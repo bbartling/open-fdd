@@ -16,15 +16,17 @@ Full guide: `docs/python-tools.md`. The package is 4.x; the NF app is 5.x (`open
 4. **Data**: `open-fdd-nf pull --equip X --days 7 --out x.csv` (SI). Offline, use the app's CSV export with
    `open_fdd.nf.export.csv_frames` or `open-fdd-report --csv`.
 5. **Report**: `open-fdd-report --nf --days 14 --out out [--docx]` (needs `open-fdd[reporting]`); ECM workbooks via `open-fdd-ecm`.
-6. **Units are SI** (degC, Pa, L/s, kW, kWh; commands 0-1). Do not convert inside rules.
+6. **Units are SI** (display °C, Pa, L/s, kW, kWh). Wire tokens are QUDT local names (`DEG_C`, `PA`, …). Roles scaled
+   `fraction` in `sql/fdd/input_contract.json` are already 0–1. Do not convert inside rules.
 7. Portal (`--via portal`) needs an API key and cannot read `/api/v1/bacnet/*`; use the LAN for BACnet.
 8. Never print or paste secrets, `docker logs` or env dumps (NF logs the backup SAS URL in plain text).
 
-9. **Read-only analytics tools** (5.0.3 app, run on the box by its `analytics` hook): `open-fdd-nf analyze weekly-runtime |
-   cooling | economizer | fault-timeline | roles | explain-view [--site --equip --rule --days --view --json]`. Use them
-   instead of re-deriving run hours, cooling bins, economizer residuals or fault timelines from raw history: the numbers
-   match the dashboard (fine 5-minute grid, schedule-aware). They cannot write. Every row has `siteRef`, `equipRef` and
-   `equipUuid`: key on `equipUuid` (two sites can both have an `AHU-1`). `fault-timeline` states are `confirmed` / `ok` /
+9. **Read-only analytics.** The `analytics` hook runs `sql/analytics/*.sql` (in-process SQLite,
+   `nf-app/hooks/lib/sql-analytics.js`). Pandas twins live in `open_fdd/analytics/sql_*.py`. CLI:
+   `open-fdd-nf analyze weekly-runtime | cooling | economizer | fault-timeline | roles | explain-view`
+   `[--site --equip --rule --days --view --json]`. Use those tools instead of re-deriving run hours, cooling bins,
+   economizer residuals or fault timelines from raw history. They cannot write. Every row has `siteRef`, `equipRef` and
+   `equipUuid`: key on `equipUuid` (two sites can share a display name). `fault-timeline` states are `confirmed` / `ok` /
    `unknown`; `unknown` (no data) is never `ok`. An ambiguous `--equip` is an error listing the candidates: add `--site`
    or pass the uuid. Details: `docs/python-tools.md`.
 

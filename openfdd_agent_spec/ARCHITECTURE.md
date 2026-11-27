@@ -7,11 +7,11 @@ remote access (Normal Online) and config backups. Open-FDD adds a UI and hooks. 
 
 | Piece | Where | Runs in |
 |---|---|---|
-| Static UI | `nf-app/static/` (served by NF at `/api/v1/apps/static/open-fdd/`) | the browser; plain JS, strict CSP, vendored ECharts |
-| `fdd` hook | `nf-app/hooks/fdd.js`, hourly | NF Node runtime; SQL rules in SQLite-WASM (sql.js) or PGlite |
+| Static UI | `nf-app/static/` (served by NF at `/api/v1/apps/static/open-fdd/`) | the browser; plain JavaScript, strict CSP, vendored ECharts. Not React or Plotly |
+| `fdd` hook | `nf-app/hooks/fdd.js`, hourly | NF Node 22 runtime. Engines: `sqlite` (sql.js), `pglite`, opt-in `duckdb` (`@duckdb/node-api` `2.0.1-r.1`), optional `timescale` |
 | `weather` hook | `nf-app/hooks/weather.js`, every 20 min | NF Node runtime; Open-Meteo to global variables |
 | `sparql` hook | `nf-app/hooks/sparql.js`, on request | NF Node runtime; Oxigraph over the model's Turtle |
-| `analytics` hook | `nf-app/hooks/analytics.js`, on request (`args.tool`) | NF Node runtime; read-only agent tools (weekly runtime, cooling bins, economizer, fault timeline, roles, view explanations) on the dashboard's own `static/*.js`; CLI `open-fdd-nf analyze` |
+| `analytics` hook | `nf-app/hooks/analytics.js`, on request (`args.tool`) | NF Node runtime; read-only. Runs `sql/analytics/*.sql` in-process (`hooks/lib/sql-analytics.js`). Pandas twins are `open_fdd/analytics/sql_*.py`. CLI `open-fdd-nf analyze` |
 | Rule math | `sql/fdd/` (Postgres SQL) to `nf-app/rules/pack-*.json` | built by `scripts/nf/build_*.py` |
 | Manifest | `nf-app/app.json` (application, file map, hooks) | read by `nf_app_sync.py` / the NF MCP |
 
@@ -21,7 +21,9 @@ cannot disagree about binding or units. NF caches static files for 5 minutes.
 ## Editions
 
 - **Full** (`nf-app/`, app id `open-fdd`): UI tabs Overview, Charts, FDD, RCx, Points, Export, BACnet Server, Model and RDF
-  (with SPARQL); hooks `fdd`, `weather`, `sparql`. Engine `sqlite` (small) or `pglite` (4 GB+); `engine: "auto"` picks.
+  (with SPARQL). Scheduled hooks: `fdd`, `weather`. On request: `sparql`, `sparql-data`, `analytics`, `schema`,
+  `tuning`, `history`, `rdf`. `engine: "auto"` uses Timescale when that option is set, otherwise PGlite when NF
+  reports at least 3.5 GiB, otherwise SQLite. `duckdb` is opt-in and is never chosen by `auto`.
 - **Lite** (`lite/`, app id `open-fdd-lite`): no FDD engine and no npm dependencies; Overview, Charts, Points, BACnet
   Server, Model and RDF; `weather` hook with an optional BACnet mirror. For 1 GB boxes.
 
@@ -47,7 +49,7 @@ answer from `.../hooks/sparql/runs?include_results=true`. `tools/rdf-check` vali
 
 ## Hooks and data surface
 
-The whole "API" of the app is these NF hooks (`POST /api/v1/apps/<id>/hooks/<hook>`, answer from `.../runs?include_results=true`) plus the 17 NF REST paths the pages and hooks consume. There is no Open-FDD HTTP server.
+The whole API of the app is these NF hooks (`POST /api/v1/apps/<id>/hooks/<hook>`, answer from `.../runs?include_results=true`) plus the NF REST paths the pages and hooks already call. There is no Open-FDD HTTP server.
 
 | Hook | Edition | Mode | Caller | Reads / writes |
 |---|---|---|---|---|
@@ -57,6 +59,9 @@ The whole "API" of the app is these NF hooks (`POST /api/v1/apps/<id>/hooks/<hoo
 | `analytics` | Full | on request | agents (`rcx-overview.js` exposes the entry points) | read-only; 6 tools via `args.tool`: `analyze_ahu_weekly_runtime`, `analyze_mechanical_cooling`, `analyze_economizer`, `get_fdd_fault_timeline`, `resolve_equipment_roles`, `explain_missing_rcx_view` |
 | `schema` | Full | on request | installer / `doctor` | read-only (`BEGIN TRANSACTION READ ONLY`); reports the Timescale `schema_version` |
 | `history` | Full | on request | `doctor` and agents (charts read `/api/v1/point/data` directly); agent-only API | read-only; server-side bucketed history from Timescale |
+| `tuning` | Full | on request | the tuning UI | reads and writes `fdd.rule_config` only (Timescale). No NF points, no BACnet, no model writes |
+| `sparql-data` | Full | on request | agents | read-only SELECT/ASK on the model Turtle, then history for the matched points (`nf-app/hooks/sparql_data.js`) |
+| `rdf` | both | on request | agents and the Model tab | read-only Turtle pages of the model (`shared/hooks/rdf.js`) |
 
 Tables the **Full** edition creates, only when the optional Timescale engine is installed (`timescale/install.sql`; `SCHEMA_VERSION` 3):
 
@@ -64,7 +69,7 @@ Tables the **Full** edition creates, only when the optional Timescale engine is 
 |---|---|---|---|
 | `openfdd.config` | table | `install.sql` seeds | `hooks/lib/timescale.js`, the retention functions, `doctor` |
 | `fdd.point` | table | `fdd` hook (synced per equipment before each load) | **core schema** (`sql/fdd/schema/core.sql`): one row per bound point with its SI `unit`, `si_scale` / `si_offset` and `role`; read by `fdd.input_sample` |
-| `fdd.rule_result` | hypertable (`window_end`, 30 d) | `fdd` hook (upsert per run) | **core schema; integration output**: BI tools and downstream apps read it. PK `(site_id, equipment_id, rule_id, subject_key, window_start, window_end, rule_hash, config_hash)`; `status` PASS/FAULT/INCONCLUSIVE/SKIPPED/ERROR/STALE, `fault_hours`, `covered_hours`, `fault_pct`, `metrics`, `diagnostics` |
+| `fdd.rule_result` | hypertable (`window_end`, 30 d) | `fdd` hook (upsert per run) | **core schema; integration output**: BI tools and downstream apps read it. PK `(site_id, equipment_id, rule_id, subject_key, window_start, window_end, rule_hash, config_hash)`; `status` PASS/FAULT/INCONCLUSIVE/SKIPPED/ERROR/STALE/METRIC (`METRIC` is a statistic rule, #1707), `fault_hours`, `covered_hours`, `fault_pct`, `metrics`, `diagnostics`. Gated rules emit `active_hours`; the Timescale writer stores that number in `metrics`, not in its own column |
 | `fdd.rule_config` | table | tuning hook (writes), `fdd` hook (reads) | **core schema**: append-only tuning revisions (one active per scope); Open-FDD stores sweep role-limit overrides as `rule_id` `SV-LIMITS` (#1589) |
 | `openfdd.nf_samples` | view | n/a | NF's samples in native units (`history_buckets`, newest-sample lookup) |
 | `fdd.input_sample` | view | n/a | SI samples of the bound points (`value * si_scale + si_offset`); the loader reads it (`adapter_nf.sql`) |

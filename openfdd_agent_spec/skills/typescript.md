@@ -6,7 +6,7 @@ description: Type-check the app's plain JavaScript with JSDoc and tsc; where con
 
 NF serves `nf-app/static`, `nf-app/hooks`, `lite/static` and `lite/hooks` as plain JS, so types are JSDoc comments checked by `tsc --noEmit` (TypeScript 7.0.2, `checkJs`, never converted to `.ts`).
 
-1. Run: `cd nf-app && npm ci && npm run typecheck` (full) and `npm run typecheck:lite` (Lite uses nf-app's compiler). CI runs both.
+1. Run on Node 22: `cd nf-app && npm ci && npm run typecheck` (full) and `npm run typecheck:lite` (Lite uses nf-app's compiler). CI runs both.
 2. One tsconfig per program, because classic scripts of different pages redeclare the same top-level names (`$`, `GENERIC`, ...):
    `nf-app/tsconfig.json` (index.html, in its script load order), `.chart`, `.tree`, `.hooks` (CommonJS hooks); same four in `lite/`.
    Shared options: `tsconfig.base.json` (`allowJs`, `checkJs`, `strict: false`, `noImplicitAny: false`).

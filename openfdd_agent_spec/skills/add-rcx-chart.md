@@ -12,7 +12,11 @@ description: Add an RCx chart (view) to the Open-FDD NF app with the bottom faul
 4. Faults: only through `rcxWithFaultLane(option, [{ name, data: [[ms, 0|1], ...] }])`. No markers, shading or extra series.
 5. Add the view id to `nf-app/rcx-parity.json` (`presets` or the matching builder entry, and `fault_lanes` if it draws one).
 6. Add or extend a test in `nf-app/tests/` (rcx-presets, rcx-overview or fdd-plots tests).
-7. Check it visually: `node nf-app/dev/mock-nf.mjs`, open `http://127.0.0.1:8765/api/v1/apps/static/open-fdd/`, Overview (the RCx dashboard; panels show only when the model has the equipment). `node scripts/nf/ui_acceptance.mjs` is the headless check.
+7. Overview cards load through `nf-app/static/lazy-cards.js`. A new panel fetches history only when it nears the
+   viewport, and it stops when the user leaves the tab. Do not fetch history for an off-screen card.
+8. The chart library is vendored ECharts (`nf-app/static/vendor/echarts.esm.min.js`). The UI stays plain JavaScript.
+   Do not add React or Plotly.
+9. Check it visually: `node nf-app/dev/mock-nf.mjs`, open `http://127.0.0.1:8765/api/v1/apps/static/open-fdd/`, Overview (the RCx dashboard; panels show only when the model has the equipment). `node scripts/nf/ui_acceptance.mjs` is the headless check.
 
 Tests: `node --test nf-app/tests/*.test.mjs` (`parity.test.mjs` fails on a missing view or entry) and
 `(cd nf-app && npm run typecheck)`.
