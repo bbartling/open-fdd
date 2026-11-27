@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:open-fdd:roles:schema:1",
+  "title": "Open-FDD canonical point roles",
+  "description": "One role vocabulary for Open-FDD, open-hvac-edge and nf-hvac-functional-test: an ASHRAE 223P property pattern, a QUDT unit and one Haystack 4 binding per role. Cross-field rules (name derivation, unit and quantity kind, binding safety) are checked by validate_roles.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "vocabulary", "version", "openfdd_release", "status", "description", "sources", "derivation",
+    "lexicon", "ratio_unit", "units", "quantity_kind_broader", "ingest_conversions", "haystack", "writable_policy",
+    "ambiguous_legacy_names", "roles"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "vocabulary": {"const": "openfdd-roles"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.]+)?$"},
+    "openfdd_release": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "status": {"enum": ["draft", "released"]},
+    "description": {"type": "string"},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "vocabulary", "version", "url", "sha256", "file"],
+        "properties": {
+          "name": {"enum": ["s223", "haystack", "haystack-units", "qudt-units", "qudt-quantitykinds"]},
+          "vocabulary": {"type": "string"},
+          "version": {"type": "string"},
+          "url": {"type": "string", "format": "uri"},
+          "archive_path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "file": {"type": "string"}
+        }
+      }
+    },
+    "derivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "slots", "slot_notes", "aspect_order", "suffix", "suffix_exception"],
+      "properties": {
+        "rule": {"type": "string"},
+        "slots": {"type": "array", "items": {"$ref": "#/$defs/slot"}, "uniqueItems": true},
+        "slot_notes": {"type": "object", "propertyNames": {"$ref": "#/$defs/slot"}, "additionalProperties": {"type": "string"}},
+        "aspect_order": {"type": "array", "items": {"$ref": "#/$defs/term"}, "uniqueItems": true},
+        "suffix": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["s223:QuantifiableObservableProperty", "s223:QuantifiableActuatableProperty",
+            "s223:EnumeratedObservableProperty", "s223:EnumeratedActuatableProperty"],
+          "properties": {
+            "s223:QuantifiableObservableProperty": {"type": "string"},
+            "s223:QuantifiableActuatableProperty": {"type": "string"},
+            "s223:EnumeratedObservableProperty": {"type": "string"},
+            "s223:EnumeratedActuatableProperty": {"type": "string"}
+          }
+        },
+        "suffix_exception": {"type": "string"}
+      }
+    },
+    "lexicon": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/term"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["token"],
+        "properties": {
+          "token": {"type": "string", "pattern": "^([a-z][a-z0-9]*(_[a-z0-9]+)*)?$"},
+          "extension": {"const": true},
+          "closest": {"type": "string"},
+          "why": {"type": "string"}
+        }
+      }
+    },
+    "ratio_unit": {"const": "unit:PERCENT"},
+    "units": {
+      "type": "object",
+      "propertyNames": {"pattern": "^unit:[A-Za-z0-9_-]+$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["wire", "haystack", "quantity_kinds", "range"],
+        "properties": {
+          "wire": {"type": "string"},
+          "haystack": {"type": ["string", "null"]},
+          "quantity_kinds": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "range": {"$ref": "#/$defs/range"}
+        }
+      }
+    },
+    "quantity_kind_broader": {
+      "type": "object",
+      "additionalProperties": {"type": "array", "items": {"type": "string"}}
+    },
+    "ingest_conversions": {
+      "description": "si = value * multiplier + offset",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "multiplier", "offset"],
+        "properties": {
+          "from": {"type": "string"},
+          "to": {"type": "string", "pattern": "^unit:"},
+          "multiplier": {"type": "number"},
+          "offset": {"type": "number"},
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "haystack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "function_markers", "markers", "custom_markers", "binding_rules"],
+      "properties": {
+        "version": {"type": "string"},
+        "function_markers": {"const": ["sensor", "sp", "cmd"]},
+        "markers": {"type": "array", "items": {"$ref": "#/$defs/marker"}, "uniqueItems": true},
+        "custom_markers": {"type": "object", "propertyNames": {"$ref": "#/$defs/marker"}, "additionalProperties": {"type": "string"}},
+        "binding_rules": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+      }
+    },
+    "writable_policy": {"type": "string"},
+    "ambiguous_legacy_names": {"type": "object", "additionalProperties": {"type": "string"}},
+    "roles": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/role"}}
+  },
+  "$defs": {
+    "slot": {"enum": ["scope", "equipment_role", "equipment_medium", "equipment", "roles", "connection_point", "medium",
+      "constituent", "qualifier", "quantity_kind", "enumeration_kind", "aspects"]},
+    "term": {"type": "string", "pattern": "^(s223|g36|quantitykind|ext):[A-Za-z0-9_-]+$"},
+    "marker": {"type": "string", "pattern": "^[a-z][A-Za-z0-9]*$"},
+    "markers": {"type": "array", "items": {"$ref": "#/$defs/marker"}, "uniqueItems": true},
+    "range": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "array", "prefixItems": [{"type": "number"}, {"type": ["number", "null"]}], "minItems": 2, "maxItems": 2}
+      ]
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "grounding", "s223", "unit", "value_type", "range", "derived", "writable", "haystack",
+        "rule_input", "consumers", "legacy_keys", "aliases"],
+      "properties": {
+        "role": {"type": "string", "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"},
+        "grounding": {"enum": ["s223", "extension"]},
+        "s223": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["property_class", "applies_to"],
+          "properties": {
+            "property_class": {"enum": ["s223:QuantifiableObservableProperty", "s223:QuantifiableActuatableProperty",
+              "s223:EnumeratedObservableProperty", "s223:EnumeratedActuatableProperty"]},
+            "scope": {"$ref": "#/$defs/term"},
+            "equipment_role": {"$ref": "#/$defs/term"},
+            "equipment_medium": {"$ref": "#/$defs/term"},
+            "equipment": {"$ref": "#/$defs/term"},
+            "roles": {"type": "array", "items": {"$ref": "#/$defs/term"}, "minItems": 1},
+            "connection_point": {"$ref": "#/$defs/term"},
+            "medium": {"$ref": "#/$defs/term"},
+            "constituent": {"$ref": "#/$defs/term"},
+            "qualifier": {"$ref": "#/$defs/term"},
+            "quantity_kind": {"type": "string", "pattern": "^quantitykind:[A-Za-z0-9]+$"},
+            "enumeration_kind": {"$ref": "#/$defs/term"},
+            "aspects": {"type": "array", "items": {"$ref": "#/$defs/term"}, "minItems": 1},
+            "applies_to": {"type": "array", "items": {"$ref": "#/$defs/term"}, "uniqueItems": true}
+          }
+        },
+        "unit": {"type": ["string", "null"], "pattern": "^unit:"},
+        "value_type": {"enum": ["number", "boolean", "enumeration"]},
+        "range": {"$ref": "#/$defs/range"},
+        "derived": {"type": "boolean"},
+        "writable": {"enum": ["never", "model"]},
+        "haystack": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "unit", "classes", "markers", "forbid", "binding_scope", "conformance"],
+          "properties": {
+            "kind": {"enum": ["Number", "Bool", "Str"]},
+            "unit": {"type": ["string", "null"]},
+            "classes": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][A-Za-z0-9]*(-[a-z][A-Za-z0-9]*)*$"}, "uniqueItems": true},
+            "markers": {"$ref": "#/$defs/markers"},
+            "optional": {"$ref": "#/$defs/markers"},
+            "forbid": {"$ref": "#/$defs/markers"},
+            "custom_markers": {"$ref": "#/$defs/markers"},
+            "alt_markers": {"type": "array", "items": {"$ref": "#/$defs/markers"}},
+            "equip_markers": {"$ref": "#/$defs/markers"},
+            "binding_scope": {"enum": ["own", "fed_by_air_handling_unit", "aggregate", "weather", "derived"]},
+            "conformance": {"enum": ["standard", "nonstandard", "custom"]},
+            "note": {"type": "string"}
+          }
+        },
+        "rule_input": {"type": "boolean"},
+        "accepts_fallback": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "consumers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "open-fdd": {"enum": ["read"]},
+            "open-hvac-edge": {"enum": ["read"]},
+            "nf-hvac-functional-test": {"enum": ["read", "write", "readwrite"]}
+          }
+        },
+        "legacy_keys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "aliases": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "note": {"type": "string"}
+      }
+    }
+  }
+}
