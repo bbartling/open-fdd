@@ -108,6 +108,21 @@ def occupied_mask(index: pd.DatetimeIndex, schedule: OccupancySchedule) -> pd.Se
     return pd.Series(out, index=index, dtype=bool)
 
 
+def default_hook_schedule() -> dict[str, Any]:
+    """The hook's fallback occupancy when a site has no saved calendar and no NF schedule.
+
+    Monday–Friday 07:00–17:00 in America/Chicago (50 h/week). Twin of ``nf-app/static/schedule.js``
+    ``defaultSchedule``. The Overview calendar default (06:00–18:00, 60 h/week) is a different document.
+    """
+    return {
+        "timezone": "America/Chicago",
+        "days": {
+            d: {"occupied": d not in {"sat", "sun"}, "start": "07:00", "end": "17:00"}
+            for d in DAYS
+        },
+    }
+
+
 def occupied_hours_per_week(schedule: OccupancySchedule) -> float:
     """Nominal occupied hours in one Mon–Sun week from the calendar (for bare-min runtime lines)."""
     total = 0.0

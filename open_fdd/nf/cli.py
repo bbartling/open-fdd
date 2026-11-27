@@ -8,9 +8,11 @@
     open-fdd-nf report --days 7 --out report_dir [--findings]
     open-fdd-nf analyze weekly-runtime --site S --days 28 [--json]       (read-only tools run on the box)
 
-Connection: ``--url`` or the environment (``NF_URL`` / ``NF_LAN_URL`` / ``NFURL``,
-``NF_CLIENT_ID`` + ``NF_CLIENT_SECRET`` or ``NF_CONSOLE_USER`` + ``NF_CONSOLE_PASSWORD``,
-``NF_CA_FILE``), optionally topped up from ``--env FILE``. ``--via lan|portal`` picks the URL.
+Connection: ``--url`` or the environment (``NF_URL`` / ``NF_LAN_URL`` / ``NFURL`` /
+``NF_CONSOLE_URL``, ``NF_CLIENT_ID`` + ``NF_CLIENT_SECRET`` or ``NF_CONSOLE_USER`` +
+``NF_CONSOLE_PASSWORD`` — the same file as ``nf_app_sync.py`` may say ``CONSOLE_USERNAME`` +
+``CONSOLE_PASSWORD``), ``NF_CA_FILE`` or ``--pin-server-cert``. ``--env FILE`` loads that file.
+``--via lan|portal`` picks the URL.
 """
 
 from __future__ import annotations
@@ -43,10 +45,13 @@ def _common() -> argparse.ArgumentParser:
     g = p.add_argument_group("connection")
     g.add_argument("--url", help="NF base URL (overrides the environment)")
     g.add_argument("--env", metavar="FILE", default=os.environ.get("NF_ENV_FILE", ""),
-                   help="KEY=VALUE env file with NF_* settings (default: $NF_ENV_FILE; real environment wins)")
+                   help="KEY=VALUE file (NF_* or NF_CONSOLE_URL / CONSOLE_USERNAME / CONSOLE_PASSWORD; "
+                        "default: $NF_ENV_FILE; real environment wins)")
     g.add_argument("--via", choices=("lan", "portal"),
                    help="lan: prefer NF_LAN_URL; portal: prefer NFURL (Normal Online)")
     g.add_argument("--ca-file", help="trust this self-signed LAN certificate (default: $NF_CA_FILE)")
+    g.add_argument("--pin-server-cert", action="store_true",
+                   help="trust only the certificate this host presents (same as nf_app_sync.py)")
     g.add_argument("--timeout", type=float, default=60.0, help="HTTP timeout seconds (default 60)")
     s = p.add_argument_group("scope")
     s.add_argument("--site", help="site id or name (default: every site)")
@@ -132,7 +137,8 @@ def client_from_args(a: argparse.Namespace) -> NFClient:
             env[k] = a.url
     if a.ca_file:
         env["NF_CA_FILE"] = a.ca_file
-    return NFClient.from_env(via=a.via, env_file=a.env or None, env=env, timeout=a.timeout)
+    return NFClient.from_env(via=a.via, env_file=a.env or None, env=env, timeout=a.timeout,
+                             pin=a.pin_server_cert)
 
 
 def time_range(a: argparse.Namespace) -> tuple[datetime, datetime]:

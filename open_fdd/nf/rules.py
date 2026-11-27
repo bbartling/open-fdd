@@ -14,6 +14,21 @@ COLUMNS = ["site", "equip", "rule", "status", "fault_hours", "fault_pct", "cover
            "raw_status", "missing_roles", "notes"]
 
 
+def _with_default_occupancy(params_by_rule: dict[str, dict] | None) -> dict[str, dict]:
+    """The hook's 50 h/week calendar when the caller did not pass one.
+
+    ``vav1`` reads it only when the frame has no occupancy column, so a bound ``occ_mode`` point still wins.
+    A rule that requires the point (VAV-2) does not see this fallback.
+    """
+    from open_fdd.analytics.occupancy import default_hook_schedule
+
+    out = {k: dict(v) for k, v in (params_by_rule or {}).items()}
+    if any(isinstance(v, dict) and v.get("occupancy_schedule") for v in out.values()):
+        return out
+    out["_default_occupancy"] = {"occupancy_schedule": default_hook_schedule()}
+    return out
+
+
 def rule_results(
     frames: Mapping[tuple[str, str], Any],
     rules: Iterable[str] | None = None,
@@ -24,6 +39,7 @@ def rule_results(
     from open_fdd.rules.runner import run_all_cookbook_rules
 
     want = {r.upper() for r in rules} if rules else None
+    params_by_rule = _with_default_occupancy(params_by_rule)
     out = []
     for (site, equip), df in frames.items():
         poll = float(df.attrs.get("window_sec") or 300)

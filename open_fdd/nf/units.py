@@ -54,10 +54,14 @@ _add(["°F", "degF", "F", "fahrenheit", "deg_f"], "temperature", "°C", lambda x
 _add(["K", "kelvin"], "temperature", "°C", lambda x: x - 273.15)
 _add(["Pa", "pascal"], "pressure", "Pa", _ident)
 _add(["kPa"], "pressure", "Pa", lambda x: x * 1000)
-_add(["inH2O", "inWC", "in wc", "in. w.c.", "inH₂O", '"wc', "in_h2o"], "pressure", "Pa", lambda x: x * FACTORS["pa_per_in_wc"])
+# inH20 is the digit-zero spelling of inH₂O (QUDT pressure, stored as PA). "in h₂0" normalises to the same key.
+_add(["inH2O", "inH20", "inWC", "in wc", "in. w.c.", "inH₂O", "in h₂0", '"wc', "in_h2o",
+      "inches of water", "inches-of-water", "iwc"], "pressure", "Pa", lambda x: x * FACTORS["pa_per_in_wc"])
 _add(["psi", "psig", "psid"], "pressure", "Pa", lambda x: x * FACTORS["pa_per_psi"])
 _add(["bar"], "pressure", "Pa", lambda x: x * 1e5)
-_add(["L/s", "l/s", "lps"], "flow", "L/s", _ident)
+# L/sec is QUDT L-PER-SEC (stored as L/s), the spelling NF uses beside lps.
+_add(["L/s", "l/s", "lps", "L/sec", "liters/second", "litres/second", "liters per second",
+      "litres per second", "liters-per-second"], "flow", "L/s", _ident)
 _add(["m³/s", "m3/s"], "flow", "L/s", lambda x: x * 1000)
 _add(["m³/h", "m3/h", "cmh"], "flow", "L/s", lambda x: x / 3.6)
 _add(["cfm", "ft³/min", "ft3/min"], "flow", "L/s", lambda x: x * FACTORS["lps_per_cfm"])
