@@ -35,7 +35,7 @@ function overlayHttp(base, overlay) {
 async function runHook(nowMs, { http, config = {} } = {}) {
   http = http || fakeSdkHttp(fx, { nowMs });
   const logs = [];
-  const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: { engine: "sqlite", ...config }, now: nowMs });
+  const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: { engine: "duckdb", ...config }, now: nowMs });
   return { http, logs, summary };
 }
 /** What a run wrote: model records by uuid (last wins) and the [[ms, value]] samples per uuid. */
@@ -521,7 +521,7 @@ test("#1636: a saved occupancy calendar wins over the NF schedule (holiday ignor
   const withCalendar = async (o) => ({ ...(await createEngine(o)), ruleConfigOverrides: async () => [row] });
   const logs = [];
   const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, createEngine: withCalendar,
-    config: { engine: "sqlite", windowHours: 72, equips: ["VAV-9"] }, now });
+    config: { engine: "duckdb", windowHours: 72, equips: ["VAV-9"] }, now });
   assert.equal(summary.errors, 0, logs.join("\n"));
   assert.ok(logs.some((l) => /occ_mode synthesized from calendar \(occupancy calendar 100 h\/week \(America\/Chicago\) rev 7/.test(l)), logs.join("\n"));
   assert.deepEqual(summary.occupancy["site-a"], { source: "calendar", revision: 7 });
@@ -536,7 +536,7 @@ test("#1636: a saved occupancy calendar wins over the NF schedule (holiday ignor
   const resetRow = { ...row, parameters: { version: 1, reset: true } };
   const http2 = vavSetup(A, { nowMs: now }).http;
   const logs2 = [];
-  await hook.runFdd({ sdk: { http: http2, logEvent: (m) => logs2.push(m) }, config: { engine: "sqlite", windowHours: 72, equips: ["VAV-9"] }, now,
+  await hook.runFdd({ sdk: { http: http2, logEvent: (m) => logs2.push(m) }, config: { engine: "duckdb", windowHours: 72, equips: ["VAV-9"] }, now,
     createEngine: async (o) => ({ ...(await createEngine(o)), ruleConfigOverrides: async () => [resetRow] }) });
   assert.ok(logs2.some((l) => /occ_mode synthesized from schedule/.test(l)), logs2.join("\n"));
 });

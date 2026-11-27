@@ -290,7 +290,7 @@ async function createPglite(pack, opts = {}) {
     ({ PGlite } = await import("@electric-sql/pglite"));
   } catch (e) {
     if (e && (e.code === "ERR_MODULE_NOT_FOUND" || /Cannot find (package|module)/.test(String(e.message)))) {
-      throw new Error('pglite not installed: install the app dependencies (nf_app_sync.py install, or PATCH /api/v1/apps/<app-id>/dependencies then restart), or set the hook config engine to "sqlite"');
+      throw new Error("pglite is not installed. It is a parity-test engine only (nf-app devDependency), not a runtime engine. Use duckdb or timescale.");
     }
     throw e;
   }
@@ -436,7 +436,7 @@ async function createTimescale(pack, opts = {}) {
 // ---------------------------------------------------------------- duckdb (#1645: native DuckDB, warm in-memory instance)
 
 /**
- * Native DuckDB (@duckdb/node-api, pinned in package.json optionalDependencies) runs the Postgres pack as written; the
+ * Native DuckDB (@duckdb/node-api, pinned in package.json dependencies) runs the Postgres pack as written; the
  * fdd.* helpers are the SQL macros of pack.duckdb_helpers_sql (sql/fdd/duckdb/duckdb_helpers.sql).
  *
  * Lifetime: ONE in-memory DuckDB instance per hook process, created on first use and kept warm between runs (no
@@ -454,7 +454,7 @@ async function createTimescale(pack, opts = {}) {
  * Memory (1 GB edges): the instance is capped by DuckDB's memory_limit (default DUCKDB_DEFAULTS.memoryLimit) and
  * threads. With spilling off, a query over the cap fails with an out-of-memory error (the rule is reported as a rule
  * error). If the instance cannot be created at all, createEngine throws and the run fails loudly (no silent engine
- * swap; only a package that does not load falls back, see fdd.js pickEngine). Settings: app options duckdbMemoryLimit
+ * swap). A package that does not load fails the same way in pickEngine and does not switch engines. Settings: app options duckdbMemoryLimit
  * ("256MB") and duckdbThreads (2), passed here as opts.config { memoryLimit, threads }; env OPENFDD_DUCKDB_MEMORY_LIMIT /
  * OPENFDD_DUCKDB_THREADS when unset.
  * The settings of the first engine of a process win until releaseDuckDb().
@@ -621,7 +621,7 @@ async function createEngine({ kind, pack, ...opts }) {
   if (kind === "pglite") return createPglite(pack, opts);
   if (kind === "timescale") return createTimescale(pack, opts);
   if (kind === "duckdb") return createDuckDb(pack, opts);
-  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite", "pglite", "duckdb" or "timescale")`);
+  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (runtime engines are "duckdb" and "timescale"; "sqlite" and "pglite" are parity-test engines)`);
 }
 
 module.exports = { createEngine, HELPERS, loadSqlJs, releaseDuckDb, duckDbOptions, DUCKDB_DEFAULTS, DUCKDB_SAFETY };

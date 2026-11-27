@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open-FDD chart</title>
+<meta name="ofdd-engine-build" content="duckdb">
+<meta name="ofdd-engine-library" content="@duckdb/node-api">
+<meta name="ofdd-engine-library-version" content="2.0.1-r.1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https:; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <!--
   One Open-FDD chart per window: chart.html?c=<id>&site=<siteRef>[&equip=<equipRef>][&h=<hours>][&point=<uuid>]
@@ -12,6 +15,7 @@
 -->
 <script src="theme-init.js"></script>
 <script type="module" src="echarts-global.js"></script>
+<script defer src="version.js"></script>
 <script defer src="paging.js"></script>
 <script defer src="nf.js"></script>
 <script defer src="model.js"></script>
@@ -26,6 +30,7 @@
 <header>
   <div>
     <h1 id="title">⚡ Chart</h1>
+    <span class="pill app-engine" id="engineBuild" data-ofdd-engine="duckdb">DuckDB build</span>
     <div class="sub" id="sub">Loading the Haystack model…</div>
   </div>
   <div class="spacer"></div>

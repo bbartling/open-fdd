@@ -6,7 +6,7 @@ nav_order: 2
 
 # Upgrading to 5.0.16
 
-Applies to Full installations that use the Timescale engine. Lite and the `sqlite` / `pglite` engines have no persistent
+Applies to Full installations that use the Timescale engine. Lite and the DuckDB engine have no persistent
 tables and need nothing.
 
 ## What changes

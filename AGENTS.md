@@ -48,9 +48,12 @@ rule ids those files name.
    at runtime, the page CSP keeps `script-src 'self' https:` (and `connect-src 'self' https:`). Do not describe the
    app as "self-only" or "no CDN at runtime", and do not add any other remote script. Bump the Clerk pin only to a
    release at least two weeks old, in both `nf-app/static/nf.js` and `lite/static/nf.js`.
-5. **One FDD math.** Change rules in `sql/fdd`, then rebuild the catalog and packs. SQLite, Postgres, DuckDB and
-   Timescale run that SQL; pandas must match it (`tests/parity/`, `.github/workflows/parity.yml`). Sensor sweeps
-   (`SV-RANGE`, `SV-SPIKE`, `SV-FLATLINE`, `SV-STALE`, `SV-RATE`) return one row per sensor.
+5. **One FDD math.** Change rules in `sql/fdd`, then rebuild the catalog and packs. The NF app runs two engines:
+   Node DuckDB (`@duckdb/node-api` 2.0.1-r.1) for a single site, and Timescale for Full. `auto` picks DuckDB unless
+   Timescale is configured. A saved option named `sqlite` or `pglite` fails and names `duckdb`. Parity compares pandas
+   with Node DuckDB and, when a server is configured, Timescale. If `@duckdb/node-api` does not load, the DuckDB build
+   stops and does not switch engines. The badge in the plugin header is `DuckDB build` or `Timescale build`. Sensor
+   sweeps (`SV-RANGE`, `SV-SPIKE`, `SV-FLATLINE`, `SV-STALE`, `SV-RATE`) return one row per sensor.
 6. **Small PR slices** (one concern each, easy for a small model to review). Update the docs page that describes
    what you changed; `docs/rules/*.md` is generated. See Docs style below.
 

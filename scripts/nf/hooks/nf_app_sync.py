@@ -37,7 +37,7 @@ read-only and cannot deploy).
 
 Dependencies: NF installs an app's ``package.json`` with ``PATCH /api/v1/apps/<id>/dependencies`` (then the
 runtimes restart). ``push`` does that after writing ``package.json`` and before the hooks are (re)started;
-``--skip-deps`` leaves it out. sql.js is vendored, so the sqlite engine needs no npm install.
+``--skip-deps`` leaves it out. The DuckDB build depends on ``@duckdb/node-api``; the Timescale build depends on ``pg``.
 
 TLS to a self-signed front door: ``--ca-file FILE`` (or NF_CA_FILE) trusts that certificate; ``--pin-server-cert``
 fetches the leaf the server presents, prints its SHA-256 fingerprint and trusts only that one for this process
@@ -566,7 +566,7 @@ def install_deps(c, m: dict, clock=time.monotonic, sleep=time.sleep,
 
 def manual_deps_hint(app_id: str) -> str:
     return (f"install them by hand: PATCH /api/v1/apps/{app_id}/dependencies (body {{}}) with the console login, "
-            f"then PATCH /api/v1/apps/{app_id}/restart; or set the fdd hook engine to \"sqlite\"")
+            f"then PATCH /api/v1/apps/{app_id}/restart. A DuckDB build that cannot load @duckdb/node-api does not fall back.")
 
 
 def report_deps(res: dict, app_id: str) -> None:
@@ -1799,7 +1799,7 @@ def timescale_check(app: dict) -> tuple[str, str]:
         if engine == "timescale":
             return "FAIL", ('engine option is "timescale" but no Timescale connection setting was found: set the app '
                             'option "timescale" (JSON string {"host","port","database","user","password"} or a postgres:// URL)')
-        return "PASS", "not configured (history hook skips with a notice; fdd uses sqlite/pglite)"
+        return "PASS", "not configured (history hook skips with a notice; the DuckDB build runs DuckDB)"
     text = str(raw).strip()
     if re.match(r"postgres(ql)?://", text, re.I):
         return "PASS", 'app option "timescale" is a postgres:// URL (value not shown)'
@@ -1871,11 +1871,19 @@ SCHEMA_REMEDY = ("install a PostgreSQL client (psql) and set NF_TIMESCALE_PREFLI
                  "or install a release that ships the NF-side schema probe (the `schema` hook), which needs neither")
 
 
+RETIRED_ENGINES = {"sqlite", "pglite"}
+
+
+def retired_engine_message(engine: str) -> str:
+    return (f'engine option "{engine}" was removed in 5.0.22. Set the app option engine to "duckdb" '
+            '(single site) or "timescale".')
+
+
 def timescale_selected(app: dict) -> bool:
     """True when the app's options select Timescale (engine "timescale", or a connection set and the engine not forced off)."""
     engine = str(option_scalar(app, "engine") or "auto").strip().lower()
     raw = option_scalar(app, "timescale")
-    if engine in {"sqlite", "pglite"}:
+    if engine in RETIRED_ENGINES:
         return False
     return engine == "timescale" or (raw is not None and str(raw).strip() != "")
 
@@ -1944,7 +1952,8 @@ def probe_verdict(got: dict) -> tuple[str, str]:
 # What hooks/schema.js needs at run time: itself, the two libs it requires, and static/units.js (required by
 # lib/timescale.js). tests/test_nf_app_install.py checks this list against the real require() graph. The only npm
 # package involved is pg (loaded lazily by lib/timescale.js), which every Timescale install already has.
-PROBE_FILES = ("/hooks/schema.js", "/hooks/lib/settings.js", "/hooks/lib/timescale.js", "/static/units.js")
+PROBE_FILES = ("/hooks/schema.js", "/hooks/lib/engine-build.js", "/hooks/lib/settings.js", "/hooks/lib/timescale.js",
+               "/static/engine-build.json", "/static/units.js")
 PROBE_DEP = "pg"
 PROBE_LEFTOVER = ("The probe files and the `schema` hook were put on the box ahead of the install; nothing else was "
                   "changed (the app keeps its current version, hooks and settings).")
@@ -2046,6 +2055,10 @@ def install_schema_gate(c, m: dict, a, prior: dict | None, app_id: str, environ,
     The probe on the box is used when it is current; an app with no `schema` hook, or one whose probe reports an older
     required schema than this release, gets the probe bootstrapped first. A manifest that ships no probe keeps the
     DSN/psql path. Never falls back to psql on its own when the probe cannot run."""
+    if prior:
+        engine = str(option_scalar(prior, "engine") or "").strip().lower()
+        if engine in RETIRED_ENGINES:
+            return "FAIL", retired_engine_message(engine), False
     if not prior or not timescale_selected(prior):
         return "SKIP", "", False
     if not manifest_ships_probe(m):
@@ -2119,6 +2132,9 @@ def push_schema_verdict(c, m: dict, prior: dict, app_id: str, environ=None, cloc
 def schema_preflight(c, app: dict, app_id: str, environ=None, **kw) -> tuple[str, str]:
     """Schema check order: the NF-side probe when the installed app has it, else the NF_TIMESCALE_PREFLIGHT_DSN path
     (psql), else a refusal that names both remedies. SKIP on Lite or a non-Timescale engine."""
+    engine = str(option_scalar(app, "engine") or "auto").strip().lower()
+    if engine in RETIRED_ENGINES:
+        return "FAIL", retired_engine_message(engine)
     if not timescale_selected(app):
         return "SKIP", ""
     probed = schema_probe(c, app, app_id)
@@ -2134,7 +2150,9 @@ def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tu
     raw = option_scalar(app, "timescale")
     explicit = engine == "timescale"
     configured = raw is not None and str(raw).strip() != ""
-    if engine in {"sqlite", "pglite"} or (not explicit and not configured):
+    if engine in RETIRED_ENGINES:
+        return "FAIL", retired_engine_message(engine)
+    if not explicit and not configured:
         return "SKIP", ""
     dsn_override = env.get("NF_TIMESCALE_PREFLIGHT_DSN")
     if not dsn_override and is_loopback_host(timescale_connection_host(raw)):
@@ -2562,7 +2580,7 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
         line("WARN", "timescale schema", "schema probe not installed yet; install will bootstrap it")
     else:
         schema_lvl, schema_text = schema_preflight(c, a, app_id, environ)
-        line(schema_lvl, "timescale schema", schema_text or "not selected (Lite/sqlite/pglite)")
+        line(schema_lvl, "timescale schema", schema_text or "not selected (Lite, or DuckDB without a Timescale connection)")
     try:
         drift = find_drift(c, m)
     except SystemExit as e:

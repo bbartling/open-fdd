@@ -7,7 +7,7 @@
  * app in the NF console, or PATCH /api/v1/apps/<id> with updateMask ["options"] + ["configuration"]). The hook
  * runtime hands the option values to the hook as `ctx.config`, one flat map of scalars:
  *
- *   engine       string  "auto" | "sqlite" | "pglite" | "timescale"
+ *   engine       string  "auto" | "duckdb" | "timescale"   (sqlite and pglite were removed; naming either fails the run)
  *   windowHours  number  (a string such as "24" is accepted)
  *   timescale    string  (secret) the connection as JSON {"host","port","database","user","password"} or a postgres:// URL
  *   latitude     number  weather: site latitude when neither NF Sites nor the model has one

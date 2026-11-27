@@ -48,7 +48,7 @@ function retentionNf(nowMs, retentionMs, priorModels) {
 }
 async function runAt(nowMs, retentionMs, prior, windowHours) {
   const http = retentionNf(nowMs, retentionMs, prior), logs = [];
-  const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: { engine: "sqlite", windowHours }, now: nowMs });
+  const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: { engine: "duckdb", windowHours }, now: nowMs });
   assert.equal(summary.errors, 0, logs.join("\n"));
   return { http, summary };
 }

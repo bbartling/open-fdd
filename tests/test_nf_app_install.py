@@ -706,7 +706,8 @@ def test_schema_check_is_skipped_on_lite_or_a_non_timescale_engine(no_psql_no_ds
     assert sync.schema_preflight(nf, {"options": [], "hooks": []}, "new-app", {})[0] == "SKIP"
     sqlite = nf.store["new-app"]
     sqlite["options"] = [{"name": "engine", "value": {"string": "sqlite"}}]
-    assert sync.schema_preflight(nf, sqlite, "new-app", {})[0] == "SKIP"
+    lvl, text = sync.schema_preflight(nf, sqlite, "new-app", {})
+    assert lvl == "FAIL" and "duckdb" in text and "removed" in text
     assert nf.starts == []
 
 
@@ -748,8 +749,11 @@ def test_doctor_names_an_invalid_timezone_option(tmp_path, capsys):
 
 # ---------------------------------------------------------------- bootstrapping the schema probe on an upgrade (#1593)
 
-PROBE_BODY = {"/hooks/schema.js": "// schema probe\n", "/hooks/lib/settings.js": "// settings\n",
-              "/hooks/lib/timescale.js": "const SCHEMA_VERSION = 3;\n", "/static/units.js": "// units\n"}
+PROBE_BODY = {"/hooks/schema.js": "// schema probe\n", "/hooks/lib/engine-build.js": "// build\n",
+              "/hooks/lib/settings.js": "// settings\n",
+              "/hooks/lib/timescale.js": "const SCHEMA_VERSION = 3;\n",
+              "/static/engine-build.json": '{"id":"timescale","label":"Timescale build","library":"pg","libraryVersion":"8.23.1"}\n',
+              "/static/units.js": "// units\n"}
 OK3 = {"ok": True, "installed": 3, "required": 3}
 
 
@@ -843,8 +847,9 @@ def test_probe_files_cover_the_require_graph_of_the_real_hook():
                 todo.append(target if target.suffix else target.with_suffix(".js"))
             else:
                 external.add(req)
-    assert seen == set(sync.PROBE_FILES), "update PROBE_FILES: the probe needs " + ", ".join(sorted(seen))
-    assert external <= {"fs", "path", sync.PROBE_DEP}, external
+    # engine-build.json is read, not required. @duckdb/node-api is required only when that build's package is probed.
+    assert seen == set(sync.PROBE_FILES) - {"/static/engine-build.json"}, "update PROBE_FILES: the probe needs " + ", ".join(sorted(seen | {"/static/engine-build.json"}))
+    assert external <= {"fs", "path", sync.PROBE_DEP, "@duckdb/node-api"}, external
     app = json.loads((root / "app.json").read_text(encoding="utf-8"))
     assert set(sync.PROBE_FILES) <= set(app["files"])
     assert any(h["id"] == "schema" for h in app["hooks"])
@@ -959,10 +964,20 @@ def test_dry_run_still_stops_on_a_hand_edited_probe_file(forbid_psql, tmp_path, 
     assert not [1 for mt, p in nf.log if mt != "GET"]
 
 
-@pytest.mark.parametrize("engine", ["sqlite", "pglite", None])
-def test_lite_and_non_timescale_engines_never_bootstrap(forbid_psql, tmp_path, capsys, engine):
+@pytest.mark.parametrize("engine", ["sqlite", "pglite"])
+def test_retired_engines_fail_and_never_bootstrap(forbid_psql, tmp_path, capsys, engine):
     m = boot_manifest(tmp_path)
     nf = old_box(m, [OK3], engine=engine)
+    assert install_on(nf, m) != 0
+    out = capsys.readouterr().out
+    assert "duckdb" in out and "removed" in out
+    assert "bootstrapping" not in out
+    assert nf.snap is None and "schema" not in [h for h, _ in nf.starts]
+
+
+def test_auto_engine_never_bootstraps(forbid_psql, tmp_path, capsys):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [OK3], engine=None)
     assert install_on(nf, m) == 0
     assert "bootstrapping" not in capsys.readouterr().out
     assert nf.snap is None and "schema" not in [h for h, _ in nf.starts]
@@ -983,7 +998,7 @@ def test_an_older_probe_that_checks_an_older_schema_is_refreshed(forbid_psql, tm
     assert install_on(nf, m) == 0
     out = capsys.readouterr().out
     assert "checks schema 2, this release needs 3" in out and "Timescale schema version 3" in out
-    assert sorted(nf.written[:5]) == sorted([*sync.PROBE_FILES, "/static/version.json"])
+    assert sorted(nf.written[:len(sync.PROBE_FILES) + 1]) == sorted([*sync.PROBE_FILES, "/static/version.json"])
 
 
 def test_skip_hooks_never_replaces_an_older_schema_hook(forbid_psql, tmp_path, capsys):
