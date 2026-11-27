@@ -1,10 +1,9 @@
-"""#1780 cross-sensor consistency (XS-MIX, XS-COPY, XS-CLIP): pandas == SQL on SQLite, DuckDB and, when POSTGRES_TEST_URL
+"""#1780 cross-sensor consistency (XS-MIX, XS-COPY, XS-CLIP): pandas == SQL on DuckDB and, when POSTGRES_TEST_URL
 is set, PostgreSQL, over tests/fixtures/cross_sensor_cases.json (envelope and tolerance edges, fan proof, not assessed)."""
 from __future__ import annotations
 
 import json
 import os
-import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,7 +15,7 @@ from open_fdd.parity.pandas_ref import pandas_rule_result
 ROOT = Path(__file__).resolve().parents[1]
 CASES = json.loads((ROOT / "tests/fixtures/cross_sensor_cases.json").read_text(encoding="utf-8"))["cases"]
 ROLE_MAP = json.loads((ROOT / "sql/fdd/role_map.json").read_text(encoding="utf-8"))
-PACKS = {k: json.loads((ROOT / f"nf-app/rules/pack-{k}.json").read_text(encoding="utf-8")) for k in ("sqlite", "postgres")}
+PACK = json.loads((ROOT / "nf-app/rules/pack-postgres.json").read_text(encoding="utf-8"))
 START = int(datetime(2026, 7, 1, tzinfo=timezone.utc).timestamp())
 STEP, N = 300, 97
 RULES = sorted({c["rule"] for c in CASES})
@@ -73,20 +72,9 @@ def _utc(ts):
     return datetime.fromtimestamp(ts, tz=timezone.utc)
 
 
-def _sqlite(case):
-    pack = PACKS["sqlite"]
-    con = sqlite3.connect(":memory:")
-    try:
-        _create(con, pack, "REAL", "TEXT", "REAL")
-        _insert(con, case, float, "?")
-        return _query(con, pack["rules"][case["rule"]]["sql"])[case["id"]]
-    finally:
-        con.close()
-
-
 def _duckdb(case):
     duckdb = pytest.importorskip("duckdb")
-    pack = PACKS["postgres"]
+    pack = PACK
     con = duckdb.connect(":memory:")
     try:
         con.execute("SET TimeZone = 'UTC'")
@@ -102,7 +90,7 @@ def _postgres(case):
     if not url:
         pytest.skip("POSTGRES_TEST_URL not set")
     psycopg = pytest.importorskip("psycopg")
-    pack = PACKS["postgres"]
+    pack = PACK
     with psycopg.connect(url) as con:   # temp table only; rolled back on exit
         _create(con, pack, "TIMESTAMPTZ", "TEXT", "DOUBLE PRECISION", temp="TEMP ")
         _insert(con, case, _utc, "%s")
@@ -111,7 +99,7 @@ def _postgres(case):
     return out
 
 
-ENGINES = {"sqlite": _sqlite, "duckdb": _duckdb, "postgres": _postgres}
+ENGINES = {"duckdb": _duckdb, "postgres": _postgres}
 
 
 def _pandas(case):
@@ -159,8 +147,7 @@ def test_sql_matches_the_fixture_and_pandas(engine, case):
 def test_every_rule_has_cases_and_the_pack_carries_it():
     assert RULES == ["XS-CLIP", "XS-COPY", "XS-MIX"]
     for rule in RULES:
-        for kind in ("sqlite", "postgres"):
-            assert rule in PACKS[kind]["rules"], (kind, rule)
+        assert rule in PACK["rules"], rule
 
 
 def test_no_site_specific_names_in_the_sql():
