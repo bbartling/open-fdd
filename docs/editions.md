@@ -7,7 +7,7 @@ has_children: true
 # Lite vs Full
 
 Open-FDD ships two NF apps from one shared source. Pick the edition from the host, not from the building. Both read the same Haystack
-model in NF ([data model](modeling.html)). Lite runs the rule pack on DuckDB. Full can also run it in Timescale.
+model in NF ([data model](modeling.html)).
 
 | | **Lite** | **Full** |
 |---|---|---|
