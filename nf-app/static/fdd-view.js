@@ -123,7 +123,11 @@ function fddUrlWith(href, { equip = "", rule = "", filter = "" } = {}) {
  * @param {any} rule catalog rule @param {Record<string, any>|null} [controls] plot-spec rule_tuning.rules[id].controls
  */
 function fddSiParameters(rule, controls = null) {
-  const units = { degC: "°C", "degC/h": "°C/h", delta_degC: "K", frac: "(fraction 0-1)", pct: "%", L_per_s: "L/s", Pa: "Pa", min: "min", s: "s", h: "h" };
+  const units = {
+    degC: "°C", DEG_C: "°C", "degC/h": "°C/h", "K-PER-HR": "K/h", delta_degC: "K", K: "K",
+    frac: "(fraction 0-1)", pct: "%", PERCENT: "%", L_per_s: "L/s", "L-PER-SEC": "L/s",
+    Pa: "Pa", PA: "Pa", min: "min", MIN: "min", s: "s", h: "h", HR: "h", PPM: "ppm", "KiloW-HR": "kWh",
+  };
   if (controls && Object.keys(controls).length) {
     return Object.values(controls).filter((c) => typeof c.default === "number")
       .map((c) => ({ name: c.label || c.key, key: c.key, value: Number(c.default.toFixed(4)), unit: units[c.unit] ?? (c.unit || "") }));

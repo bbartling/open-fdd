@@ -16,6 +16,7 @@
     "discharge_air_relative_humidity",
     "discharge_air_static_pressure",
     "chilled_water_volume_flow_rate",
+    "discharge_air_volume_flow_rate",
     "chilled_water_pressure_delta",
     "supply_condenser_water_temperature",
     "return_condenser_water_temperature",

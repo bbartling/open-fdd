@@ -13,6 +13,12 @@ test("unit aliases convert only the declared NF and BACnet spellings", () => {
     assert.deepEqual(toSI(1, unit), { value: 249.0889, unit: "Pa", quantity: "pressure" });
   }
   assert.equal(toSI(1, "cubic-feet-per-minute").value, 0.4719474);
+  assert.deepEqual(toSI(1, "L-PER-SEC"), { value: 1, unit: "L/s", quantity: "flow" });
+  assert.deepEqual(toSI(1, "ft\u00b3/min"), { value: 0.4719474, unit: "L/s", quantity: "flow" });
+  assert.deepEqual(toSI(1, "FT3-PER-MIN"), { value: 0.4719474, unit: "L/s", quantity: "flow" });
+  assert.deepEqual(toSI(1, "IN_H2O"), { value: 249.0889, unit: "Pa", quantity: "pressure" });
+  assert.deepEqual(toSI(40, "PERCENT_RH"), { value: 40, unit: "%", quantity: "percent" });
+  assert.deepEqual(toSI(40, "%RH"), { value: 40, unit: "%", quantity: "percent" });
   assert.equal(toSI(1, "pascals").value, 1);
   assert.equal(toSI(1, "kilopascals").value, 1000);
   assert.equal(toSI(68, "degrees-fahrenheit").value, 20);

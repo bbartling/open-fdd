@@ -71,6 +71,12 @@ def test_plant_roles_are_si_and_conservative():
         assert roles[role]["quantity"] == expected_quantity[role]
         assert role in cat.ASSESSABLE_ROLES_BY_SWEEP["SV-RANGE"]
     assert cat.unit_declares_quantity("L/s", "volume_flow") and not cat.unit_declares_quantity("gpm", "volume_flow")
+    assert cat.unit_declares_quantity("L-PER-SEC", "volume_flow") and cat.unit_declares_quantity("L/sec", "volume_flow")
+    assert not cat.unit_declares_quantity("FT3-PER-MIN", "volume_flow")
+    assert cat.unit_declares_quantity("PERCENT_RH", "relative_humidity")
+    assert "discharge_air_volume_flow_rate" in cat.ASSESSABLE_ROLES_BY_SWEEP["SV-RANGE"]
+    assert "discharge_air_volume_flow_rate" in cat.ASSESSABLE_ROLES_BY_SWEEP["SV-STALE"]
+    assert "discharge_air_static_pressure" in cat.ASSESSABLE_ROLES_BY_SWEEP["SV-STALE"]
     assert cat.unit_declares_quantity("kW", "power") and not cat.unit_declares_quantity("W", "power")
     # #1669: the canonical 0-100 %RH token is relative humidity; a 0-1 fraction is not
     assert cat.unit_declares_quantity("percent_0_100", "relative_humidity")

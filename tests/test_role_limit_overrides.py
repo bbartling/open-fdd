@@ -60,6 +60,11 @@ def test_imperial_round_trip_absolute_difference_and_rate_are_separate_conversio
     assert o.to_si(1.8, "degF", q, "rate_per_h") == pytest.approx(1.0)
     assert o.to_si(1.0, "inH2O", "air_pressure", "hi") == pytest.approx(249.0889)
     assert o.to_si(1.0, "cfm", "volume_flow", "hi") == pytest.approx(0.4719474)
+    assert o.to_si(1.0, "L/sec", "volume_flow", "hi") == pytest.approx(1.0)
+    assert o.to_si(1.0, "L-PER-SEC", "volume_flow", "hi") == pytest.approx(1.0)
+    assert o.to_si(1.0, "FT3-PER-MIN", "volume_flow", "hi") == pytest.approx(0.4719474)
+    assert o.to_si(1.0, "in h₂0", "air_pressure", "hi") == pytest.approx(249.0889)
+    assert o.to_si(1.0, "PERCENT_RH", "relative_humidity", "hi") == pytest.approx(1.0)
     assert o.to_si(1.0, "gpm", "volume_flow", "hi") == pytest.approx(0.0630902)
     for q, unit in (("absolute_temperature", "degF"), ("air_pressure", "inH2O"), ("volume_flow", "cfm"), ("volume_flow", "gpm"), ("relative_humidity", "%RH")):
         for field in o.FIELD_KIND:

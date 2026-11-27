@@ -203,7 +203,7 @@
       "source": "Gross-fault band for terminal discharge airflow, litres per second (NF L/sec and ft3/min convert before this check)"
     },
     {
-      "role": "chw-flow",
+      "role": "chilled_water_volume_flow_rate",
       "quantity": "volume_flow",
       "lo": -1.0,
       "hi": 1500.0,
