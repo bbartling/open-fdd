@@ -316,7 +316,7 @@
         id: `weekly-${motor.id}${i ? "-" + role.split("_").pop() : ""}`,
         group: motor.group,
         title: `Weekly runtime: ${motor.title}${motor.signals.length > 1 ? ` (${role.endsWith("_status") ? "status" : "command"})` : ""}`,
-        kinds: motor.kinds, scope: "site", hours: 672,
+        kinds: motor.kinds, scope: "site", hours: 672, fine: true,
         roles: { required: [role], optional: ["oa_t", ...motor.signals.filter((r) => r !== role)] },
         render: (el, ctx) => renderWeekly(el, ctx, motor, role),
       });
@@ -380,7 +380,7 @@
   function dailyRuntimeView(motor, id, extra = {}) {
     rcxView({
       id, group: motor.group, title: `${motor.title}: run hours per day`,
-      kinds: motor.kinds, scope: "site", hours: 168, ...extra,
+      kinds: motor.kinds, scope: "site", hours: 168, fine: true, ...extra,
       roles: { required: [], anyOf: motor.signals, optional: [] },
       render: async (el, ctx) => {
         const list = ctx.equips.map((eq) => ({ eq, sig: runSignalOf(ctx, eq, motor) })).filter((x) => x.sig);
@@ -477,7 +477,7 @@
   const MECH_CMD = ["chiller_cmd", "compressor_cmd", "dx_cool_cmd"];
   rcxView({
     id: "mech-cooling-hours", group: "Plant", title: "Mechanical cooling hours by outdoor air",
-    kinds: [], scope: "site", hours: 720,
+    kinds: [], scope: "site", hours: 720, fine: true,
     roles: { required: [], anyOf: [...MECH_STATUS, ...MECH_CMD], optional: ["oa_t"] },
     render: async (el, ctx) => {
       const roleOf = new Map();

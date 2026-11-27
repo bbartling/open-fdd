@@ -7,8 +7,10 @@
 //   2. the proof of the equipment that FEEDS it, one hop: its airRef / chilledWaterRef / hotWaterRef target, then an
 //      isFedBy target, then any equipment that lists it under `feeds` (RDF: brick:isFedBy / brick:feeds). Each feeder is
 //      judged by its own proof (tier 1);
-//   3. none -> a gated rule is SKIPPED with reason `no_run_proof`, never a silent PASS.
-// Needs model.js (idOf) and fdd.js (bindRoles, equipPool). The FDD hook loads it in the same sandbox as those two.
+//   3. a VAV with no airRef at all, when the site has exactly one AHU-class equipment: that AHU's own proof
+//      (via `assumedSingleAhu`). A dangling airRef is not guessed around. Off when assumeSingleFeeder is false.
+//   4. none -> a gated rule is SKIPPED with reason `no_run_proof`, never a silent PASS.
+// Needs model.js (idOf) and fdd.js (bindRoles, equipPool, equipKinds). The FDD hook loads it in the same sandbox as those two.
 
 /** Ref value -> bare id ("@AHU-1" and "AHU-1" are the same). */
 const runProofRefId = (v) => String(v ?? "").trim().replace(/^@/, "");
@@ -61,6 +63,25 @@ function ownRunProof(equipRec, model, catalog, refused = []) {
   return null;
 }
 
+/**
+ * The site's only AHU, when this equip is a VAV with no airRef at all. Null when airRef is set (even if it
+ * points nowhere), when the site has zero or several AHU-class equips, or when the equip is not a VAV.
+ * @returns {any | null}
+ */
+function singleAhuRecord(equipRec, model, catalog) {
+  if (!equipKinds(equipRec, catalog).includes("vav")) return null;
+  if (runProofRefId((equipRec.attrs || {}).airRef)) return null;
+  const site = (equipRec.attrs || {}).siteRef || "";
+  const ahus = model.equips.filter((e) => e !== equipRec && ((e.attrs || {}).siteRef || "") === site && equipKinds(e, catalog).includes("ahu"));
+  return ahus.length === 1 ? ahus[0] : null;
+}
+
+/** App option assumeSingleFeeder (default on, matching the RCx "AHU on" assumption). The hook passes the option explicitly. */
+function assumeSingleFeederOn() {
+  if (typeof siteAssumeSingleFeeder === "function") return siteAssumeSingleFeeder() !== false;
+  return true;
+}
+
 /** Candidate feeders of an equip, in contract order: [{ rec, via }]. Same site only, never itself. */
 function runProofFeeders(equipRec, model, catalog) {
   const a = equipRec.attrs || {};
@@ -85,16 +106,24 @@ function runProofFeeders(equipRec, model, catalog) {
 /**
  * The run proof of one equip.
  * @returns {{ found: boolean, tier?: string, source?: string, role?: string, point?: any,
- *             equip?: string, via?: string, reason?: string,
+ *             equip?: string, via?: string, assumed?: boolean, reason?: string,
  *             refused?: Array<{ equip: string, role: string, point: string, reason: string }> }}
  */
-function resolveRunProof(equipRec, model, catalog) {
+function resolveRunProof(equipRec, model, catalog, opts = {}) {
   const refused = [];   // commands skipped for an unknown scale (#1631); the next candidate wins
+  const assume = opts.assumeSingleFeeder !== undefined ? opts.assumeSingleFeeder !== false : assumeSingleFeederOn();
   const own = ownRunProof(equipRec, model, catalog, refused);
   if (own) return { found: true, tier: "own", source: own.source, role: own.role, point: own.point, equip: idOf(equipRec), via: "self", refused };
   for (const { rec, via } of runProofFeeders(equipRec, model, catalog)) {
     const hit = ownRunProof(rec, model, catalog, refused);
     if (hit) return { found: true, tier: "feeder", source: hit.source, role: hit.role, point: hit.point, equip: idOf(rec), via, refused };
+  }
+  if (assume) {
+    const ahu = singleAhuRecord(equipRec, model, catalog);
+    if (ahu) {
+      const hit = ownRunProof(ahu, model, catalog, refused);
+      if (hit) return { found: true, tier: "feeder", source: hit.source, role: hit.role, point: hit.point, equip: idOf(ahu), via: "assumedSingleAhu", assumed: true, refused };
+    }
   }
   return { found: false, reason: catalog.run_proof.skip_reason, refused };
 }

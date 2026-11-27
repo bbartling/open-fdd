@@ -11,7 +11,9 @@ Resolution, in order (first hit wins):
 2. the proof of the equipment that FEEDS it, one hop: its ``airRef`` / ``chilledWaterRef`` / ``hotWaterRef`` target, then a
    ``isFedBy`` target, then any equipment that lists it under ``feeds`` (RDF: ``brick:isFedBy`` / ``brick:feeds``), each
    feeder judged by its own proof (tier 1);
-3. none: a gated rule is SKIPPED with reason ``no_run_proof``.
+3. a VAV (``kinds`` contains ``vav``) with no ``airRef``, when the site has exactly one AHU-class equipment: that AHU's
+   own proof (``via`` ``assumedSingleAhu``). Off when ``assume_single_feeder`` is false. A dangling ``airRef`` is not guessed.
+4. none: a gated rule is SKIPPED with reason ``no_run_proof``.
 
 The pure function :func:`resolve_run_proof` works on :class:`ProofNode` objects, which come from an NF model
 (:func:`nodes_from_model`) or from the Turtle export (:func:`nodes_from_graph`, rdflib), so both give the same answer.
@@ -47,6 +49,7 @@ class ProofNode:
     is_fed_by: tuple[str, ...] = ()
     feeds: tuple[str, ...] = ()
     roles: frozenset[str] = frozenset()              # roles with at least one bound point
+    kinds: frozenset[str] = frozenset()              # equipment kinds (ahu, vav, ...); empty = the single-AHU assumption does not apply
 
     def names(self) -> set[str]:
         return {self.id, *self.aliases} - {""}
@@ -83,7 +86,7 @@ def _own(node: ProofNode, own: Mapping[str, Iterable[str]]) -> tuple[str, str] |
     return None
 
 
-def resolve_run_proof(node: ProofNode, nodes: Iterable[ProofNode], contract: Mapping) -> RunProof:
+def resolve_run_proof(node: ProofNode, nodes: Iterable[ProofNode], contract: Mapping, *, assume_single_feeder: bool = True) -> RunProof:
     """The proof of ``node`` (see the module docstring). ``nodes`` = every equipment of the model."""
     own = contract["own"]
     hit = _own(node, own)
@@ -110,6 +113,12 @@ def resolve_run_proof(node: ProofNode, nodes: Iterable[ProofNode], contract: Map
         hit = _own(feeder, own)
         if hit:
             return RunProof(True, "feeder", hit[0], hit[1], feeder.id, via)
+    if assume_single_feeder and "vav" in node.kinds and not node.refs.get("airRef"):
+        ahus = [n for n in site_nodes if "ahu" in n.kinds]
+        if len(ahus) == 1:
+            hit = _own(ahus[0], own)
+            if hit:
+                return RunProof(True, "feeder", hit[0], hit[1], ahus[0].id, "assumedSingleAhu")
     return NONE
 
 
@@ -122,7 +131,7 @@ def _split(v: Any) -> tuple[str, ...]:
 
 def nodes_from_model(model, catalog: Mapping | None = None) -> list[ProofNode]:
     """:class:`ProofNode` per equipment of an ``open_fdd.nf.model.Model`` (roles bound exactly like the rules bind them)."""
-    from open_fdd.nf.model import bind_roles, equip_pool, id_of, load_catalog
+    from open_fdd.nf.model import bind_roles, equip_kinds, equip_pool, id_of, load_catalog
 
     cat = catalog or load_catalog()
     c = spec(cat)
@@ -136,7 +145,8 @@ def nodes_from_model(model, catalog: Mapping | None = None) -> list[ProofNode]:
             aliases=tuple(x for x in (e.get("name"), e.get("uuid"), a.get("dis")) if x),
             refs={r: _ref_id(a.get(r)) for r in c["feeders"]["refs"] if a.get(r)},
             is_fed_by=_split(a.get("isFedBy")), feeds=_split(a.get("feeds")),
-            roles=frozenset(r for r, pts in bound.items() if pts)))
+            roles=frozenset(r for r, pts in bound.items() if pts),
+            kinds=frozenset(equip_kinds(e, cat))))
     return out
 
 

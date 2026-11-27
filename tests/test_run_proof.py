@@ -115,8 +115,23 @@ def test_a_ref_never_crosses_sites_and_never_guesses():
     a = ProofNode("AHU-1", "x", roles=frozenset({"fan_status"}))
     v = ProofNode("VAV-1", "y", refs={"airRef": "AHU-1"})
     assert not resolve_run_proof(v, [a, v], spec()).found
-    v2 = ProofNode("VAV-2", "x")                                  # no ref: the only AHU of the site is NOT assumed
+    v2 = ProofNode("VAV-2", "x")                                  # no kinds: the single-AHU assumption does not apply
     assert not resolve_run_proof(v2, [a, v2], spec()).found
+
+
+def test_one_ahu_and_no_airref_is_assumed_and_can_be_turned_off():
+    c = spec()
+    a = ProofNode("AHU-1", "s", roles=frozenset({"fan_status"}), kinds=frozenset({"ahu"}))
+    v = ProofNode("VAV-1", "s", kinds=frozenset({"vav"}))
+    dangling = ProofNode("VAV-2", "s", refs={"airRef": "missing"}, kinds=frozenset({"vav"}))
+    boiler = ProofNode("B-1", "s", kinds=frozenset({"boiler"}))
+    got = resolve_run_proof(v, [a, v], c)
+    assert (got.found, got.tier, got.equip, got.via) == (True, "feeder", "AHU-1", "assumedSingleAhu")
+    assert not resolve_run_proof(v, [a, v], c, assume_single_feeder=False).found
+    assert not resolve_run_proof(dangling, [a, dangling], c).found
+    assert not resolve_run_proof(boiler, [a, boiler], c).found
+    other = ProofNode("AHU-2", "s", roles=frozenset({"fan_cmd"}), kinds=frozenset({"ahu"}))
+    assert not resolve_run_proof(v, [a, other, v], c).found
 
 
 def test_own_status_beats_own_command_and_feeder_order_is_the_contract_order():

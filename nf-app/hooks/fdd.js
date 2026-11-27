@@ -103,6 +103,7 @@ function loadShared() {
   return {
     toPoint: get('toPoint'), idOf: get('idOf'), has: get('has'), equipRules: get('equipRules'),
     bindRoles: get('bindRoles'), equipPool: get('equipPool'), resolveRunProof: get('resolveRunProof'),
+    singleAhuRecord: get('singleAhuRecord'),
     ENTITY_TYPES: get('ENTITY_TYPES'),
     catalog: JSON.parse(fs.readFileSync(path.join(STATIC, 'fdd-catalog.json'), 'utf8')),
   };
@@ -984,6 +985,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
     occupancy: /** @type {Record<string, {source: string, revision: number | null}>} */ ({}),
     // loud-failure bookkeeping (#1550): what was eligible, what was skipped and why, how fresh the input was
     eligible: 0, skipped: [], stale_reasons: {}, failure: null, roles_skipped_by_unit: {}, no_run_proof: 0,
+    assumed_feeders: 0, airref_hint: '',
     window: { from: new Date(from).toISOString(), to: new Date(to).toISOString(), hours: windowHours },
     source_freshness: { engine: kind, newest_sample: null, age_minutes: null, nf_latest: isoOrNull(newestLatest(model.points)), nf_latest_age_minutes: null } };
   let sourceNewest = null;                               // newest input sample the engine could see (ms)
@@ -1042,10 +1044,14 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         // history column run_proof. None found = gated rules are SKIPPED no_run_proof (SQL returns covered_hours 0).
         let proof = { found: false };
         if (runnable.some((r) => r.rule.run_proof === 'gated')) {
-          proof = shared.resolveRunProof(equipRec, model, shared.catalog);
+          proof = shared.resolveRunProof(equipRec, model, shared.catalog, { assumeSingleFeeder: settings.assumeSingleFeeder(config) });
           // #1631: commands with an unknown scale are skipped by the resolver (the next candidate wins); say so
           for (const r of proof.refused || []) log(`${equipId}: run proof candidate ${r.equip}/${r.point} (${r.role}) not used: ${r.reason}`);
           if (!proof.found && (proof.refused || []).length) proof = { ...proof, reason: proof.refused.map((r) => r.reason).join('; ') };
+          if (proof.found && proof.via === 'assumedSingleAhu') {
+            summary.assumed_feeders++;
+            log(`${equipId}: run proof uses the site's only AHU ${proof.equip} (no airRef)`);
+          }
           if (proof.found && proof.point) roles.run_proof = proof.point;
         }
         const si = siPlan(roles, shared.catalog, log, warnedUnits);
@@ -1184,8 +1190,16 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             && pack.rule_tuning_templates.rules[r.rule.id], tunedHere);
           const noProof = gateOn && !roles.run_proof;
           if (noProof && out.status === 'not-assessed') {
-            out.reason = `${shared.catalog.run_proof.skip_reason}: ${proof.reason && proof.reason !== shared.catalog.run_proof.skip_reason ? proof.reason : 'no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound'}`;
+            const oneAhu = shared.singleAhuRecord(equipRec, model, shared.catalog);
+            const hint = oneAhu ? 'add airRef on this VAV (the site has one AHU) to name its feeder' : '';
+            out.reason = `${shared.catalog.run_proof.skip_reason}: ${proof.reason && proof.reason !== shared.catalog.run_proof.skip_reason ? proof.reason : 'no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound'}`
+              + (hint ? `; ${hint}` : '');
             summary.no_run_proof++;
+            if (hint) {
+              if (!summary.airref_vavs) summary.airref_vavs = new Set();
+              summary.airref_vavs.add(equipId);
+              summary.airref_rules = (summary.airref_rules || 0) + 1;
+            }
           }
           const sensorFaultHours = row && row.sensor_fault_hours;
           const perSensor = row && row.sensor_rows || [];
@@ -1378,6 +1392,10 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   }
   // An empty / incomplete MODEL is its own failure with its own reason: never "required roles missing" (#1550)
   if (modelProblem) summary.failure = modelProblem;
+  if (summary.airref_vavs && summary.airref_vavs.size) {
+    summary.airref_hint = `add airRef to ${summary.airref_vavs.size} VAVs to enable ${summary.airref_rules} rules`;
+    summary.airref_vavs = summary.airref_vavs.size;
+  }
   for (const line of runReport(summary, windowHours)) log(line);
   log(`open-fdd ${kind}: ${summary.equips} equips, ${summary.rules} rule runs, ${summary.errors} errors, `
     + `${faults.length} with fault time, ${summary.written} values written (window ${windowHours} h); `
@@ -1423,6 +1441,8 @@ function runReport(s, windowHours) {
     `open-fdd counts: eligible ${s.eligible}, evaluated ${s.equips}, written ${s.written}, skipped ${s.skipped.length}, stale ${s.status.stale}; `
     + `skipped by reason: ${tally(s.skipped, (x) => x.kind)}; stale by reason: ${Object.entries(s.stale_reasons).map(([k, n]) => `${k} x${n}`).join('; ') || 'none'}`,
   ];
+  if (s.assumed_feeders) lines.push(`open-fdd run proof: ${s.assumed_feeders} VAVs use the site's only AHU (no airRef)`);
+  if (s.airref_hint) lines.push(`open-fdd run proof: ${s.airref_hint}`);
   for (const x of s.skipped.slice(0, 20)) lines.push(`open-fdd skipped ${x.site ? `${x.site}/` : ''}${x.equip}: ${x.detail}`);
   if (s.skipped.length > 20) lines.push(`open-fdd skipped: ${s.skipped.length - 20} more equips (same format)`);
   if (s.failure) lines.push(`open-fdd FAILED: ${s.failure}`);

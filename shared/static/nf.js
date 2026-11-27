@@ -49,7 +49,7 @@ function isRetryable(path, method) {
 /**
  * @param {string} path
  * @param {unknown} [body] POSTed as JSON when given
- * @param {{method?: string}} [opts] override the method (PATCH/DELETE); default GET, or POST with a body
+ * @param {{method?: string, signal?: AbortSignal}} [opts] override the method (PATCH/DELETE); default GET, or POST with a body. signal aborts the request.
  * @returns {Promise<any>}
  */
 async function api(path, body, opts = {}) {
@@ -60,7 +60,7 @@ async function api(path, body, opts = {}) {
   const retry = isRetryable(path, method);
   for (let attempt = 1; ; attempt++) {
     if (getToken) headers.Authorization = `Bearer ${await getToken()}`;
-    const r = await fetch(path, { credentials: "same-origin", headers, ...init });
+    const r = await fetch(path, { credentials: "same-origin", headers, ...init, signal: opts.signal });
     if (r.ok) return r.json();
     // NF occasionally answers a transient empty-body 403; retry reads a few times.
     if (retry && [403, 429, 502, 503, 504].includes(r.status) && attempt < 4) {

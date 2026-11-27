@@ -394,7 +394,7 @@ const WINDOWS = [60, 300, 600, 900, 1800, 3600, 7200, 14400, 86400];
 const pickWindow = (hours, target = 360) => WINDOWS.find((w) => (hours * 3600) / w <= target) || 86400;
 const windowLabel = (seconds) => seconds >= 3600 ? `${+(seconds / 3600).toFixed(1)} h` : `${+(seconds / 60).toFixed(1)} min`;
 
-const seriesCache = new Map();  // url -> { at, promise }
+const seriesCache = new Map();  // url -> { at, promise, uuids, from, to, windowSec, method }
 const CACHE_MS = 60e3;
 // Leave room for fixed query parameters and request headers under NF's ~8 KB front-door limit.
 const HISTORY_URL_BUDGET = 6000;
@@ -421,7 +421,7 @@ function chartTimeZone(siteTz) { return validChartTimeZone(siteTz); }
 // Nothing is retagged; the resolved source is shown next to the zone when it is a fallback.
 // modelSites: SITE records in the loaded model (null until loadModel ran); a lone Sites API record is only
 // borrowed for an unmatched site when the model is not known to hold several sites.
-const SITE_TZ_SOURCES = { appOption: null, sites: [], weatherOff: false, modelSites: null };
+const SITE_TZ_SOURCES = { appOption: null, sites: [], weatherOff: false, assumeSingle: true, modelSites: null };
 /** Called by loadModel with the number of modeled sites. */
 function noteModelSiteCount(n) { SITE_TZ_SOURCES.modelSites = Number.isFinite(n) ? n : null; }
 /** The optional zone reads must not hold the page: give up after `ms` and use the remaining fallbacks. */
@@ -439,11 +439,12 @@ const knownZone = (z) => {
   try { new Intl.DateTimeFormat("en-US", { timeZone: s }); return s; } catch { return null; }
 };
 const isUtcZone = (z) => /^(utc|etc\/utc|etc\/gmt|gmt|z)$/i.test(String(z ?? "").trim());
-/** @param {{appOption?: string|null, sites?: any[], weatherOff?: boolean}} s */
+/** @param {{appOption?: string|null, sites?: any[], weatherOff?: boolean, assumeSingle?: boolean}} s */
 function setSiteTimeZoneSources(s = {}) {
   SITE_TZ_SOURCES.appOption = knownZone(s.appOption);
   SITE_TZ_SOURCES.sites = Array.isArray(s.sites) ? s.sites : [];
   SITE_TZ_SOURCES.weatherOff = !!s.weatherOff;
+  SITE_TZ_SOURCES.assumeSingle = s.assumeSingle !== false;
 }
 /** The raw value of an app option (typed or scalar) from a GET /api/v1/apps listing entry, or undefined. */
 function appOptionRaw(app, name) {
@@ -460,11 +461,18 @@ function appWeatherOff(app) {
 }
 /** Is the web weather switched off in the app options? (set by loadSiteTimeZoneSources / the analytics hook) */
 const weatherDisabled = () => SITE_TZ_SOURCES.weatherOff;
+/** A VAV with no airRef uses the site's only AHU (default on; app option assumeSingleFeeder). */
+function appAssumeSingleFeeder(app) {
+  const raw = appOptionRaw(app, "assumeSingleFeeder");
+  if (raw == null || String(raw).trim() === "") return true;
+  return !["false", "0", "no", "off"].includes(String(raw).trim().toLowerCase());
+}
+const siteAssumeSingleFeeder = () => SITE_TZ_SOURCES.assumeSingle !== false;
 /** Best-effort read of the non-model zone sources + the weather switch; a failure just leaves that source empty. */
 async function loadSiteTimeZoneSources() {
   const loc = typeof location === "undefined" ? null : location;
   const appId = loc && (String(loc.pathname || "").match(/\/apps\/static\/([^/]+)\//) || [])[1];
-  let appOption = null, weatherOff = false, sites = [];
+  let appOption = null, weatherOff = false, assumeSingle = true, sites = [];
   // both reads run together, each bounded; a failure or a timeout just leaves that source empty
   const [appsR, sitesR] = await Promise.allSettled([
     appId ? boundedRead(api("/api/v1/apps")) : Promise.resolve(null),
@@ -472,10 +480,10 @@ async function loadSiteTimeZoneSources() {
   ]);
   try {
     const app = appsR.status === "fulfilled" && appsR.value ? (appsR.value.applications || []).find((a) => a.id === appId) : null;
-    appOption = appTimeZoneOption(app); weatherOff = appWeatherOff(app);
+    appOption = appTimeZoneOption(app); weatherOff = appWeatherOff(app); assumeSingle = appAssumeSingleFeeder(app);
   } catch { /* malformed: leave empty */ }
   try { sites = sitesR.status === "fulfilled" ? ((sitesR.value || {}).sites || []).filter((s) => s && knownZone(s.timezone)) : []; } catch { sites = []; }
-  setSiteTimeZoneSources({ appOption, sites, weatherOff });
+  setSiteTimeZoneSources({ appOption, sites, weatherOff, assumeSingle });
 }
 /**
  * The zone to show and parse for a model site record.
@@ -646,6 +654,36 @@ function historyChunks(list, from, to, windowSec, method) {
   return chunks;
 }
 
+/** In-flight history for the visible tab. A tab, site or range change aborts it. */
+let historyCtrl = typeof AbortController === "function" ? new AbortController() : { signal: undefined, abort() {} };
+function cancelHistory() {
+  try { historyCtrl.abort(); } catch { /* already aborted */ }
+  historyCtrl = typeof AbortController === "function" ? new AbortController() : { signal: undefined, abort() {} };
+}
+
+/**
+ * A cached answer whose uuid set covers `list` for the same window (Overview prefetches one batch; each card reuses it).
+ * @returns {Promise<{data: any[]}> | null}
+ */
+function coverFromCache(list, from, to, windowSec, method) {
+  const want = new Set(list.map((p) => p.uuid));
+  if (!want.size) return null;
+  const hits = [];
+  const covered = new Set();
+  for (const hit of seriesCache.values()) {
+    if (!hit || !hit.uuids || hit.from !== from || hit.to !== to || hit.windowSec !== windowSec || hit.method !== method) continue;
+    if (Date.now() - hit.at > CACHE_MS) continue;
+    let useful = false;
+    for (const u of hit.uuids) if (want.has(u) && !covered.has(u)) { covered.add(u); useful = true; }
+    if (useful) hits.push(hit);
+    if (covered.size === want.size) break;
+  }
+  if (covered.size !== want.size) return null;
+  return Promise.all(hits.map((h) => h.promise)).then((responses) => ({
+    data: responses.flatMap((r) => r.data || []).filter((s) => want.has(s.uuid)),
+  }));
+}
+
 /**
  * uuid -> [[ms, value], ...] for `list` over the last `hours`, one value per window.
  * UUIDs are grouped into bounded requests; repeat calls within a minute reuse each chunk answer.
@@ -658,27 +696,31 @@ async function fetchSeries(list, hours, { method = "AVERAGE", windowSec = pickWi
   // caller walk a long span back in chunks (rcx.js alignedFine).
   const end = endMs != null ? endMs : Math.ceil(Date.now() / (windowSec * 1e3)) * windowSec * 1e3;
   const from = new Date(fromMs == null ? end - hours * 3600e3 : fromMs).toISOString(), to = new Date(end).toISOString();
-  const chunks = historyChunks(list, from, to, windowSec, method);
+  const signal = historyCtrl.signal;
+  const covered = coverFromCache(list, from, to, windowSec, method);
+  const chunks = covered ? [] : historyChunks(list, from, to, windowSec, method);
   // A small fixed concurrency bounds load while keeping 709-sensor views practical.
+  const responses = covered ? [await covered] : [];
   for (let base = 0; base < chunks.length; base += 4) {
-    const responses = await Promise.all(chunks.slice(base, base + 4).map((chunk) => {
+    if (signal && signal.aborted) throw new DOMException("aborted", "AbortError");
+    responses.push(...await Promise.all(chunks.slice(base, base + 4).map((chunk) => {
       const url = historyUrl(chunk, from, to, windowSec, method);
       let hit = seriesCache.get(url);
       if (!hit || Date.now() - hit.at > CACHE_MS) {
-        hit = { at: Date.now(), promise: api(url) };
+        hit = { at: Date.now(), promise: api(url, null, { signal }), uuids: chunk.map((p) => p.uuid), from, to, windowSec, method };
         seriesCache.set(url, hit);
         hit.promise.catch(() => seriesCache.delete(url));
         for (const [k, v] of seriesCache) if (Date.now() - v.at > CACHE_MS) seriesCache.delete(k);
       }
       return hit.promise;
-    }));
-    for (const response of responses) for (const series of response.data || []) {
-      const arr = out.get(series.uuid);
-      if (!arr) continue;
-      for (const s of series.values || []) {
-        const v = s.double ?? s.real;
-        if (v != null && s.ts) arr.push([parseTs(s.ts), v]);
-      }
+    })));
+  }
+  for (const response of responses) for (const series of response.data || []) {
+    const arr = out.get(series.uuid);
+    if (!arr) continue;
+    for (const s of series.values || []) {
+      const v = s.double ?? s.real;
+      if (v != null && s.ts) arr.push([parseTs(s.ts), v]);
     }
   }
   for (const arr of out.values()) arr.sort((a, b) => a[0] - b[0]);

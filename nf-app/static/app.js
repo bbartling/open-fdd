@@ -85,6 +85,7 @@ function wireViewTabs() {
   on("fddMore", "ontoggle", () => { if (/** @type {HTMLDetailsElement} */ (/** @type {unknown} */ ($("fddMore"))).open) requestAnimationFrame(ofddResizeAll); });
   on("fddHeatAll", "onchange", (e) => { fddUi.heatAll = e.target.checked; renderScopedFddResults().catch(fail); });
   on("rcxAhuOn", "onclick", (e) => { rcxUi.ahuOn = e.currentTarget.getAttribute("aria-pressed") !== "true"; renderRcx().catch(fail); });
+  on("rcxMore", "onclick", () => { if (typeof showTab === "function") showTab("analytics"); });
 }
 
 async function renderFdd() {
@@ -401,14 +402,15 @@ async function renderFddResults(equips, sweepRoles = {}) {
 // card that drew nothing is removed, so a site without a chiller / hot-water plant / DX / zones simply has no such panel.
 // The FDD charts follow the FDD tab's one selected equipment. Each card renders on its own so one failing view never
 // blanks the page.
-const viewTabRuns = { rcx: 0, fdd: 0 };
+const viewTabRuns = { rcx: 0, fdd: 0, analytics: 0 };
 // Overview (#1643): the fleet dashboard draws a card only when it comes near the viewport, a few at a time, so opening
 // Overview no longer requests history for every panel on the site at once. Holds the running queue's stop().
 /** @type {Record<string, (() => void) | null>} */
-const viewTabObservers = { rcx: null, fdd: null };
+const viewTabObservers = { rcx: null, fdd: null, analytics: null };
 const LAZY_CARD_MARGIN = "600px 0px", LAZY_CARD_CONCURRENCY = 2;
 const VIEW_TABS = {
   rcx: { ui: () => rcxUi, body: "rcxBody", range: "rcxRangeControl", status: "rcxRangeStatus", key: "rcx", mode: "rcxMode", kpis: "rcxKpis" },
+  analytics: { ui: () => rcxUi, body: "anBody", range: "anRangeControl", status: "anRangeStatus", key: "analytics", mode: "anMode", kpis: "anKpis" },
   fdd: { ui: () => fddUi, body: "fddBody", range: "fddChartsRangeControl", status: "fddChartsRangeStatus", key: "fddCharts", mode: "fddMode", kpis: null },
 };
 
@@ -436,15 +438,16 @@ function renderAhuControl(siteEquips, catalog) {
 }
 
 async function renderViewTab(tab) {
+  if (typeof cancelHistory === "function") cancelHistory();
   const T = VIEW_TABS[tab], ui = T.ui(), run = ++viewTabRuns[tab];
   const catalog = await loadCatalog();
   wireViewTabs();
   const siteEquips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site);
-  const fleet = tab === "rcx";                                  // the RCx dashboard: every device, never one picked
+  const fleet = tab === "rcx" || tab === "analytics";            // every device, never one picked
   // Weather checks still bind their outdoor-air pair from the site's model, but must never draw equipment plots.
   const weatherOnly = !fleet && scope.equip === WEATHER_SCOPE;
   const equips = fleet || weatherOnly ? siteEquips : fddEquipsInScope(), single = !fleet && !!tabEquip();
-  const ahuOn = tab === "rcx" ? renderAhuControl(siteEquips, catalog) : false;
+  const ahuOn = fleet ? renderAhuControl(siteEquips, catalog) : false;
   const rangeState = getChartRangeState(T.key), siteTz = siteTimeZone();
   renderRangeControl($(T.range), { key: T.key, state: rangeState, siteTz,
     onChange: () => {
@@ -462,13 +465,14 @@ async function renderViewTab(tab) {
   if (run !== viewTabRuns[tab]) return;
   const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
   $(T.status).textContent = "Loading history…";
-  const plan = rcxPlan(equips, model, catalog, { tab, single });
+  const place = tab === "analytics" ? "more" : tab === "rcx" ? "overview" : null;
+  const plan = rcxPlan(equips, model, catalog, { tab: place ? "rcx" : tab, single, ...(place ? { place } : {}) });
   const { missing } = plan;
   const ready = weatherOnly ? plan.ready.filter(({ view }) => view.id === "bas-vs-web-oat" || view.id === "bas-vs-web-oat-hist") : plan.ready;
   const cards = ready.flatMap(({ view, equips: eqs }) => (view.scope === "site" ? [{ view, eqs }] : eqs.map((eq) => ({ view, eqs: [eq] }))));
   const groupOf = (c) => (c.view.groupOf ? c.view.groupOf(c.eqs) : c.view.group);
   void missing;                                                  // unbound views are hidden, never listed
-  if (fleet && $("overviewRcx")) $("overviewRcx").hidden = !cards.length;
+  if (tab === "rcx" && $("overviewRcx")) $("overviewRcx").hidden = !cards.length;
   if ($(T.mode)) {
     const who = single ? (fddEquipOptions(model, scope.site).find((o) => o.id === tabEquip()) || { label: tabEquip() }).label : "";
     $(T.mode).textContent = tab === "fdd"
@@ -476,8 +480,8 @@ async function renderViewTab(tab) {
       : `${cards.length} panel${cards.length === 1 ? "" : "s"} from the ${siteEquips.length} modeled device${siteEquips.length === 1 ? "" : "s"} of this site.`;
   }
   const sections = [];
-  if (tab === "rcx" && cards.some((c) => c.view.headline)) sections.push({ title: "Headline", cls: " rcx-headline", cards: cards.filter((c) => c.view.headline) });
-  const rest = cards.filter((c) => tab !== "rcx" || !c.view.headline);
+  if (fleet && cards.some((c) => c.view.headline)) sections.push({ title: "Headline", cls: " rcx-headline", cards: cards.filter((c) => c.view.headline) });
+  const rest = cards.filter((c) => !fleet || !c.view.headline);
   for (const g of [...new Set(rest.map(groupOf))]) sections.push({ title: g, cls: "", cards: rest.filter((c) => groupOf(c) === g) });
   $(T.body).innerHTML = sections.map((sec) => `<section class="panel${sec.cls}"><h2>${esc(sec.title)}</h2><div class="rcx-grid${tab === "fdd" ? " one-col" : ""}">${
     sec.cards.map((c) => `<div class="rcx-card${c.view.wide ? " rcx-wide" : ""}" data-view="${esc(c.view.id)}">
@@ -521,18 +525,27 @@ async function renderViewTab(tab) {
     if (run !== viewTabRuns[tab]) return;
     $(T.status).textContent = "";
     const body = $(T.body);
-    if (fleet && $("overviewRcx") && body && typeof body.querySelectorAll === "function") {
+    if (tab === "rcx" && $("overviewRcx") && body && typeof body.querySelectorAll === "function") {
       $("overviewRcx").hidden = ![...body.querySelectorAll(".rcx-card")].some((x) => !/** @type {HTMLElement} */ (x).hidden);
     }
   };
   if (viewTabObservers[tab]) { viewTabObservers[tab](); viewTabObservers[tab] = null; }
+  if (run !== viewTabRuns[tab]) return;
+  if (fleet && cards.length && typeof prefetchViewHistory === "function") {
+    try { await prefetchViewHistory(cards, range, siteTz); }
+    catch (e) {
+      if (run !== viewTabRuns[tab] || (e && e.name === "AbortError")) return;
+      throw e;
+    }
+  }
+  if (run !== viewTabRuns[tab]) return;
   if (fleet && cards.length && typeof IntersectionObserver === "function" && typeof lazyDrawCards === "function") {
     // Lazy (lazy-cards.js): a card fetches its history when it nears the viewport, LAZY_CARD_CONCURRENCY at once.
     // Leaving Overview stops the queue; coming back re-renders the dashboard as a new run.
     $(T.status).textContent = "";                               // each card shows its own loading placeholder
     viewTabObservers[tab] = lazyDrawCards({
       els: cards.map((_, i) => $(`${tab}-${i}`)), draw: drawCard, onDone: finish,
-      isLive: () => run === viewTabRuns[tab] && activeTab === "overview",
+      isLive: () => run === viewTabRuns[tab] && activeTab === (tab === "rcx" ? "overview" : tab),
       concurrency: LAZY_CARD_CONCURRENCY, rootMargin: LAZY_CARD_MARGIN,
     });
     return;
@@ -545,6 +558,22 @@ async function renderViewTab(tab) {
 }
 
 function renderRcx() { return renderViewTab("rcx"); }
+
+/** One history read for the cards on this surface: fine grid for run hours and cooling bins, display grid for the rest. */
+async function prefetchViewHistory(cards, range, siteTz) {
+  if (typeof fetchRange !== "function" || !range) return;
+  const fine = new Map(), disp = new Map();
+  for (const c of cards) {
+    const dest = c.view.fine ? fine : disp;
+    for (const eq of c.eqs || []) for (const pts of Object.values(eq.bound || {})) {
+      for (const p of pts || []) if (p && p.uuid) dest.set(p.uuid, p);
+    }
+  }
+  const jobs = [];
+  if (disp.size) jobs.push(fetchRange([...disp.values()], range, { siteTz, preserveWindow: true }));
+  if (fine.size) jobs.push(fetchRange([...fine.values()], range, { siteTz, preserveWindow: true, windowSec: RCX_FINE_SEC, minWindowSec: RCX_FINE_SEC }));
+  await Promise.all(jobs);
+}
 
 // ---- display units: imperial | si (units.js, localStorage "openfdd-units") -------------------
 function syncUnitsToggle() {
@@ -569,7 +598,8 @@ ofddTabs.overview = async () => {
   if (globalThis.ofddOccupancyEditor) await globalThis.ofddOccupancyEditor.render({ site: scope.site,
     timezone: resolveSiteTimeZone(model.sites.find((s) => idOf(s) === scope.site)).zone, onChange: () => renderRcx() });
   return renderRcx();
-};   // the RCx dashboard is part of Overview (the RCx tab is gone; #rcx opens Overview)
+};   // plant, run hours and zone temperatures. Scatter and the other RCx plots are the Analytics tab.
+ofddTabs.analytics = () => renderViewTab("analytics");
 const timescaleHistoryState = { disabled: false, reason: "" };
 // The history hook takes at most 200 uuids per run (hooks/lib/timescale.js MAX_UUIDS); a chart or export with more
 // points is sent in batches and the rows merged, instead of one refused run that silently drops the long-range fill.

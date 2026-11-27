@@ -749,14 +749,21 @@ test("fdd hook: a VAV's run proof is its AHU's fan status (airRef); a VAV with n
   // VAV-1: the AHU fan status rides in as the history column run_proof, on VAV-1's own grid
   assert.ok(loads["VAV-1"].history.every((r) => r.run_proof === 0 || r.run_proof === 1), "run_proof is 0/1");
   assert.ok(loads["VAV-1"].history.some((r) => r.run_proof === 1) && loads["VAV-1"].history.some((r) => r.run_proof === 0));
-  // VAV-2: nothing proves it runs: no run_proof column at all
-  assert.ok(loads["VAV-2"].history.every((r) => !("run_proof" in r)));
+  // VAV-2 has no airRef and the site has one AHU: the same fan is the proof (RCx and FDD agree)
+  assert.ok(loads["VAV-2"].history.every((r) => r.run_proof === 0 || r.run_proof === 1), "assumed single AHU");
   const attrsOf = (equip) => http.writes.points.find((r) => r.layer === "model" && r.attrs.ruleRef === "VAV-3" && r.attrs.equipRef === equip).attrs;
   assert.equal(attrsOf("VAV-1").fddStatus, "fault");
-  assert.equal(attrsOf("VAV-2").fddStatus, "not-assessed");
-  assert.match(attrsOf("VAV-2").fddReason, /^no_run_proof/);
-  assert.equal(summary.no_run_proof, 1);
-  assert.equal(http.writes.data.filter((d) => d.uuid === hook.resultUuid(hook.resultKey(model[3], "site-a", "VAV-2"), "VAV-3")).length, 0, "no value is written for the skipped result");
+  assert.equal(attrsOf("VAV-2").fddStatus, "fault");
+  assert.equal(summary.no_run_proof, 0);
+  assert.equal(summary.assumed_feeders, 1);
+
+  const offHttp = fakeHttp([], { "u-AHUFAN": (t) => ((t / 3600e3) % 2 < 1 ? 1 : 0), "u-VAV-1-RH": () => 0.9 }, { model, points });
+  const off = await hook.runFdd({ sdk: { http: offHttp, logEvent() {} }, config: { assumeSingleFeeder: false }, pack, createEngine, now: NOW });
+  const offAttrs = offHttp.writes.points.find((r) => r.layer === "model" && r.attrs.ruleRef === "VAV-3" && r.attrs.equipRef === "VAV-2").attrs;
+  assert.equal(offAttrs.fddStatus, "not-assessed");
+  assert.match(offAttrs.fddReason, /^no_run_proof/);
+  assert.match(off.airref_hint, /add airRef to 1 VAVs to enable \d+ rules/);
+  assert.equal(offHttp.writes.data.filter((d) => d.uuid === hook.resultUuid(hook.resultKey(model[3], "site-a", "VAV-2"), "VAV-3")).length, 0, "no value is written for the skipped result");
 });
 
 // ---- run proof: the effective tuning decides, and a skip is durable (#1608 port) ----------------------------------------

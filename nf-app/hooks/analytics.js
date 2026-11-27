@@ -491,7 +491,7 @@ async function handle({ sdk, args = {}, config = {}, now = () => Date.now(), con
     const cfg = settings.normalizeConfig(config);
     const nfSites = (await siteTz.loadNfSites(http)).sites;
     const calendars = tool === 'analyze_ahu_weekly_runtime' ? await loadCalendars(cfg, connect, log) : {};
-    const g = loadSandbox(http, nowMs, { appOption: siteTz.knownZone(siteTz.optionOf(cfg)), sites: nfSites, weatherOff: !settings.weatherEnabled(cfg), calendars });
+    const g = loadSandbox(http, nowMs, { appOption: siteTz.knownZone(siteTz.optionOf(cfg)), sites: nfSites, weatherOff: !settings.weatherEnabled(cfg), assumeSingle: settings.assumeSingleFeeder(cfg), calendars });
     const model = await loadModel(http, g);
     const out = await TOOLS[tool]({ g, model, http, now: nowMs }, args);
     result = { ok: true, tool, ms: now() - t0, ...out };
