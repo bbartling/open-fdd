@@ -50,7 +50,7 @@ Never pass an existing point uuid to `POST /api/v1/bacnet/local`: it overwrites 
 |---|---|---|
 | Target | 1 GB boxes | machines with real resources |
 | FDD hook and rules | no | yes |
-| Hook dependencies | none (Node built-ins) | `@duckdb/node-api` 2.0.1-r.1 |
+| Hook dependencies | none (Node built-ins) | DuckDB build: `@duckdb/node-api` 2.0.1-r.1; Timescale build: `pg` |
 | ECharts build | UMD, classic scripts | ES module |
 
 Which hosts get which edition, in more detail: [Lite or full](operations/nf/lite-vs-full.html). The Caddy front door

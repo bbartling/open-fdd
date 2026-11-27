@@ -12,11 +12,11 @@ tagging ([Haystack tagging](haystack-tagging.html)); they differ in whether a ru
 | | **Lite** ([`lite/`](https://github.com/bbartling/open-fdd/tree/master/lite)) | **Full** ([`nf-app/`](https://github.com/bbartling/open-fdd/tree/master/nf-app)) |
 |---|---|---|
 | NF app id | `open-fdd-lite` | `open-fdd` |
-| Host | 1 GB boxes, Raspberry Pi class | 2 GB or more |
-| FDD engine | **none** (no rules run) | Node DuckDB (`@duckdb/node-api` 2.0.1-r.1) with Parquet on disk, or TimescaleDB when that option is set |
+| Host | 1 GB boxes, Raspberry Pi class | 2 GB or more; 4 GB or more is comfortable |
+| FDD engine | **none** (no rules run) | DuckDB build (Node `@duckdb/node-api` 2.0.1-r.1, Parquet on disk) or Timescale build |
 | What you get | dashboard, charts, points, view of NF's BACnet server, RDF export, weather hook | everything in Lite plus the FDD tab, the Overview RCx dashboard and occupancy calendar, fault points, SPARQL |
 | History it can see | NF's own history: **about 7 days** kept in NF's Redis time series (resampled by NF) | the same window from NF, Parquet on disk (default retention 90 days), or long-range history from TimescaleDB |
-| Hook dependencies | none (Node built-ins) | `@duckdb/node-api` 2.0.1-r.1; sql.js and PGlite remain as deprecated engines; `pg` for Timescale |
+| Hook dependencies | none (Node built-ins) | DuckDB build: `@duckdb/node-api`; Timescale build: `pg` |
 
 ## Choose Lite when
 
@@ -27,9 +27,7 @@ tagging ([Haystack tagging](haystack-tagging.html)); they differ in whether a ru
 
 ## Choose full when
 
-- the box has about 2 GB or more and you want faults, RCx charts and fault points in NF. `auto` runs server-side
-  Node DuckDB. Timescale is used when that option is set. If `@duckdb/node-api` cannot load, the run fails. It does not
-  fall back to SQLite or PGlite.
+- the box has at least 2 GB and you want faults, RCx charts and fault points in NF. `auto` runs the DuckDB build. Timescale is used on the Timescale build or when that option is set. If `@duckdb/node-api` cannot load, the run fails.
 - you need history longer than NF's week. Enable NF's **TimescaleDB northbound connector** and set the hook's
   `timescale` config: the rules then run inside the database, results and long-range history stay there, and a
   size cap (default **100 GB**, oldest chunks dropped first) keeps the disk bounded. Details and setup in

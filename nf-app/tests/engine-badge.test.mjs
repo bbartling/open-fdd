@@ -1,19 +1,14 @@
 // node --test nf-app/tests/engine-badge.test.mjs
+// The DuckDB build stamps its label in the page. There is no options badge for SQLite, PGlite, or WASM.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 
-const require = createRequire(import.meta.url);
-const { engineBadgeText, appOptions } = require("../static/version.js");
-
-test("engine badge matches the NF plugin auto rule and never says WASM", () => {
-  assert.equal(engineBadgeText({}), "DuckDB");
-  assert.equal(engineBadgeText({ engine: "auto" }), "DuckDB");
-  assert.equal(engineBadgeText({ engine: "auto", timescale: "{\"host\":\"db\"}" }), "Timescale");
-  assert.equal(engineBadgeText({ engine: "timescale" }), "Timescale");
-  assert.equal(engineBadgeText({ engine: "duckdb", timescale: "{\"host\":\"db\"}" }), "DuckDB");
-  assert.equal(engineBadgeText({ engine: "sqlite" }), "SQLite (deprecated)");
-  assert.equal(engineBadgeText({ engine: "pglite" }), "PGlite (deprecated)");
-  assert.equal(appOptions({ applications: [{ id: "open-fdd", options: { engine: "auto" } }] }).engine, "auto");
-  assert.equal(appOptions({ applications: [{ id: "other" }] }), null);
+test("the DuckDB build page names DuckDB and does not ship a WASM engine", () => {
+  const html = readFileSync(new URL("../static/index.html", import.meta.url), "utf8");
+  const build = JSON.parse(readFileSync(new URL("../static/engine-build.json", import.meta.url), "utf8"));
+  assert.equal(build.id, "duckdb");
+  assert.equal(build.library, "@duckdb/node-api");
+  assert.match(html, /id="engineBuild"[^>]*>DuckDB build</);
+  assert.doesNotMatch(html, /duckdb-wasm|sql-wasm|SQLite|PGlite/);
 });

@@ -212,7 +212,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding-botto
 /* app version (version.js) */
 .app-version { font-size: 12px; color: var(--muted, #64748b); text-decoration: none; margin-left: 10px; align-self: center; }
 .app-version:hover { text-decoration: underline; }
-.engine-badge { font-size: 12px; color: var(--muted, #64748b); margin-left: 10px; align-self: center; border: 1px solid var(--line, #e2e8f0); border-radius: 999px; padding: 1px 8px; }
+.app-engine { font-size: 12px; align-self: center; margin-left: 10px; }
 
 /* classes that replaced inline style="" attributes (the page CSP forbids them) */
 [hidden] { display: none !important; }

@@ -63,7 +63,8 @@ PyPI tooling uses pandas for faults. `duckdb>=2.0.1` stays only as a test and pa
    release at least two weeks old, in both `nf-app/static/nf.js` and `lite/static/nf.js`.
 5. **One FDD math.** Change rules in `sql/fdd`, then rebuild the catalog and packs. Node DuckDB and Timescale run
    the Postgres pack. pandas must match SQL (`tests/parity/`, `.github/workflows/parity.yml`). Sensor sweeps
-   (`SV-RANGE`, `SV-SPIKE`, `SV-FLATLINE`, `SV-STALE`, `SV-RATE`) return one row per sensor.
+   (`SV-RANGE`, `SV-SPIKE`, `SV-FLATLINE`, `SV-STALE`, `SV-RATE`) return one row per sensor. `sqlite` and `pglite`
+   are not runtime engines. A saved option with either name fails. If `@duckdb/node-api` does not load, the run stops.
 6. **Small PR slices** (one concern each, easy for a small model to review). Update the docs page that describes
    what you changed; `docs/rules/*.md` is generated. See Docs style below.
 

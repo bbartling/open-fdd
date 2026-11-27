@@ -110,20 +110,15 @@ test("history: no config.timescale but args that ask for a query still fails", a
 
 const bigBox = { async get() { return { data: { resources: [{ memory: { totalBytes: String(16 * 1024 ** 3) } }] } }; } };
 
-test("engine auto: DuckDB when it loads; a missing package is an error, not PGlite", async () => {
-  assert.equal((await fdd.pickEngine(bigBox, "auto", undefined, () => true, () => true)).kind, "duckdb");
-  await assert.rejects(fdd.pickEngine(bigBox, "auto", undefined, () => true, () => false), /does not fall back to SQLite or PGlite/);
-  await assert.rejects(fdd.pickEngine(bigBox, undefined, undefined, () => false, () => false), /@duckdb\/node-api is not loadable/);
+test("engine auto is duckdb; a missing package does not fall back", async () => {
+  assert.deepEqual(await fdd.pickEngine(bigBox, "auto", undefined, () => true), { kind: "duckdb", note: "" });
+  await assert.rejects(() => fdd.pickEngine(bigBox, undefined, undefined, () => false), /DuckDB engine failed to load/);
 });
 
-test("engine: an explicitly configured engine is never swapped for DuckDB", async () => {
-  const pglite = await fdd.pickEngine(bigBox, "pglite", undefined, () => false, () => true);
-  assert.equal(pglite.kind, "pglite");
-  assert.match(pglite.note, /deprecated/);
-  const sqlite = await fdd.pickEngine(bigBox, "sqlite", undefined, () => true, () => true);
-  assert.equal(sqlite.kind, "sqlite");
-  assert.match(sqlite.note, /deprecated/);
-  assert.equal((await fdd.pickEngine(bigBox, "auto", { host: "h" }, () => false, () => true)).kind, "timescale");
+test("engine: timescale is explicit; sqlite and pglite are refused", async () => {
+  await assert.rejects(() => fdd.pickEngine(bigBox, "pglite", undefined, () => false), /engine "pglite" was removed/);
+  await assert.rejects(() => fdd.pickEngine(bigBox, "sqlite", undefined, () => true), /engine "sqlite" was removed/);
+  assert.equal((await fdd.pickEngine(bigBox, "auto", { host: "h" }, () => true)).kind, "timescale");
 });
 
 test("history: normalizeArgs coerces StartHook string-map uuids and windowHours", async () => {

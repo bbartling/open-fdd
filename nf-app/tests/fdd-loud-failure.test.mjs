@@ -119,7 +119,7 @@ test("empty timescale history: stale 'no input data in window (newest sample at 
   assert.ok(r.logs.some((l) => /skipped by reason: no-data x1; stale by reason: no input data in window x2/.test(l)), r.logs.join("\n"));
 });
 
-test("sqlite engine, source without data in the window: same reason, newest sample from NF's latest value", async () => {
+test("source without data in the window: same reason, newest sample from NF's latest value", async () => {
   const latest = { ts: "2026-11-08T18:55:00Z", double: 1 };
   const http = fakeHttp({ points: [FANC({}), FANS(), OAT].map((p) => ({ ...p, latestValue: latest })), noHistory: true });
   const s = await run(http, engine({ rows: 0 })).summary;
@@ -213,10 +213,10 @@ test("history hook: empty result is ok with a reason and the newest source times
 test("#1673: bound sweep sensors with no sample in the window are SV-STALE, not a silent no-data skip", async () => {
   const { readFileSync } = await import("node:fs");
   const { createEngine } = require("../hooks/lib/engines.js");
-  const litePack = JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8"));
+  const pgPack = JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8"));
   const http = fakeHttp({ points: [FANC(), FANS(), OAT], noHistory: true });
   const logs = [];
-  const s = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: { engine: "sqlite" }, pack: litePack, createEngine, now: NOW });
+  const s = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: {}, pack: pgPack, createEngine, now: NOW });
   assert.ok(logs.some((l) => /only SV-STALE runs/.test(l)), logs.join("\n"));
   assert.equal(s.skipped.filter((x) => x.kind === "no-data").length, 0, "the equipment is assessed for missing data");
   const stale = http.writes.points.filter((r) => r.layer === "model" && r.attrs.ruleRef === "SV-STALE");

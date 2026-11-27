@@ -49,23 +49,23 @@ test("runtime / mech / econ / bas through the hook equal the in-process SQL", as
   const weekOf = (x) => x - ((x - T0) % (7 * 24 * H));
   const occ = (x) => { const h = ((x - T0) / H) % 24; return h >= 7 && h < 17; };
   const rspecs = [{ key: "AHU-1", motor: "fan", oat: "oa_t", weekOf, occ }, { key: "AHU-2", motor: "ch", oat: null, weekOf }];
-  const direct = await SA.runtimeFromGrid("sqlite", g, rspecs);
+  const direct = await SA.runtimeFromGrid("duckdb", g, rspecs);
   const remote = await viaHook.runtime(g, rspecs);
   assert.ok(remote instanceof Map && remote.get("AHU-1") instanceof Map);
   assert.deepEqual(remote, direct);
   assert.ok(direct.get("AHU-1").size === 2 && direct.get("AHU-1").get(T0).inHours > 0);
 
   const mspecs = [{ key: "CH-1", proof: "ch", oat: "oa_t" }];
-  assert.deepEqual(await viaHook.mech(g, mspecs), await SA.mechFromGrid("sqlite", g, mspecs));
+  assert.deepEqual(await viaHook.mech(g, mspecs), await SA.mechFromGrid("duckdb", g, mspecs));
 
   const eg = { t: g.t, cols: { fan: g.cols.fan, oa_t: g.cols.oa_t, rat: g.cols.rat, mat: g.cols.mat, damper: g.cols.damper, sat: g.cols.sat } };
   const econ = await viaHook.econ(eg);
-  assert.deepEqual(econ, await SA.econFromGrid("sqlite", eg));
+  assert.deepEqual(econ, await SA.econFromGrid("duckdb", eg));
   assert.ok(econ.rows.length > 0 && econ.summary.n > 0);
 
   const bg = { t: g.t, cols: { bas: g.cols.bas, web: g.cols.web } };
   const bas = await viaHook.bas(bg);
-  assert.deepEqual(bas, await SA.basFromGrid("sqlite", bg));
+  assert.deepEqual(bas, await SA.basFromGrid("duckdb", bg));
   assert.ok(Math.abs(bas.stats.bias - 0.7) < 0.5 && bas.rows.length === bas.stats.n);
 });
 
@@ -131,7 +131,7 @@ test("browser: the script defines ofddSqlAnalytics on the NF api, and leaves a h
   const r = await ctx.ofddSqlAnalytics.bas(bg);
   assert.equal(calls[0][0], "/api/v1/apps/open-fdd/hooks/analytics");
   assert.match(calls[1][0], /hooks\/analytics\/runs\?/);
-  assert.deepEqual(JSON.parse(JSON.stringify(r)), await SA.basFromGrid("sqlite", bg));
+  assert.deepEqual(JSON.parse(JSON.stringify(r)), await SA.basFromGrid("duckdb", bg));
   const own = { mine: true };
   const ctx2 = vm.createContext({ api: async () => ({}), ofddSqlAnalytics: own });
   vm.runInContext(src, ctx2);

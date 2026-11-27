@@ -25,7 +25,7 @@ cannot disagree about binding or units. NF caches static files for 5 minutes.
   `tuning`, `history`, `rdf`. The runtime database is server-side Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`,
   Parquet on disk) or Timescale. There is no DuckDB-WASM and no Python DuckDB runtime. `engine: "auto"` uses
   Timescale on the Timescale build or when that option is set, otherwise DuckDB. If `@duckdb/node-api` cannot load,
-  the run fails. A config that names `sqlite` or `pglite` fails.
+  the run fails. A config that names `sqlite` or `pglite` fails. The header badge is `DuckDB build` or `Timescale build`.
 - **Lite** (`lite/`, app id `open-fdd-lite`): no FDD engine and no npm dependencies; Overview, Charts, Points, BACnet
   Server, Model and RDF; `weather` hook with an optional BACnet mirror. For 1 GB boxes.
 
@@ -76,10 +76,9 @@ Tables the **Full** edition creates, only when the optional Timescale engine is 
 | `openfdd.nf_samples` | view | n/a | NF's samples in native units (`history_buckets`, newest-sample lookup) |
 | `fdd.input_sample` | view | n/a | SI samples of the bound points (`value * si_scale + si_offset`); the loader reads it (`adapter_nf.sql`) |
 
-The Lite edition and the `sqlite` / `pglite` engines create no persistent tables. Node DuckDB keeps history as Parquet
-on disk and builds the same per-run relations as views over the window. Each run's scratch relations come from the SQL
-input contract (`sql/fdd/input_contract.json`, version 3): `history`, `weather`, `sensor_history`, `utility_interval`,
-`utility_monthly`.
+The Lite edition creates no persistent tables. Node DuckDB keeps history as Parquet on disk and builds the window
+as views. Each run's scratch relations come from the SQL input contract (`sql/fdd/input_contract.json`, version 3):
+`history`, `weather`, `sensor_history`, `utility_interval`, `utility_monthly`.
 
 `sql/fdd/schema/core.sql` is the shared core schema (`fdd.point`, `fdd.rule_result`, `fdd.rule_config`): the NF app installs it, and downstream applications vendor it byte for byte (it ships in the wheel as `open_fdd/data/core.sql`). Schema version 4 (5.0.16) replaced `openfdd.fdd_results` and `openfdd.retention_log` with it; see [`docs/upgrade-5x.md`](../docs/upgrade-5x.md).
 

@@ -17,7 +17,7 @@ NF serves `nf-app/static`, `nf-app/hooks`, `lite/static` and `lite/hooks` as pla
    cast DOM lookups (`/** @type {HTMLElement} */ (ev.target)`), run the typecheck until 0 errors.
 5. CommonJS hooks: `module.exports = Object.assign(fn, { helper })` (not `module.exports.helper = ...`); hide `require()` of vendored code
    with a cast (`require(/** @type {string} */ ('../static/vendor/x.js'))`) so tsc does not follow it.
-6. Never list `static/vendor/**`, `hooks/vendor/**` or `lite/static/vendor/**`. `static/echarts-global.js` (imports the vendored ESM build) is in
+6. Never list a vendor directory glob in `files` (the static vendor tree, the hook vendor tree, or Lite's static vendor tree). `static/echarts-global.js` (imports the vendored ESM build) is in
    no config for that reason; `window.echarts` is declared in globals.
 7. `noImplicitAny` stays off (thousands of untyped callbacks); turn it on per file group only when it is clean without `any` noise.
 8. No bundler, transpiler or runtime dependency; do not use `any` casts to silence real errors. Then run `node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs`.

@@ -2,29 +2,7 @@
 // version.json is generated at deploy time by scripts/nf/hooks/nf_app_sync.py from the repo's
 // VERSION file + `git rev-parse HEAD` (never committed, never edited by hand), so what a box
 // shows always maps to the open-fdd revision that was pushed to it. Dev mock serves the same.
-//
-// The Full app also shows which server engine `auto` would run. Charts themselves stay on the NF
-// history API. Lite has no FDD engine, so it shows no badge. There is no DuckDB-WASM.
-
-/** Label for the NF plugin engine. `auto` matches pickEngine: Timescale when that option is set, else DuckDB. */
-function engineBadgeText(options) {
-  const engine = String((options && options.engine) || "auto");
-  if (engine === "timescale") return "Timescale";
-  if (engine === "sqlite") return "SQLite (deprecated)";
-  if (engine === "pglite") return "PGlite (deprecated)";
-  if (engine === "duckdb") return "DuckDB";
-  if (options && options.timescale) return "Timescale";
-  return "DuckDB";
-}
-
-function appOptions(body) {
-  const list = Array.isArray(body) ? body : (body && (body.applications || body.apps)) || [];
-  const app = list.find((item) => item && (item.id === "open-fdd" || (item.application && item.application.id === "open-fdd")));
-  if (!app) return null;
-  return app.options || (app.application && app.application.options) || {};
-}
-
-if (typeof document !== "undefined") {
+(function () {
   const REPO = "https://github.com/bbartling/open-fdd";
   async function mount() {
     const h1 = document.querySelector("header h1");
@@ -48,20 +26,51 @@ if (typeof document !== "undefined") {
     a.title = `Open-FDD ${v.version}${v.commit ? `, commit ${v.commit}` : ""}${v.dirty ? " (local changes)" : ""}`
       + (v.deployed ? `, deployed ${v.deployed}` : "");
     h1.insertAdjacentElement("afterend", a);
-    if (/\/open-fdd-lite(\/|$)/.test(location.pathname)) return;
-    try {
-      const r = await fetch("/api/v1/apps", { cache: "no-store", credentials: "same-origin" });
-      if (!r.ok) return;
-      const options = appOptions(await r.json());
-      if (!options) return;
-      const badge = document.createElement("span");
-      badge.className = "engine-badge";
-      badge.textContent = engineBadgeText(options);
-      a.insertAdjacentElement("afterend", badge);
-    } catch (e) { /* the version link stands without an engine label */ }
   }
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
-  else mount();
-}
-
-if (typeof module !== "undefined" && module.exports) module.exports = { engineBadgeText, appOptions };
+  function showEngineError(text) {
+    const err = document.getElementById("err");
+    if (!document.getElementById("engineBuild") || !text || !err) return;
+    err.textContent = text;
+    err.classList.add("show");
+  }
+  function errorFromRun(run) {
+    const blobs = [];
+    const results = (run && run.results) || {};
+    for (const g of Object.values(results)) {
+      if (!g || typeof g !== "object") continue;
+      if (g.result) blobs.push(g.result);
+      for (const e of g.events || []) if (e && e.message) blobs.push(e.message);
+    }
+    for (const b of blobs) {
+      if (b && typeof b === "object" && b.engine_error) return String(b.engine_error);
+      if (typeof b === "string") {
+        try { const j = JSON.parse(b); if (j && j.engine_error) return String(j.engine_error); } catch (e) { /* log line is not JSON */ }
+        if (b.startsWith("DuckDB engine failed to load:")) return b;
+      }
+    }
+    return "";
+  }
+  async function engineHealth() {
+    if (!document.getElementById("engineBuild") || typeof api !== "function") return;
+    const app = (location.pathname.match(/\/apps\/static\/([^/]+)/) || [])[1] || "open-fdd";
+    try {
+      const started = await api(`/api/v1/apps/${app}/hooks/schema`, {});
+      if (started && started.engine_error) { showEngineError(started.engine_error); return; }
+      const pid = started && started.pid;
+      if (!pid) return;
+      const deadline = Date.now() + 20000;
+      while (Date.now() < deadline) {
+        const runs = await api(`/api/v1/apps/${app}/hooks/schema/runs?page_size=5&include_results=true`);
+        const hit = ((runs && runs.runs) || []).find((r) => String(r.pid) === String(pid));
+        const msg = hit && errorFromRun(hit);
+        if (msg) { showEngineError(msg); return; }
+        const state = String((hit && (hit.state || hit.status)) || "");
+        if (hit && /SUCCESS|FAIL|ERROR|CANCEL/.test(state)) return;
+        await new Promise((ok) => setTimeout(ok, 400));
+      }
+    } catch (e) { /* the badge still names the build */ }
+  }
+  function start() { mount(); engineHealth(); }
+  if (document.readyState === "complete") start();
+  else document.addEventListener("DOMContentLoaded", start);
+})();
