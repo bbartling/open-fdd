@@ -4,32 +4,40 @@ The folder is what ``open-fdd-ml detect``, ``open-fdd-anomaly screen`` and ``ope
 
 - ``history_wide.csv``: one row per sample. A ``timestamp_utc`` column (ISO 8601, UTC) and one column per point.
   Values are SI: degC, Pa, fractions 0-1 for commands and positions (0-100 % also works for commands), 0/1 for status.
-- ``column_map.json``: ``{"equipType": "AHU", "points": {"<role>": "<column>"}}``. A role is a Haystack-style name
-  such as ``discharge-air-temp`` or its short alias (``sat``); ``open-fdd-ml make-folder --list-roles`` prints them.
+- ``column_map.json``: ``{"equipType": "AHU", "points": {"<role>": "<column>"}}``. A role is a 223P name
+  (``discharge_air_temperature``). A legacy key (``sat``) or the older hyphenated column
+  (``discharge-air-temp``) still maps. ``open-fdd-ml make-folder --list-roles`` prints the role names.
 """
 
 from __future__ import annotations
 
 import json
-from importlib import resources
 from pathlib import Path
 
 import pandas as pd
 
 
 def role_names() -> dict[str, str]:
-    """``{short alias: Haystack role}`` from the packaged ``role_map.json`` plus the ML aliases."""
-    from open_fdd.ml.detectors import ROLE_ALIASES
+    """``{legacy key: 223P role}``. A role with no legacy key is keyed by its own name."""
+    from open_fdd.point_roles import load_vocabulary
 
-    raw = json.loads(resources.files("open_fdd.data").joinpath("role_map.json").read_text(encoding="utf-8"))
-    names = {str(k): str(v) for k, v in raw.items() if isinstance(v, str)}
-    names.update(ROLE_ALIASES)
+    names: dict[str, str] = {}
+    for rec in load_vocabulary()["roles"]:
+        role = str(rec["role"])
+        keys = [str(k) for k in (rec.get("legacy_keys") or [])]
+        if keys:
+            for key in keys:
+                names[key] = role
+        else:
+            names[role] = role
     return dict(sorted(names.items()))
 
 
 def known_roles() -> set[str]:
-    names = role_names()
-    return set(names) | set(names.values()) | {"run-proof", "pump-status", "return-fan-cmd"}
+    """Role names, legacy keys, aliases and the hyphenated pandas columns."""
+    from open_fdd.point_roles import accepted_names
+
+    return accepted_names() | {"run-proof", "pump-status", "return-fan-cmd"}
 
 
 def write_folder(frame: pd.DataFrame, out: Path | str, points: dict[str, str], *, equip_type: str = "AHU") -> Path:
@@ -119,6 +127,7 @@ def example_folder(out: Path | str, *, days: int = 2, seed: int = 0) -> Path:
         },
         index=idx,
     )
-    points = {"discharge-air-temp": "SAT", "mixed-air-temp": "MAT", "return-air-temp": "RAT",
-              "outside-air-temp": "OAT", "fan-status": "FAN"}
+    points = {"discharge_air_temperature": "SAT", "mixed_air_temperature": "MAT",
+              "return_air_temperature": "RAT", "outdoor_air_intake_temperature": "OAT",
+              "supply_fan_operating_status": "FAN"}
     return write_folder(frame, out, points, equip_type="AHU")

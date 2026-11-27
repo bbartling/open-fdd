@@ -1547,9 +1547,9 @@ rules:
     description: Stale data (no fresh samples for longer than the stale threshold)
     # #1673: SV-STALE is missing data only (gaps and expected series with no sample); a stuck value that is still polled is
     # SV-FLATLINE. Not gated by run proof. Gap scoring was removed from SV-FLATLINE, SV-RANGE and SV-SPIKE.
-    # Catalog matches pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
+    # Temps, humidity, duct static and zone airflow. A stuck value that is still polled is SV-FLATLINE.
     required_roles: []
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, duct_static, zone_flow]
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
@@ -2064,8 +2064,8 @@ rules:
     sql_file: fc15_hw_coil_dt_inactive.sql
     pandas_function: null
     description: HW coil ΔT when inactive (GL36 M)
-    required_roles: []
-    optional_roles: [heating_coil_entering_temp, heating_coil_leaving_temp, mat, sat, htg_valve_pct, clg_valve_pct, fan_status, fan_cmd, run_proof]
+    required_roles: [heating_coil_entering_temp, heating_coil_leaving_temp, oa_damper_pct, clg_valve_pct]
+    optional_roles: [htg_valve_pct, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening

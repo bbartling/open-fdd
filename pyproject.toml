@@ -149,6 +149,8 @@ test = [
     "open-fdd[ml]",
     "open-fdd[ontology-shacl]",
     "duckdb>=2.0.1",
+    "rdflib>=7.6.0",
+    "pyoxigraph>=0.5.13",
 ]
 dev = [
     "pytest>=9.2.0",

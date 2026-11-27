@@ -8,9 +8,7 @@ nav_order: 5
 
 The parity harness is a versioned part of the `open-fdd` package (`open_fdd.parity`). Any app that runs the Open-FDD rule SQL on its own
 database can use it to prove that the SQL result equals the pandas reference on the same data. It is stdlib plus
-pandas: `pip install open-fdd[oracle]` is all a third-party adapter needs. All values are SI.
-
-Datetime indexes normalize to nanoseconds; timestamp precision and values remain checked.
+pandas. `pip install open-fdd[oracle]` is all a third-party adapter needs. Values are SI.
 
 ```python
 from open_fdd.parity import generate, reference, compare, Policy, run_adapter
@@ -43,22 +41,13 @@ assert verdict.ok
 ## Profiles
 
 - `basic`: the dataset the in-repo suite has always used (a healthy unit, a sick unit with fault windows, a 5-minute
-  grid, Monday 2026-01-05 00:00 UTC). It is a bit-exact port of `nf-app/tests/fixtures/synthetic_dataset.js`; the repo test
-  `tests/parity/test_generator_equivalence.py` runs both generators and asserts identical rows, which keeps the
-  known-difference list valid. Seed 0 is that data. Other seeds salt the column hash and shift the start by whole weeks.
-- `edge`: `basic` plus, deterministically from the seed: null runs, a 3 hour gap on every even unit, timestamp jitter of
-  +-60 s, duplicate rows, out-of-order rows, a DST-transition week (America/Chicago, timestamps stay UTC; occupancy
-  follows local time; starts Friday 2026-03-06 so a run of 3 or more days crosses the 2026-03-08 change), and planted
-  faults (a `sat` flatline and a `zone_t` out-of-range block per unit) whose nominal windows are in `dataset.faults`.
+  grid, Monday 2026-01-05 00:00 UTC).
+- `edge`: `basic` plus null runs, a 3 hour gap on every even unit, timestamp jitter of +-60 s, duplicate rows,
+  out-of-order rows, a DST-transition week, and planted faults whose nominal windows are in `dataset.faults`.
 
-The `edge` profile exposes six input-handling differences between the SQL pack and the pandas reference that the
-`basic` data never reaches (series that starts with the fan running, NULL runs, out-of-range values, a long gap,
-duplicate rows). They are listed with the reason and evidence in `parity_known_differences.json` under scope `edge`;
-`Policy.default("edge")` includes them. `generate(..., edge_features=[...])` enables a subset of the stresses
-(`nulls`, `planted`, `gap`, `jitter`, `duplicates`, `out_of_order`) to bisect a divergence.
-
-`reference(ds)` sorts rows by time and drops duplicate timestamps before running the pandas rules (a no-op on `basic`);
-pass `ingest="as_is"` to see the raw behavior.
+`Policy.default("edge")` includes the edge-scope rows of `parity_known_differences.json`.
+`generate(..., edge_features=[...])` turns on `nulls`, `planted`, `gap`, `jitter`, `duplicates` or `out_of_order`.
+`reference(ds)` sorts by time and drops duplicate timestamps (a no-op on `basic`); `ingest="as_is"` keeps them.
 
 ## Third leg: the SPARQL data client
 
