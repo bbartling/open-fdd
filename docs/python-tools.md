@@ -182,7 +182,8 @@ Offline and read-only; NF is optional (#1569).
 ```bash
 open-fdd-ontology-audit --example --out ./r                         # synthetic sheet + two-sensor AHU graph
 open-fdd-ontology-audit req.xlsx --refresh --out ./r                # pinned Brick / 223P / Haystack, sha256-checked
-open-fdd-ontology-audit req.xlsx --graph building.ttl --shacl --out ./r
+open-fdd-ontology-audit req.xlsx --graph building.ttl --shacl --engine shifty --out ./r
+open-fdd-ontology-audit --graph building.ttl --closure --out ./r          # vendored 223P owl:imports, offline
 open-fdd-ontology-audit --from-nf --out ./r                          # optional: the app's RDF export (open-fdd[nf])
 open-fdd-ontology-audit --extensions --out ./r                       # Open-FDD extension terms: parent, label, definition
 ```

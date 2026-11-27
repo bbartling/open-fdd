@@ -77,9 +77,14 @@ on the sites, so adding a site rewrites no subject. The tab, the `rdf`, `sparql`
 client give the same IRIs; the hooks take `base` to override it. A point IRI from an older `urn:nf:<host>:<uuid>` or
 `urn:nf:site:<site>:<uuid>` export still names its point in `sparql-data` and `open_fdd.nf.sparql_data`.
 
+ASHRAE 223P is the rule-input contract (`roles/openfdd-roles.json`, 1.1.0-draft.1). Haystack defs 4.0.0 are only the
+overlay this export writes, and those IRIs are versioned (`…/def/phIoT/4.0.0#`). The app does not resolve `owl:imports`
+or run SHACL: CI builds a sha256-pinned 223P closure offline with OntoEnv and validates the role file with Shifty.
+SPARQL answers use Oxigraph 0.5.13. rdflib 7.6.0 parses Turtle and does not evaluate those queries.
+
 | Use | How |
 |---|---|
-| Check a Turtle file | `pip install rdflib pyoxigraph`, then `python tools/rdf-check/check_ttl.py model.ttl` |
+| Check a Turtle file | `pip install rdflib==7.6.0 pyoxigraph==0.5.13`, then `python tools/rdf-check/check_ttl.py model.ttl` |
 | Build Turtle from a fixture | `node tools/rdf-check/gen_ttl.js fixture.json fixture.ttl` (fixture has a `records` array) |
 | Query in the browser | SELECT, ASK, CONSTRUCT or DESCRIBE over the loaded model; results are capped and download as CSV |
 | Query from code (Full) | `POST /api/v1/apps/{app-id}/hooks/sparql`, then read `GET /api/v1/apps/{app-id}/hooks/sparql/runs?include_results=true` |
@@ -94,7 +99,7 @@ pandas reference rules on its own machine:
 | Edition | Path |
 |---|---|
 | Full | `sparql-data` hook: SELECT / ASK only, the matched points' history from NF `point/data` (raw or resampled) or Timescale (`source=timescale`), at most 200 points a page (`pointOffset`), at most 190 000 UTF-8 bytes an answer (cut on a timestamp, continue from `next_from`), every page pinned to one model `snapshot` |
-| Lite | `rdf` hook hands over the model Turtle in pages; the client runs the query with rdflib (same SELECT / ASK policy) and reads history through NF `point/data` |
+| Lite | `rdf` hook hands over the model Turtle in pages; the client runs the query with pyoxigraph (same SELECT / ASK policy and the same answers as the Full hook) and reads history through NF `point/data` |
 
 ```bash
 open-fdd-nf sparql examples/sparql_data/ahu_points.rq --days 7 --rules FC1,FC3

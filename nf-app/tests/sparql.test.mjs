@@ -131,7 +131,7 @@ test("hook handle(): loads the model through sdk.http, logs and returns the answ
   };
   const logs = [];
   const sdk = { http, logEvent: (m) => logs.push(m) };
-  const out = await hook.handle({ sdk, args: { query: "SELECT (COUNT(*) AS ?n) WHERE { ?p a <https://project-haystack.org/def/phIoT/point> }", format: "json" } });
+  const out = await hook.handle({ sdk, args: { query: "SELECT (COUNT(*) AS ?n) WHERE { ?p a <https://project-haystack.org/def/phIoT/4.0.0#point> }", format: "json" } });
   assert.equal(out.ok, true, JSON.stringify(out));
   assert.equal(out.rows[0][0], String(records.filter((r) => r.pointType === "POINT" && r.attrs.markers).length));
   assert.equal(logs.length, 1);

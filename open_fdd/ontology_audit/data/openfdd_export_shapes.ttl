@@ -1,9 +1,10 @@
-# SHACL shapes for the Open-FDD NF model export (Haystack IRIs in canonical, unversioned form).
+# SHACL shapes for the Open-FDD NF model export (Haystack defs 4.0.0 IRIs).
 # Synthetic, public: they check structure only (refs and history links), not site content.
+# validate_shacl also rewrites an unversioned Haystack IRI to this form before the check.
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
 @prefix ref: <https://brickschema.org/schema/Brick/ref#> .
 @prefix ofddsh: <urn:openfdd:shapes#> .
 

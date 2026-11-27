@@ -1,0 +1,8 @@
+# Fixture: a model whose only 223P content is owl:imports. CI resolves that import
+# from the vendored closure and runs Shifty. It declares no equipment.
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<urn:openfdd:fixture/import-only> a owl:Ontology ;
+    rdfs:label "import-only fixture" ;
+    owl:imports <http://data.ashrae.org/standard223/1.0/model/all> .

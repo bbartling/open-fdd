@@ -89,7 +89,8 @@ analytics = [
 nf = [
     "open-fdd[oracle]",
 ]
-# Read the NF app's RDF/Turtle export.
+# Read the NF app's RDF/Turtle export. rdflib parses; pyoxigraph 0.5.13 evaluates SPARQL
+# (the same release as the vendored Oxigraph build in the Full app).
 rdf = [
     "rdflib==7.6.0",
     "pyoxigraph==0.5.13",
@@ -124,7 +125,8 @@ ml-copod = [
     "open-fdd[ml]",
     "pyod>=3.6.8",
 ]
-# open-fdd-ontology-audit: requirements coverage audit and model doctor (#1569); SHACL is optional
+# open-fdd-ontology-audit: requirements coverage audit and model doctor (#1569); SHACL is optional.
+# rdflib parses. SPARQL answers use pyoxigraph, pinned to the app's Oxigraph release.
 ontology = [
     "rdflib==7.6.0",
     "pyoxigraph==0.5.13",
@@ -132,7 +134,13 @@ ontology = [
 ]
 ontology-shacl = [
     "open-fdd[ontology]",
-    "pyshacl>=0.40.2",
+    "pyshacl==0.40.2",
+]
+# Offline 223P closure (OntoEnv) and Shifty. Not imported by the NF app.
+ontology-align = [
+    "open-fdd[ontology-shacl]",
+    "ontoenv==0.6.4",
+    "pyshifty==0.6.0",
 ]
 test = [
     "pytest>=9.2.0",

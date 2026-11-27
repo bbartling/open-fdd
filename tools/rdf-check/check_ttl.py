@@ -18,6 +18,9 @@ print(f"rdflib:   parsed OK, {len(g)} triples; N-Triples round trip {'OK' if len
 if len(g2) != len(g) or len(g) != len(ox_triples):
     problems.append("triple counts differ between parsers / round trip")
 
+def _local(iri: str) -> str:
+    return iri.rsplit("#", 1)[-1] if "#" in iri else iri.rsplit("/", 1)[-1]
+
 local = [ns for p, ns in g.namespaces() if p == "local"][0]
 is_local = lambda n: isinstance(n, URIRef) and str(n).startswith(str(local))
 REF = {p for p in g.predicates() if str(p).endswith("Ref")}
@@ -37,7 +40,7 @@ for s in typed:
 linked = {o for s, p, o in g if p in REF} | {s for s, p, o in g if p in REF}
 points = []
 for s in typed:
-    kinds = {str(t).rsplit("/", 1)[-1] for t in g.objects(s, RDF.type)}
+    kinds = {_local(str(t)) for t in g.objects(s, RDF.type)}
     if "point" in kinds:
         points.append(s)
     if kinds & {"point", "equip", "device"} and not any(g.objects(s, p) for p in REF if str(p).endswith("siteRef")):

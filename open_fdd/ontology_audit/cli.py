@@ -36,6 +36,12 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--env", help="KEY=VALUE env file for the NF client")
     p.add_argument("--app", choices=["full", "lite"], default="full")
     p.add_argument("--shacl", nargs="?", const="default", help="validate the graph with SHACL (default shapes or a file)")
+    p.add_argument("--closure", action="store_true",
+                   help="resolve owl:imports with the vendored OntoEnv 223P closure (offline) and validate against it")
+    p.add_argument("--engine", choices=("shifty", "pyshacl"), default="shifty",
+                   help="SHACL engine (default shifty). pyshacl is the cross-check, not a fallback")
+    p.add_argument("--cross-check", action="store_true",
+                   help="also run the other engine and record it; the verdict stays --engine")
     p.add_argument("--no-xlsx", action="store_true")
     p.add_argument("--example", action="store_true", help="use the shipped synthetic requirements and building graph")
     p.add_argument("--sources", action="store_true", help="print the pinned source manifest and exit")
@@ -112,11 +118,18 @@ def _run(args) -> int:
         print(json.dumps({"audit": summary(rows), "files": {k: str(v) for k, v in paths.items()}}))
     if graph is not None:
         shacl = None
-        if args.shacl:
+        if args.shacl or args.closure:
             from open_fdd.ontology_audit.shacl import validate_shacl
 
-            shapes = None if args.shacl == "default" else _parse_graph(Path(args.shacl))
-            shacl = validate_shacl(graph, shapes)
+            closure = None
+            shapes = None if args.shacl in (None, "default") else _parse_graph(Path(args.shacl))
+            if args.closure:
+                from open_fdd.ontology_audit.closure import copy_223p_closure
+
+                closure, _names = copy_223p_closure()
+            shacl = validate_shacl(graph, shapes, engine=args.engine, closure=closure, cross_check=args.cross_check)
+            if shacl.get("available") is False:
+                raise ValueError(shacl.get("detail") or "SHACL engine is not installed")
         report = doctor(graph, sources)
         paths = write_doctor(report, args.out, shacl)
         print(json.dumps({"doctor": report.counts(), "problems": len(report.problems),

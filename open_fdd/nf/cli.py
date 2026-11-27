@@ -111,12 +111,12 @@ def build_parser() -> argparse.ArgumentParser:
     sq = sub.add_parser(
         "sparql", parents=[c], help="SPARQL query -> trend data -> SI frames -> pandas rules (read-only)",
         description="Run a SELECT / ASK against the site model and fetch the matched points' history: the Full app's "
-                    "sparql-data hook, or on Lite the rdf hook's Turtle queried here with rdflib. Then the pandas "
+                    "sparql-data hook, or on Lite the rdf hook's Turtle queried here with pyoxigraph. Then the pandas "
                     "reference rules (open_fdd.rules) run on the SI frames.")
     _range(sq)
     sq.add_argument("query", help="a .rq file, or the query text")
     sq.add_argument("--mode", choices=("auto", "hook", "local"), default="auto",
-                    help="hook: Full sparql-data hook; local: rdf hook + rdflib (Lite); auto: hook when the box has it")
+                    help="hook: Full sparql-data hook; local: rdf hook + pyoxigraph (Lite); auto: hook when the box has it")
     sq.add_argument("--bucket", help='resample bucket, e.g. "5 minutes" or "raw" (default: --window seconds)')
     sq.add_argument("--rules", help="comma list of rule ids (default: every applicable rule)")
     sq.add_argument("--rows", action="store_true", help="print the SPARQL rows, not the rules")
