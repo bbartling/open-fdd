@@ -46,10 +46,10 @@ async function open(ruleId) {
 const unitOf = (key) => panel().match(new RegExp(`data-param="${key}" data-unit="([^"]+)"`))[1];
 const saved = (client, ruleId) => (client.rows.find((r) => r.rule_id === ruleId && r.scope_key === SCOPE && r.active) || {}).parameters;
 
-test("76 rules have controls; FAN-RUNTIME-HOURS and AVG-ZONE-TEMP have none", () => {
+test("78 rules have controls; FAN-RUNTIME-HOURS and AVG-ZONE-TEMP have none", () => {
   const ids = pack.rule_tuning_templates ? Object.keys(pack.rules) : [];
   const withControls = ids.filter((id) => tpls[id] && Object.keys(tpls[id].controls).length);
-  assert.equal(withControls.length, 76);   // + COIL-PERF (#1724)
+  assert.equal(withControls.length, 78);   // + COIL-PERF (#1724), + SHORT-CYCLE (#1781), HW-OAT-1 (#1782)
   assert.deepEqual(ids.filter((id) => !withControls.includes(id)).sort(), ["AVG-ZONE-TEMP", "FAN-RUNTIME-HOURS"]);
 });
 

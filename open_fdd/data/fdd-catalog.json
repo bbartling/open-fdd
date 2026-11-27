@@ -75,6 +75,16 @@
    ],
    "scale": "si:degC"
   },
+  "boiler_status": {
+   "name": "boiler-status",
+   "classes": [],
+   "markers": [
+    "boiler",
+    "run",
+    "sensor"
+   ],
+   "scale": "boolean"
+  },
   "building_ahu_load_satisfied": {
    "name": "building-ahu-load-satisfied",
    "classes": [],
@@ -2298,6 +2308,31 @@
    "run_proof_note": "needs cold-weather samples even when proof drops; carries its own mechanical-cooling proof"
   },
   {
+   "id": "HW-OAT-1",
+   "description": "Hot-water plant proven on above 18.3 °C web OAT",
+   "sql_file": "hw_oat_1.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "boiler"
+   ],
+   "required_roles": [
+    "web_oa_t"
+   ],
+   "optional_roles": [
+    "pump_status",
+    "hw_supply_t"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "confirm_seconds": 900.0,
+    "hw_oat_min": 18.333333,
+    "hw_on_min": 43.333333
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "carries its own proven-on proof (hot-water pump status or supply temperature) and must see warm samples while that proof is off"
+  },
+  {
    "id": "CMD-1",
    "description": "Fan cmd/status mismatch",
    "sql_file": "cmd1_fan_mismatch.sql",
@@ -3404,6 +3439,35 @@
     "require_run_proof": 1.0
    },
    "run_proof": "gated"
+  },
+  {
+   "id": "SHORT-CYCLE",
+   "description": "Too many starts per hour, or short on-times",
+   "sql_file": "short_cycle.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "boiler",
+    "chiller",
+    "heatpump",
+    "ahu"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "boiler_status",
+    "compressor_status",
+    "chiller_status",
+    "chiller_amps",
+    "chiller_power"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "max_starts_per_hour": 6.0,
+    "min_on_seconds": 600.0,
+    "min_short_cycles": 3.0
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "the run status is the signal: starts and on-times are counted from it"
   }
  ]
 }

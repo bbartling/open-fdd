@@ -144,6 +144,30 @@ def mech_oat1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     return (db.notna() & (db < oat_max) & run).fillna(False)
 
 
+HW_PROOF_ROLES = ("pump-status", "hot-water-supply-temp")
+
+
+def hw_oat1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Fault (#1782, twin of hw_oat_1.sql): hot-water plant proven on while web dry-bulb > hw_oat_min (18.3 °C).
+
+    Proven on per sample: hot-water pump status > 0.05, or hot-water supply temperature > hw_on_min (43.3 °C). The gate
+    is the web dry bulb at each sample, never a daily maximum. Missing web OAT or proof: the runner skips the rule.
+    """
+    del poll
+    db, _dp, src = resolve_web_drybulb_dewpoint(d)
+    d.attrs["hw_oat1_weather_source"] = "web_dry_bulb" if db is not None else src   # dew point is not needed here
+    if db is None:
+        return _false(d.index)
+    on = _false(d.index)
+    kinds = []
+    for role, thr in (("pump-status", 0.05), ("hot-water-supply-temp", _f(p, "hw_on_min", 43.333333))):
+        if role in d.columns and d[role].notna().any():
+            on = on | (pd.to_numeric(d[role], errors="coerce") > thr)
+            kinds.append(role)
+    d.attrs["hw_oat1_proof"] = "+".join(kinds)
+    return (db.notna() & (db > _f(p, "hw_oat_min", 18.333333)) & on).fillna(False)
+
+
 def econ6_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     """Fault: OA damper above winter min-OA ceiling while web OAT < −3.888889°C."""
     del poll

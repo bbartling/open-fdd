@@ -264,7 +264,7 @@ OUTPUT_COLUMNS = {
     "proven_on_hours": ("h", "time with run proof ON"),
     "proven_off_hours": ("h", "time with run proof OFF"),
     "unknown_hours": ("h", "window time with no known run proof (missing proof or gaps)"),
-    "assessment": ("-", "assessed, insufficient_proof or no_proof"),
+    "assessment": ("-", "assessed, or why the equipment was not assessed (for example no_proof)"),
 }
 
 

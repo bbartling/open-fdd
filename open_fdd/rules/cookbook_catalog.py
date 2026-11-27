@@ -1649,6 +1649,13 @@ def fcu_mode_cycle(d, p, poll):
     return (mode != 0) & (changes >= int(_f(p, "mode_changes", 4.0)))
 
 
+def short_cycle(d, p, poll):
+    """#1781 SHORT-CYCLE: starts in the trailing hour, or repeated short on-times, from proven run status (duty-aware)."""
+    from open_fdd.rules.short_cycle import short_cycle_compute
+
+    return short_cycle_compute(d, p, poll)
+
+
 # ---------------------------------------------------------------------------
 # Central plants
 # ---------------------------------------------------------------------------
@@ -2311,6 +2318,22 @@ RULES: list[CookbookRule] = [
         confirm_seconds=600,
     ),
     CookbookRule(
+        "HW-OAT-1",
+        "Hot-water plant proven on above 18.3 °C web OAT",
+        "plant",
+        ["boiler"],
+        ["web-outside-air-temp"],
+        "Pump on, or supply above 43.3 °C, with web dry-bulb above 18.3 °C.",
+        __import__("open_fdd.rules.economizer_weather", fromlist=["hw_oat1_compute"]).hw_oat1_compute,
+        params=[
+            CookbookParam("hw_oat_min", "HW lockout OAT", "°C", 12.777778, 23.888889, 0.555556, 18.333333, direction="fewer"),
+            CookbookParam("hw_on_min", "HW supply running cut", "°C", 32.222222, 60.0, 0.555556, 43.333333, direction="fewer"),
+            CONFIRM_PARAM(15.0),
+        ],
+        optional_roles=["pump-status", "hot-water-supply-temp"],
+        confirm_seconds=900,
+    ),
+    CookbookRule(
         "CHW-NOLOAD-1",
         "Chiller running with no building load",
         "plant",
@@ -2581,6 +2604,15 @@ RULES: list[CookbookRule] = [
             CookbookParam("chw_lo", "CHWS low", "°C", 1.666667, 12.777778, 0.277778, 7.222222, direction="stricter"),
             CookbookParam("request_lo", "Request sum low", "count", 0.0, 10.0, 0.5, 1.0, direction="stricter"),
             CONFIRM_PARAM()], confirm_seconds=1800),
+    CookbookRule("SHORT-CYCLE", "Short cycling", "plant", ["boiler", "chiller", "heatpump", "ahu"], [],
+        "Too many starts per hour, or short on-times.",
+        short_cycle, params=[
+            CookbookParam("max_starts_per_hour", "Max starts per hour", "count", 2.0, 20.0, 1.0, 6.0, direction="fewer"),
+            CookbookParam("min_on_seconds", "Minimum on-time", "sec", 60.0, 1800.0, 60.0, 600.0, direction="stricter"),
+            CookbookParam("min_short_cycles", "Short cycles per hour", "count", 1.0, 10.0, 1.0, 3.0, direction="fewer"),
+            CONFIRM_PARAM(0.0)],
+        optional_roles=["boiler-status", "compressor-status", "chiller-status", "chiller-amps", "chiller-power"],
+        confirm_seconds=0),
 
     # --- Extended families ---
     CookbookRule(
@@ -2689,6 +2721,7 @@ RULE_SUMMARY_OVERRIDES: dict[str, str] = {
     "ECON-6": "Flags an AHU economizing above min-OA when web outdoor air is below freezing (−3.9 °C).",
     "ECON-7": "Flags cooling demand during economizer-OK web weather (dew point < 15.6 °C, dry-bulb < 22.2 °C) while the OA damper is not economizing.",
     "MECH-OAT-1": "Flags proven DX or chiller cooling while web dry-bulb is below 15.6 °C.",
+    "HW-OAT-1": "Flags a boiler, hot-water plant or hot-water pump proven on while web dry-bulb is above 18.3 °C.",
     "CHW-NOLOAD-1": "Flags a chiller running while mapped zones or AHU SAT show the building is satisfied.",
     "FC1": "Flags duct static too low while the supply fan is near full speed.",
     "FC2": "Flags mixed-air temperature colder than the OAT/RAT mixing envelope allows.",
