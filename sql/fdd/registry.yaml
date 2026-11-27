@@ -4553,3 +4553,163 @@ rules:
         kind: count
         frontend_control: slider
         sql_placeholder: MIN_SHORT_CYCLES
+
+  - rule_id: XS-MIX
+    # #1780: cross-sensor consistency, a sensor / mapping finding (not an economizer fault).
+    equipment_kinds: [ahu]
+    run_proof: gated
+    sql_file: xs_mix.sql
+    pandas_function: xs_mix
+    description: Mixed-air temperature outside the outdoor / return mixing envelope (sensor or mapping)
+    required_roles: [mat, oa_t, rat]
+    optional_roles: [fan_status, fan_cmd, run_proof]
+    output_columns: [equipment_id, fault_hours, covered_hours, active_hours, fault_pct, assessment]
+    priority: P1
+    parity_status: sql_screening
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        kind: duration_seconds
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      mix_band:
+        label: Mixing envelope band
+        default: 1.111111
+        min: 0.277778
+        max: 5.555556
+        step: 0.138889
+        unit: degC
+        kind: temperature_difference
+        frontend_control: slider
+        sql_placeholder: MIX_BAND
+      require_run_proof:
+        label: Require motor status
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        kind: boolean
+        frontend_control: slider
+        sql_placeholder: REQUIRE_RUN_PROOF
+
+  - rule_id: XS-COPY
+    # #1780: two temperature roles of one unit carry the same changing signal (copied or bound wrong).
+    equipment_kinds: [ahu, vav, zone_other]
+    run_proof: exempt
+    run_proof_note: "a copied or wrongly bound signal is a mapping fault whether or not the unit runs"
+    sql_file: xs_copy.sql
+    pandas_function: xs_copy
+    description: Two temperature roles identical while changing (copied or wrongly bound signal)
+    required_roles: []
+    optional_roles: [rat, sat, mat, zone_t, vav_discharge_t]
+    output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, assessment]
+    priority: P1
+    parity_status: sql_screening
+    delete_python_candidate: false
+    confirm_seconds: 7200
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 7200.0
+        min: 1800.0
+        max: 43200.0
+        step: 1800.0
+        unit: sec
+        kind: duration_seconds
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      copy_tol:
+        label: Copy tolerance
+        default: 0.02
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: degC
+        kind: temperature_difference
+        frontend_control: slider
+        sql_placeholder: COPY_TOL
+      change_min:
+        label: Minimum change over the run
+        default: 1.0
+        min: 0.277778
+        max: 5.555556
+        step: 0.138889
+        unit: degC
+        kind: temperature_difference
+        frontend_control: slider
+        sql_placeholder: CHANGE_MIN
+
+  - rule_id: XS-CLIP
+    # #1780: a transmitter clipped at a round full scale; an instrumentation finding inside the hard range.
+    equipment_kinds: [ahu, vav, zone_other]
+    run_proof: exempt
+    run_proof_note: "CO2 is judged on every sample; fan-dependent roles count only their own fan-on samples"
+    sql_file: xs_clip.sql
+    pandas_function: xs_clip
+    description: Sensor value piled up at a round transmitter full scale (clipped)
+    required_roles: []
+    optional_roles: [zone_co2, duct_static, zone_flow, fan_status, fan_cmd, run_proof]
+    output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, assessment]
+    priority: P1
+    parity_status: sql_screening
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 0.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        kind: duration_seconds
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      clip_share:
+        label: Share of samples at the limit
+        default: 5.0
+        min: 1.0
+        max: 50.0
+        step: 1.0
+        unit: pct
+        kind: percent
+        frontend_control: slider
+        sql_placeholder: CLIP_SHARE
+      co2_round:
+        label: CO2 full-scale step
+        default: 100.0
+        min: 50.0
+        max: 1000.0
+        step: 50.0
+        unit: ppm
+        kind: dimensionless
+        frontend_control: slider
+        sql_placeholder: CO2_ROUND
+      static_round:
+        label: Duct static full-scale step
+        default: 25.0
+        min: 5.0
+        max: 250.0
+        step: 5.0
+        unit: Pa
+        kind: air_pressure
+        frontend_control: slider
+        sql_placeholder: STATIC_ROUND
+      flow_round:
+        label: Airflow full-scale step
+        default: 50.0
+        min: 5.0
+        max: 500.0
+        step: 5.0
+        unit: L_per_s
+        kind: volumetric_flow
+        frontend_control: slider
+        sql_placeholder: FLOW_ROUND

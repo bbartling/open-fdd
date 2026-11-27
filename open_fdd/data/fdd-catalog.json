@@ -1831,7 +1831,9 @@
     "ra_h",
     "zone_rh",
     "ma_h",
-    "sa_h"
+    "sa_h",
+    "duct_static",
+    "zone_flow"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 0,
@@ -3471,6 +3473,92 @@
    },
    "run_proof": "exempt",
    "run_proof_note": "the run status is the signal: starts and on-times are counted from it"
+  },
+  {
+   "id": "XS-MIX",
+   "description": "Mixed-air temperature outside the outdoor / return mixing envelope (sensor or mapping)",
+   "sql_file": "xs_mix.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "mat",
+    "oa_t",
+    "rat"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd",
+    "run_proof"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "confirm_seconds": 900.0,
+    "mix_band": 1.111111,
+    "require_run_proof": 1.0
+   },
+   "run_proof": "gated"
+  },
+  {
+   "id": "XS-COPY",
+   "description": "Two temperature roles identical while changing (copied or wrongly bound signal)",
+   "sql_file": "xs_copy.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "ahu",
+    "vav",
+    "zone_other"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "rat",
+    "sat",
+    "mat",
+    "zone_t",
+    "vav_discharge_t"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 7200,
+   "parameters": {
+    "confirm_seconds": 7200.0,
+    "copy_tol": 0.02,
+    "change_min": 1.0
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "a copied or wrongly bound signal is a mapping fault whether or not the unit runs"
+  },
+  {
+   "id": "XS-CLIP",
+   "description": "Sensor value piled up at a round transmitter full scale (clipped)",
+   "sql_file": "xs_clip.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "ahu",
+    "vav",
+    "zone_other"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "zone_co2",
+    "duct_static",
+    "zone_flow",
+    "fan_status",
+    "fan_cmd",
+    "run_proof"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "confirm_seconds": 0.0,
+    "clip_share": 5.0,
+    "co2_round": 100.0,
+    "static_round": 25.0,
+    "flow_round": 50.0
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "CO2 is judged on every sample; fan-dependent roles count only their own fan-on samples"
   }
  ]
 }

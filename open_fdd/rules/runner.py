@@ -747,9 +747,11 @@ def run_cookbook_rule(
             pct_mask=(proof_ok if proof_ok is not None
                       else pd.Series(True, index=d.index) if rule.id in run_proof_gated_ids() else None),
         )
-        if rule.id == "COIL-PERF" and d.attrs.get("coil_perf_assessment", "assessed") != "assessed":
-            # #1641: no coil valve or no temperature pair: not assessable, never an assessed zero
-            why = d.attrs["coil_perf_assessment"]
+        why_attr = ("coil_perf_assessment" if rule.id == "COIL-PERF"
+                    else "xs_assessment" if rule.id in {"XS-MIX", "XS-COPY", "XS-CLIP"} else None)
+        if why_attr and d.attrs.get(why_attr, "assessed") != "assessed":
+            # #1641 / #1780: missing inputs (no coil valve, no temperature pair, ...): never an assessed zero
+            why = d.attrs[why_attr]
             result.status = f"NOT_ASSESSED_{why.upper()}"
             result.fault_hours = None
             result.fault_pct = None
