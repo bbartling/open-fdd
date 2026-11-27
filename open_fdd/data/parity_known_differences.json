@@ -3,36 +3,6 @@
  "version": 1,
  "differences": [
   {
-   "rule": "AHU-SATDEV",
-   "scope": "all",
-   "reason": "Small residual left after #1642; not yet attributed.",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 0.8333,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 0.5,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "CHW-1",
-   "scope": "all",
-   "reason": "pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 0.5,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 0.3333,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "CHW-NOLOAD-1",
    "scope": "all",
    "reason": "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve",
@@ -43,36 +13,6 @@
     },
     "basic/0/4/3": {
      "hours": 3.0833,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "ECON-4",
-   "scope": "all",
-   "reason": "Small residual left after #1642; not yet attributed.",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 0.4167,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 0.1667,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "ECON-7",
-   "scope": "all",
-   "reason": "a few samples at fault edges on one AHU with its own web columns (fan-gate / startup handling); the weather as-of join and the mechanical-cooling demand match pandas since #1642",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 0.25,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 0.25,
      "tol": 0.01
     }
    }
@@ -103,36 +43,6 @@
     },
     "basic/0/4/3": {
      "hours": 6.75,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "HP-1",
-   "scope": "all",
-   "reason": "Small residual left after #1642; not yet attributed.",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 0.1667,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 0.0833,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "OA-1",
-   "scope": "all",
-   "reason": "pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 0.25,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 0.1667,
      "tol": 0.01
     }
    }
@@ -183,51 +93,6 @@
    }
   },
   {
-   "rule": "TRIM-4",
-   "scope": "stress_only",
-   "reason": "role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 0.9167,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 0.0,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "VAV-AHU-LEAVE",
-   "scope": "all",
-   "reason": "pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 1.3333,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 0.3333,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "TRIM-3",
-   "scope": "stress_only",
-   "reason": "role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 0.9167,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 0.0,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "VAV-REHEAT",
    "scope": "stress_only",
    "reason": "pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start (0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL",
@@ -241,21 +106,6 @@
      "tol": 0.01
     }
    }
-  },
-  {
-   "rule": "FC3",
-   "scope": "edge",
-   "reason": "Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows)."
-  },
-  {
-   "rule": "FC8",
-   "scope": "edge",
-   "reason": "Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas."
-  },
-  {
-   "rule": "FC9",
-   "scope": "edge",
-   "reason": "Same cause as FC8: the series begins with the fan already running; pandas holds off 600 s from the first sample, SQL does not (verified by trimming the start)."
   },
   {
    "rule": "VAV-1",
@@ -276,11 +126,6 @@
    "rule": "WX-1",
    "scope": "edge",
    "reason": "Gap handling: SQL flags |oa_t - previous sample| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a >2 h gap is a spike in SQL only."
-  },
-  {
-   "rule": "FC5",
-   "scope": "edge",
-   "reason": "Edge profile only: after a data gap pandas re-applies its 600 s startup delay; the SQL has no startup holdoff (#1646). Basic datasets match."
   },
   {
    "rule": "ECON-3",

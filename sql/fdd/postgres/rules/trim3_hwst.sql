@@ -30,6 +30,22 @@ h AS (
     END AS proof_on
   FROM history
 ),
+started AS (
+  -- #1758 startup holdoff (pandas operational_gate.apply_startup_delay): a sample counts only once the plant proof (else
+  -- the resolved run proof) has been on for STARTUP_DELAY_ROWS samples in a row, this one included; the first sample of
+  -- the series counts as a start. No proof at all is unknown, not OFF (#1631).
+  SELECT
+    *,
+    CASE
+      WHEN MIN(COALESCE(proof_on, CASE WHEN run_proof IS NULL OR run_proof > 0.05 THEN 1 ELSE 0 END))
+             OVER (PARTITION BY equipment_id ORDER BY timestamp_utc
+             ROWS BETWEEN {{STARTUP_DELAY_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) = 1
+       AND COUNT(*) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc
+             ROWS BETWEEN {{STARTUP_DELAY_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) > {{STARTUP_DELAY_ROWS_PRECEDING}}
+      THEN 1 ELSE 0
+    END AS startup_ok
+  FROM h
+),
 base AS (
   SELECT
     equipment_id,
@@ -37,6 +53,7 @@ base AS (
     CAST(CASE
       WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN proof_on = 0 THEN 0
+      WHEN startup_ok = 0 THEN 0
       WHEN hw_supply_t IS NULL THEN 0
       WHEN hw_supply_t > {{HWST_HI}}
        AND hw_reset_request_sum <= {{REQUEST_LO}} THEN 1
@@ -44,7 +61,7 @@ base AS (
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
     CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
-  FROM h
+  FROM started
 ),
 elapsed_hold AS (
   -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:

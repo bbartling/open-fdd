@@ -186,7 +186,7 @@ SAT deviation from setpoint
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#ahu-satdev)
+**Parity** [match](parity.html#ahu-satdev)
 
 
 ### AHU-SIMUL {#ahu-simul}
@@ -501,7 +501,7 @@ Low estimated OA fraction
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#econ-4)
+**Parity** [match](parity.html#econ-4)
 
 
 ### ECON-5 {#econ-5}
@@ -626,7 +626,7 @@ Economizer OK but not economizing
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#econ-7)
+**Parity** [match](parity.html#econ-7)
 
 
 ### FC1 {#fc1}
@@ -1040,7 +1040,7 @@ Mixed air above envelope
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#fc3), except on edge data
+**Parity** [match](parity.html#fc3)
 
 
 ### FC4 {#fc4}
@@ -1123,7 +1123,7 @@ SAT cold when heating commanded (GL36 D)
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#fc5), except on edge data
+**Parity** [match](parity.html#fc5)
 
 
 ### FC6 {#fc6}
@@ -1251,7 +1251,7 @@ SAT vs MAT while economizing
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#fc8), except on edge data
+**Parity** [match](parity.html#fc8)
 
 
 ### FC9 {#fc9}
@@ -1298,7 +1298,7 @@ OAT high vs SAT SP while economizing
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#fc9), except on edge data
+**Parity** [match](parity.html#fc9)
 
 
 ### MECH-OAT-1 {#mech-oat-1}
@@ -1372,7 +1372,7 @@ Low OA fraction
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#oa-1)
+**Parity** [match](parity.html#oa-1)
 
 
 ### RESET-1 {#reset-1}
@@ -1867,7 +1867,7 @@ VAV leave vs parent AHU SAT (fedBy)
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#vav-ahu-leave)
+**Parity** [match](parity.html#vav-ahu-leave)
 
 
 ### VAV-REHEAT {#vav-reheat}
@@ -2291,7 +2291,7 @@ Low chilled-water ΔT
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#chw-1)
+**Parity** [match](parity.html#chw-1)
 
 
 ### CHW-2 {#chw-2}
@@ -2608,7 +2608,7 @@ CHW plant reset advisory
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#trim-4), except on stress-only data
+**Parity** [match](parity.html#trim-4)
 
 
 ## Boilers {#group-boiler}
@@ -2653,7 +2653,7 @@ HWST trim advisory
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#trim-3), except on stress-only data
+**Parity** [match](parity.html#trim-3)
 
 
 ## Heat pumps {#group-heatpump}
@@ -2697,7 +2697,7 @@ Discharge cold when heating
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#hp-1)
+**Parity** [match](parity.html#hp-1)
 
 
 ## Meters and utilities {#group-meter}

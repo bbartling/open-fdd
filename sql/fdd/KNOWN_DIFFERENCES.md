@@ -17,25 +17,37 @@ median, noise deadband, operating-state context) is a different, richer algorith
 SV-RATE remains in `KNOWN_DIVERGENT` and the section above still applies. Only the SQL side reads `rate_per_h`; the pandas
 profile numbers are unchanged. Porting the profile algorithm to SQL is a separate decision, not part of the limits source.
 
-## Stress-only differences: TRIM-3 and VAV-REHEAT (#1582)
+## Stress-only difference: VAV-REHEAT (#1582)
 
-`python tests/parity/stress.py --equips 8 --days 7` compares 71 pandas twins; the 2x3 pytest dataset never reaches the
-branches below, so these two are pinned in `STRESS_ONLY_DIVERGENT` (tests/parity/test_parity.py), not in `KNOWN_DIVERGENT`.
+`python tests/parity/stress.py --equips 8 --days 7` reaches branches the 2x3 pytest dataset never does, so VAV-REHEAT is
+pinned in `STRESS_ONLY_DIVERGENT` (tests/parity/test_parity.py), not in `KNOWN_DIVERGENT`.
 
-- **VAV-REHEAT** (SQL 16.0833 h, pandas 15.9167 h on one equipment): pandas runs the rule behind the operational gate
-  `fan_running` with `startup_delay_seconds=600`; SQL has no startup holdoff. A standing fault at fan start is confirmed one
-  5-minute sample earlier in SQL at each of the two fan starts in the 7-day run (0.1667 h in total). With the holdoff removed
-  pandas equals SQL (regression test `test_vav_reheat_difference_is_exactly_the_startup_holdoff`). Same family as VAV-AHU-LEAVE,
-  OA-1 and CHW-1 ("Default startup/mode behavior is not yet fully equivalent" above). VAV-6 was a different cause
-  (the pandas frame never mapped `clg_available`) and matches since #1642.
-- **TRIM-3** (SQL 1.5 h, pandas skipped on every equipment): three separate differences. (1) pandas reads the role
-  `hw-reset-request-sum`; the SQL contract and the NF role are `hot-water-reset-request-sum` (the same applies to TRIM-4 and
-  `chw-reset-request-sum` / `chilled-water-reset-request-sum`), so with contract names pandas has no input and returns
-  `SKIPPED_MISSING_ROLES`. (2) With the pandas name supplied, SQL faults when the request sum is `<=` `request_lo` and pandas
-  when it is `<` `request_lo` (the synthetic request sum takes the value 1 = `request_lo` on 78 of 384 hot samples). (3) pandas adds
-  the hydronic-flow gate with a 600 s startup holdoff. With the pandas name supplied the two still differ (SQL 1.5 h against
-  pandas 0.4167 h). Not changed here: aligning the names and the comparison changes public pandas roles and rule semantics and
-  needs an owner decision; see the follow-up on #1582.
+- **VAV-REHEAT** (SQL 16.0833 h, pandas 15.9167 h on one equipment): the pandas 600 s startup holdoff after the fan proves
+  on, which this SQL does not carry (the rule is retired into COIL-PERF by #1641). A standing fault at fan start is confirmed
+  one 5-minute sample earlier in SQL at each of the two fan starts in the 7-day run (0.1667 h in total); regression test
+  `test_vav_reheat_difference_is_exactly_the_startup_holdoff`.
+- **TRIM-3 / TRIM-4** match since #1758: roles and the `<=` comparison were aligned by #1588, and the SQL now carries the
+  hydronic-proof startup holdoff (next section).
+
+## Startup holdoff (#1758)
+
+pandas holds a run-proof gated rule off for `startup_delay_seconds` (`operational_gate.RULE_GATES`) after its gate signal
+turns on: `rows = max(1, ceil(delay / poll))`, and a sample counts only when the signal was on for the last `rows` samples,
+the first sample of the series included (a series that begins with the fan running is a start). These SQL rules carry the
+same holdoff, as a `startup_ok` window over the rule's own gate signal (`MIN(...)` and `COUNT(*)` over
+`ROWS BETWEEN {{STARTUP_DELAY_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW`; window functions only, so PostgreSQL, SQLite and
+DuckDB run it unchanged). The delay is the fixed internal constant `STARTUP_DELAY_MIN` (#1671: not a user tuner).
+
+| Rule | Gate signal | Delay |
+|---|---|---|
+| CHW-1 | plant proof (`proof_on`) | 15 min |
+| TRIM-3, TRIM-4 | plant proof, else the resolved run proof | 10 min |
+| HP-1 | compressor proof (`proof_on`) | 10 min |
+| OA-1, VAV-AHU-LEAVE, AHU-SATDEV, ECON-4, ECON-7, FC3, FC5, FC8, FC9 | `fan_on` | 10 min |
+
+The holdoff is row based, like pandas: a missing-row gap does not restart it (a gap longer than `MAX_GAP_HOURS` still breaks
+confirmation). Other gated rules with a pandas startup delay do not carry it yet; on the parity datasets their faults never
+start at a proof start, so no difference shows. The FC rules keep their fan-restart (mode) holdoff as well.
 
 ## Imported FC1 healthy baseline was not healthy under current rules
 
@@ -43,7 +55,7 @@ The old fixture held duct static at 1.2 against a 1.5 setpoint during ordinary f
 
 ## Default startup/mode behavior is not yet fully equivalent
 
-Some SQL rules check fan-on stability, while pandas GL36 rules suppress faults after heat/cool/economizer mode changes. The raw synthetic contract explicitly sets `mode_delay_min=0` and `startup_delay_min=0` where exposed; confirmation is tested separately. Source UI/default tuner values are retained unchanged. Passing these controlled cases does not establish full default-mode or arbitrary-tuning parity. Implement and test the selected holdoff policy before shipping those controls as equivalent.
+Some SQL rules check fan-on stability, while pandas GL36 rules suppress faults after heat/cool/economizer mode changes. The raw synthetic contract explicitly sets `mode_delay_min=0` and `startup_delay_min=0` where exposed; confirmation is tested separately. Source UI/default tuner values are retained unchanged. Passing these controlled cases does not establish full default-mode or arbitrary-tuning parity. The startup holdoff itself is now in the SQL for the rules listed under "Startup holdoff (#1758)".
 
 ## Sensor sweeps: per-series scores and elapsed silence (#1555, #1565)
 

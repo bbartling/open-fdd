@@ -31,10 +31,10 @@ each input, parameter and output.
 | Rule | What it checks | Equipment | Confirm | Twin | Parity |
 |---|---|---|---|---|---|
 | [**AHU-DUCTHI**](sql-cookbook.html#ahu-ducthi) | Duct static pressure high | ahu | 5 min | [pandas](pandas-cookbook.html#ahu-ducthi) | match |
-| [**AHU-SATDEV**](sql-cookbook.html#ahu-satdev) | SAT deviation from setpoint | ahu | 10 min | [pandas](pandas-cookbook.html#ahu-satdev) | known divergence |
+| [**AHU-SATDEV**](sql-cookbook.html#ahu-satdev) | SAT deviation from setpoint | ahu | 10 min | [pandas](pandas-cookbook.html#ahu-satdev) | match |
 | [**AHU-SIMUL**](sql-cookbook.html#ahu-simul) | Heating and cooling simultaneous | ahu | 5 min | [pandas](pandas-cookbook.html#ahu-simul) | match |
 | [**AVG-ZONE-TEMP**](sql-cookbook.html#avg-zone-temp) | Average zone temperature per equipment | any | immediate | SQL only | SQL only |
-| [**CHW-1**](sql-cookbook.html#chw-1) | Low chilled-water ΔT | chiller, chwPlant | 15 min | [pandas](pandas-cookbook.html#chw-1) | known divergence |
+| [**CHW-1**](sql-cookbook.html#chw-1) | Low chilled-water ΔT | chiller, chwPlant | 15 min | [pandas](pandas-cookbook.html#chw-1) | match |
 | [**CHW-2**](sql-cookbook.html#chw-2) | DP below SP at max pump speed | chiller, chwPlant | 5 min | [pandas](pandas-cookbook.html#chw-2) | match |
 | [**CHW-3**](sql-cookbook.html#chw-3) | Plant supply temp outside deadband | chiller, chwPlant | 5 min | [pandas](pandas-cookbook.html#chw-3) | match |
 | [**CHW-4**](sql-cookbook.html#chw-4) | Flow high at max pump | chiller, chwPlant | 5 min | [pandas](pandas-cookbook.html#chw-4) | match |
@@ -48,10 +48,10 @@ each input, parameter and output.
 | [**ECON-1**](sql-cookbook.html#econ-1) | Economizer stuck closed when OAT favorable | ahu | 10 min | [pandas](pandas-cookbook.html#econ-1) | match |
 | [**ECON-2**](sql-cookbook.html#econ-2) | Economizing when outdoor air unfavorable | ahu | 5 min | [pandas](pandas-cookbook.html#econ-2) | match |
 | [**ECON-3**](sql-cookbook.html#econ-3) | Mech cooling without integrated economizer | ahu | 5 min | [pandas](pandas-cookbook.html#econ-3) | match |
-| [**ECON-4**](sql-cookbook.html#econ-4) | Low estimated OA fraction | ahu | 10 min | [pandas](pandas-cookbook.html#econ-4) | known divergence |
+| [**ECON-4**](sql-cookbook.html#econ-4) | Low estimated OA fraction | ahu | 10 min | [pandas](pandas-cookbook.html#econ-4) | match |
 | [**ECON-5**](sql-cookbook.html#econ-5) | Preheat over-conditioning | ahu | 10 min | [pandas](pandas-cookbook.html#econ-5) | match |
 | [**ECON-6**](sql-cookbook.html#econ-6) | Economizing in freezing weather | ahu | 10 min | [pandas](pandas-cookbook.html#econ-6) | match |
-| [**ECON-7**](sql-cookbook.html#econ-7) | Economizer OK but not economizing | ahu | 10 min | [pandas](pandas-cookbook.html#econ-7) | known divergence |
+| [**ECON-7**](sql-cookbook.html#econ-7) | Economizer OK but not economizing | ahu | 10 min | [pandas](pandas-cookbook.html#econ-7) | match |
 | [**FAN-RUNTIME-HOURS**](sql-cookbook.html#fan-runtime-hours) | Fan running hours where fan_cmd &gt; 5% (normalized 0-1) | any | immediate | SQL only | SQL only |
 | [**FAULT-ELAPSED-HOURS**](sql-cookbook.html#fault-elapsed-hours) | Comfort fault sample count → hours | any | immediate | SQL only | SQL only |
 | [**FC1**](sql-cookbook.html#fc1) | Duct static below SP at full fan | ahu | 5 min | [pandas](pandas-cookbook.html#fc1) | match |
@@ -78,9 +78,9 @@ each input, parameter and output.
 | [**FCU-SENSOR-NULL**](sql-cookbook.html#fcu-sensor-null) | Own zone setpoint present but zone temperature null for at least 90% of window | zone_other, general, ahu | immediate | [pandas](pandas-cookbook.html#fcu-sensor-null) | match |
 | [**FCU-VALVE-PASS-CLG**](sql-cookbook.html#fcu-valve-pass-clg) | Cooling valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-clg) | match |
 | [**FCU-VALVE-PASS-HTG**](sql-cookbook.html#fcu-valve-pass-htg) | Heating valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-htg) | match |
-| [**HP-1**](sql-cookbook.html#hp-1) | Discharge cold when heating | heatpump | 10 min | [pandas](pandas-cookbook.html#hp-1) | known divergence |
+| [**HP-1**](sql-cookbook.html#hp-1) | Discharge cold when heating | heatpump | 10 min | [pandas](pandas-cookbook.html#hp-1) | match |
 | [**MECH-OAT-1**](sql-cookbook.html#mech-oat-1) | Mechanical cooling below 15.6 °C web OAT | ahu, chiller, heatpump | 10 min | [pandas](pandas-cookbook.html#mech-oat-1) | match |
-| [**OA-1**](sql-cookbook.html#oa-1) | Low OA fraction | ahu | 15 min | [pandas](pandas-cookbook.html#oa-1) | known divergence |
+| [**OA-1**](sql-cookbook.html#oa-1) | Low OA fraction | ahu | 15 min | [pandas](pandas-cookbook.html#oa-1) | match |
 | [**OAT-METEO**](sql-cookbook.html#oat-meteo) | Equipment OAT vs weather-staged wx OAT | ahu | 15 min | [pandas](pandas-cookbook.html#oat-meteo) | known divergence |
 | [**PID-HUNT-1**](sql-cookbook.html#pid-hunt-1) | Suspected control-output hunting | ahu, vav, zone_other, chiller, boiler, heatpump | immediate | [pandas](pandas-cookbook.html#pid-hunt-1) | match |
 | [**RESET-1**](sql-cookbook.html#reset-1) | SAT reset not tracking outdoor air | ahu | 15 min | [pandas](pandas-cookbook.html#reset-1) | match |
@@ -103,7 +103,7 @@ each input, parameter and output.
 | [**VAV-5**](sql-cookbook.html#vav-5) | Airflow sensor bias | vav | 15 min | [pandas](pandas-cookbook.html#vav-5) | match |
 | [**VAV-6**](sql-cookbook.html#vav-6) | Reheat when cooling available | vav | 15 min | [pandas](pandas-cookbook.html#vav-6) | match |
 | [**VAV-7**](sql-cookbook.html#vav-7) | Min airflow / fixed high flow | vav | 15 min | [pandas](pandas-cookbook.html#vav-7) | match |
-| [**VAV-AHU-LEAVE**](sql-cookbook.html#vav-ahu-leave) | VAV leave vs parent AHU SAT (fedBy) | vav | 15 min | [pandas](pandas-cookbook.html#vav-ahu-leave) | known divergence |
+| [**VAV-AHU-LEAVE**](sql-cookbook.html#vav-ahu-leave) | VAV leave vs parent AHU SAT (fedBy) | vav | 15 min | [pandas](pandas-cookbook.html#vav-ahu-leave) | match |
 | [**VAV-REHEAT**](sql-cookbook.html#vav-reheat) | Reheat valve stuck / no temp rise | vav | 15 min | [pandas](pandas-cookbook.html#vav-reheat) | match |
 | [**VLV-1**](sql-cookbook.html#vlv-1) | Cooling valve leakage | ahu | 15 min | [pandas](pandas-cookbook.html#vlv-1) | match |
 | [**WX-1**](sql-cookbook.html#wx-1) | OA temperature spike | weather | 5 min | [pandas](pandas-cookbook.html#wx-1) | match |

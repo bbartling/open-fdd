@@ -38,6 +38,7 @@ base AS (
       WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN COALESCE(mode_stable, 1) = 0 THEN 0
+      WHEN startup_ok = 0 THEN 0
       WHEN sat IS NOT NULL AND mat IS NOT NULL
        AND oa_damper_pct > {{ECON_MIN_POS}} AND clg_valve_pct < {{CLG_INACTIVE_MAX}}
        AND ABS(sat - {{DELTA_SUPPLY_FAN}} - mat) > SQRT({{EPS_SAT}} * {{EPS_SAT}} + {{EPS_MAT}} * {{EPS_MAT}})
@@ -53,7 +54,16 @@ base AS (
         ROWS BETWEEN {{MODE_DELAY_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW
       ) = 0 THEN 1
       ELSE 0
-    END AS mode_stable
+    END AS mode_stable,
+    -- #1758 startup holdoff (pandas operational_gate.apply_startup_delay): the fan on for STARTUP_DELAY_ROWS samples in
+    -- a row, this one included; unlike the restart check above, the first sample of the series counts as a start.
+    CASE
+      WHEN MIN(COALESCE(fan_on, 1)) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc
+             ROWS BETWEEN {{STARTUP_DELAY_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) = 1
+       AND COUNT(*) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc
+             ROWS BETWEEN {{STARTUP_DELAY_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) > {{STARTUP_DELAY_ROWS_PRECEDING}}
+      THEN 1 ELSE 0
+    END AS startup_ok
   FROM h
 ) h
 ),
