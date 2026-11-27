@@ -34,7 +34,7 @@ remain parity-test engines, with the Python extra `duckdb>=2.0.1` used the same 
 
 `sql/fdd/port_manifest.json` stores a `source_sha256` per rule file. CI does not compare those hashes.
 
-The **Role** column is the `role` name in [`roles/openfdd-roles.json`](https://github.com/bbartling/open-fdd/blob/master/roles/openfdd-roles.json) (`openfdd-roles` 1.0.0-draft.1).
+The **Role** column is the `role` name in [`roles/openfdd-roles.json`](https://github.com/bbartling/open-fdd/blob/master/roles/openfdd-roles.json) (`openfdd-roles` 1.1.0-draft.1).
 **QUDT** is that role's unit local name. The SQL column is `legacy_keys` (what the query reads). Haystack is the pandas column and the optional NF binding.
 Damper and valve roles are `PERCENT` (0-100) in the roles file; this SQL still compares a 0-1 fraction. Thresholds are the SI values in the parameter table.
 

@@ -1,7 +1,7 @@
 {
  "$schema": "./openfdd-roles.schema.json",
  "vocabulary": "openfdd-roles",
- "version": "1.0.0-draft.1",
+ "version": "1.1.0-draft.1",
  "openfdd_release": "5.0.22",
  "status": "draft",
  "description": "Canonical point-role vocabulary shared by Open-FDD, open-hvac-edge and nf-hvac-functional-test. Every role is an ASHRAE 223P property pattern with a QUDT unit and one Haystack 4 binding. See README.md.",
@@ -114,6 +114,12 @@
   },
   "s223:Fan": {
    "token": "fan"
+  },
+  "s223:Boiler": {
+   "token": "boiler"
+  },
+  "s223:Filter": {
+   "token": "filter"
   },
   "s223:Pump": {
    "token": "pump"
@@ -567,6 +573,7 @@
    "air",
    "airTerminalUnit",
    "alarm",
+   "boiler",
    "bypass",
    "chilled",
    "chiller",
@@ -591,6 +598,7 @@
    "entering",
    "exhaust",
    "fan",
+   "filter",
    "flow",
    "freezeStat",
    "heat",
@@ -640,7 +648,7 @@
    "A point carries exactly one function marker: sensor, sp or cmd. A role whose markers include one of them never binds a point that carries another; a role whose markers include none forbids the two it does not accept.",
    "A point binds a role when its NF class is in haystack.classes, or when it carries every marker in haystack.markers (or every marker of one haystack.alt_markers set) and custom_markers; in both cases it must carry none of haystack.forbid.",
    "binding_scope says which point is meant: own = a point of the equipment being assessed; fed_by_air_handling_unit = a point of the air handler named by the equipment's airRef; aggregate = a point of the equipment that sums its terminal units; weather = a point of the site weather equipment; derived = computed by the consumer, never bound from tags.",
-   "haystack.equip_markers, when present, must be carried by the parent equipment (equipRef); equipment markers never flow down to points.",
+   "haystack.equip_markers, when present, must be carried by the parent equipment (equipRef). haystack.equip_forbid, when present, must be absent from that parent. Equipment markers never flow down to points. A shared NF class is a binding collision when those parent constraints can both hold.",
    "haystack.optional never decides whether a point binds. When several points of one equipment bind the same role, the point carrying the most optional markers wins; a remaining tie leaves the role unbound and reported.",
    "If a point still matches several roles, the role whose markers are a strict superset wins; any remaining tie leaves the point unbound and reported. List order never decides.",
    "An unknown label never becomes a role. An unbound required input makes the consumer's rule or step not applicable."
@@ -845,6 +853,53 @@
     "freeze_protection_status"
    ],
    "note": "Freeze stat: an air-temperature low-limit alarm, linked to the air temperature with s223:hasAlarmStatus."
+  },
+  {
+   "role": "boiler_operating_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "equipment": "s223:Boiler",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "aspects": [
+     "s223:Aspect-OperatingStatus"
+    ],
+    "applies_to": [
+     "s223:Boiler"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "boiler",
+     "run",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "boiler_status"
+   ],
+   "aliases": [
+    "boiler_run_status"
+   ]
   },
   {
    "role": "chilled_water_pressure_delta",
@@ -2040,7 +2095,6 @@
     "quantity_kind": "quantitykind:Temperature",
     "applies_to": [
      "s223:AirHandlingUnit",
-     "s223:TerminalUnit",
      "s223:FanCoilUnit"
     ]
    },
@@ -2062,8 +2116,12 @@
      "sensor"
     ],
     "forbid": [],
+    "equip_forbid": [
+     "airTerminalUnit"
+    ],
     "binding_scope": "own",
-    "conformance": "standard"
+    "conformance": "standard",
+    "note": "Terminal-unit discharge air temperature is terminal_unit_discharge_air_temperature. This role binds an air handler or fan coil whose parent is not an air terminal."
    },
    "rule_input": true,
    "consumers": {
@@ -2440,6 +2498,10 @@
      "sensor"
     ],
     "forbid": [
+     "chiller",
+     "fan"
+    ],
+    "equip_forbid": [
      "chiller"
     ],
     "binding_scope": "own",
@@ -2454,6 +2516,58 @@
     "electric_kw"
    ],
    "aliases": []
+  },
+  {
+   "role": "filter_air_pressure_delta",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment": "s223:Filter",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Pressure",
+    "aspects": [
+     "s223:Aspect-Delta"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:FanCoilUnit"
+    ]
+   },
+   "unit": "unit:PA",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "Pa",
+    "classes": [],
+    "markers": [
+     "filter",
+     "air",
+     "delta",
+     "pressure",
+     "sensor"
+    ],
+    "forbid": [
+     "water"
+    ],
+    "binding_scope": "own",
+    "conformance": "nonstandard",
+    "note": "Haystack 4 has the filter, air, delta and pressure markers and no filter differential-pressure point prototype."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "filter_dp"
+   ],
+   "aliases": [
+    "filter_differential_pressure",
+    "filter_diff_pressure"
+   ]
   },
   {
    "role": "heating_coil_inlet_air_temperature",
@@ -2722,12 +2836,15 @@
     ]
    },
    "unit": null,
-   "value_type": "enumeration",
-   "range": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
    "derived": false,
    "writable": "model",
    "haystack": {
-    "kind": "Str",
+    "kind": "Bool",
     "unit": null,
     "classes": [],
     "markers": [
@@ -2754,7 +2871,7 @@
    "aliases": [
     "vav_max_cooling_mode_command"
    ],
-   "note": "One controller point that drives every served terminal unit to its cooling maximum airflow. Boolean or a site-defined value set."
+   "note": "One controller point that drives every served terminal unit to its cooling maximum airflow. Canonical value is boolean: true enters the mode and false leaves it."
   },
   {
    "role": "mixed_air_relative_humidity",
@@ -2863,12 +2980,15 @@
     ]
    },
    "unit": null,
-   "value_type": "enumeration",
-   "range": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
    "derived": false,
    "writable": "never",
    "haystack": {
-    "kind": "Str",
+    "kind": "Bool",
     "unit": null,
     "classes": [
      "occupied-sensor"
@@ -2896,7 +3016,8 @@
    ],
    "aliases": [
     "occupancy_mode"
-   ]
+   ],
+   "note": "Canonical value is boolean. A Haystack occupied sensor is true when the zone is occupied and false when it is unoccupied."
   },
   {
    "role": "operating_mode_command",
@@ -3365,12 +3486,15 @@
     ]
    },
    "unit": null,
-   "value_type": "enumeration",
-   "range": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
    "derived": false,
    "writable": "model",
    "haystack": {
-    "kind": "Str",
+    "kind": "Bool",
     "unit": null,
     "classes": [],
     "markers": [
@@ -3391,7 +3515,7 @@
    "aliases": [
     "flush_mode_command"
    ],
-   "note": "Boolean or a site-defined value set."
+   "note": "Canonical value is boolean: true enters purge and false leaves it."
   },
   {
    "role": "return_air_relative_humidity",
@@ -3964,6 +4088,9 @@
      "exhaust",
      "pump"
     ],
+    "equip_forbid": [
+     "coolingTower"
+    ],
     "binding_scope": "own",
     "conformance": "standard"
    },
@@ -3978,6 +4105,65 @@
    ],
    "aliases": [],
    "note": "g36:Fan start/stop command. Speed is supply_fan_speed_command."
+  },
+  {
+   "role": "supply_fan_electric_power",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment_role": "s223:Role-Supply",
+    "equipment": "s223:Fan",
+    "medium": "s223:Electricity-AC",
+    "quantity_kind": "quantitykind:ElectricPower",
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:FanCoilUnit"
+    ]
+   },
+   "unit": "unit:KiloW",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "kW",
+    "classes": [],
+    "markers": [
+     "fan",
+     "elec",
+     "power",
+     "sensor"
+    ],
+    "optional": [
+     "discharge"
+    ],
+    "forbid": [
+     "return",
+     "exhaust",
+     "pump",
+     "chiller"
+    ],
+    "equip_forbid": [
+     "chiller",
+     "coolingTower"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard",
+    "note": "Haystack 4 has no supply marker; the supply fan is the fan that is not return or exhaust."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "fan_power"
+   ],
+   "aliases": [
+    "fan_elec_power",
+    "supply_fan_power"
+   ]
   },
   {
    "role": "supply_fan_operating_status",
@@ -4024,9 +4210,13 @@
      "exhaust",
      "pump"
     ],
+    "equip_forbid": [
+     "coolingTower",
+     "boiler"
+    ],
     "binding_scope": "own",
     "conformance": "standard",
-    "note": "Haystack 4 has no supply marker; the supply fan is the discharge fan."
+    "note": "Haystack 4 has no supply marker; the supply fan is the discharge fan. A boiler run sensor is boiler_operating_status."
    },
    "rule_input": true,
    "consumers": {
@@ -4084,6 +4274,9 @@
      "return",
      "exhaust",
      "pump"
+    ],
+    "equip_forbid": [
+     "coolingTower"
     ],
     "binding_scope": "own",
     "conformance": "standard"

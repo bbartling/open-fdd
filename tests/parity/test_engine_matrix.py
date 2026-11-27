@@ -184,7 +184,13 @@ def test_duckdb_and_sqlite_helper_equivalence():
     finally:
         sq.close()
 
-    assert duck_td == sq_td
+    # NaN / Infinity: the DuckDB macros keep them, as PostgreSQL trim(value)::double precision does (#1645);
+    # the SQLite UDF returns NULL. Every other input agrees.
+    special = {"NaN", "Infinity"}
+    keep = [i for i, v in enumerate(try_double_cases) if v not in special]
+    assert [duck_td[i] for i in keep] == [sq_td[i] for i in keep]
+    nan, inf = (duck_td[try_double_cases.index(v)] for v in ("NaN", "Infinity"))
+    assert math.isnan(nan) and inf == math.inf
     assert duck_sweep == sq_sweep
     by_case = dict(zip([(r, u) for r, u, _ in cases], duck_sweep))
     assert by_case[("oa_h", "percent_0_100")] == (False, True, 50.0)
