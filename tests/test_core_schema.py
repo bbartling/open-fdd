@@ -75,8 +75,8 @@ def test_catalog_pins_the_keys_downstream_relies_on():
 
 
 def test_build_script_check_passes():
-    if shutil.which("node") is None or not (ROOT / "nf-app/node_modules/@electric-sql").is_dir():
-        pytest.skip("node and the nf-app dependencies (PGlite) are required")
+    if shutil.which("node") is None:
+        pytest.skip("node is required")
     result = subprocess.run([sys.executable, str(ROOT / "scripts/nf/build_core_schema.py"), "--check"], cwd=ROOT,
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stderr or result.stdout

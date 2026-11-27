@@ -62,7 +62,7 @@ def test_each_engine_recipe_stamps_its_badge(tmp_path):
         assert version["engineLabel"] == label and version["engineLibraryVersion"] == rec["libraryVersion"]
         assert version["engineBuild"] == recipe
         deps = json.loads((tree / "package.json").read_text(encoding="utf-8"))["dependencies"]
-        assert set(deps) == {dep}
+        assert set(deps) == {dep, "oxigraph"}
         assert "sql.js" not in deps and "@electric-sql/pglite" not in deps
 
 

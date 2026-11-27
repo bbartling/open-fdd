@@ -1,6 +1,6 @@
 """#1781 SHORT-CYCLE: boiler / compressor short cycling from proven run status, duty-aware.
 
-Every case runs on the pandas twin and on the SQL pack (PGlite and SQLite through sql_run.mjs, DuckDB, and standalone
+Every case runs on the pandas twin and on the SQL pack (Node DuckDB through sql_run.mjs, Python DuckDB, and standalone
 PostgreSQL when POSTGRES_TEST_URL + OPENFDD_PG_TEST_DISPOSABLE=1 are set) and must give the same answer. Expected fault
 hours are derived by hand in the case comments (1 min samples unless noted; a sample holds until the next one).
 """
@@ -78,7 +78,7 @@ def _dataset(cases: dict) -> object:
 
 def _engines(ds, rule_sql: dict | None = None) -> dict[str, dict[str, dict]]:
     out = {}
-    kinds = ["pglite"] if rule_sql else ["pglite", "sqlite"]
+    kinds = ["duckdb"]
     for kind in kinds:
         ad = NodeEngineAdapter(kind)
         ad.load(ds)
