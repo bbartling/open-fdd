@@ -62,7 +62,11 @@
 // Nothing site-specific: sites, equips, points and units all come from NF.
 // config (hook settings, all optional). NF stores these as app OPTIONS and passes them as ctx.config (scalars only:
 // see lib/settings.js; a string value such as "24" or a JSON string for timescale is converted):
-//   engine        "auto" | "sqlite" | "pglite" | "timescale"   (auto: timescale when configured, else pglite when NF reports ≥ 3.5 GiB RAM)
+//   engine        "auto" | "sqlite" | "pglite" | "duckdb" | "timescale"   (auto: timescale when configured, else pglite when NF reports ≥ 3.5 GiB RAM)
+//                 duckdb (#1645, opt-in): native DuckDB, warm in-memory; when its package is not installed the run falls back to the
+//                 auto choice and says so in engine_note
+//                 With the option timescale set, duckdb reads the saved tuning (fdd.rule_config) from it like the timescale engine
+//   duckdbMemoryLimit  DuckDB memory cap, e.g. "256MB" (default) or "1GB"; duckdbThreads  DuckDB threads (default 2). Engine duckdb only
 //   timescale     the NF Timescale connection: JSON {"host","port","database","user","password"} or a postgres:// URL
 //   windowHours   trailing window per run (default 24)
 //   weather       false = web weather is OFF (#1552): weather points are ignored (they are stale leftovers), rules that read
@@ -105,7 +109,8 @@ function loadShared() {
 }
 
 // pglite runs the Postgres pack as written; sqlite runs the translated one.
-const PACK_FILE = { sqlite: 'pack-sqlite.json', pglite: 'pack-postgres.json', timescale: 'pack-postgres.json' };
+// duckdb (#1645) runs the Postgres pack too, with its fdd.* helpers as DuckDB macros (pack.duckdb_helpers_sql).
+const PACK_FILE = { sqlite: 'pack-sqlite.json', pglite: 'pack-postgres.json', timescale: 'pack-postgres.json', duckdb: 'pack-postgres.json' };
 const loadPack = (kind) => JSON.parse(fs.readFileSync(path.join(RULES, PACK_FILE[kind]), 'utf8'));
 
 // ---- NF reads -----------------------------------------------------------------------
@@ -731,14 +736,31 @@ function pgliteInstalled() {
 }
 
 /**
+ * True when the native DuckDB package (@duckdb/node-api, an optionalDependency, #1645) loads on this box. Loading it is
+ * the only honest test: the npm package can be present while its native build for this CPU / libc is not (no 32-bit ARM).
+ */
+function duckdbLoadable() {
+  try { require('@duckdb/node-api'); return true; } catch (e) { return false; }
+}
+
+/**
  * Which engine to run. An engine the config names (sqlite | pglite | timescale) is used as is, never swapped.
  * Only when none was configured ("auto"/unset) is the choice ours: timescale if configured, else pglite on big
  * boxes, but sqlite (vendored, no npm install) when pglite is not installed. Returns {kind, note}.
+ * duckdb (#1645) is opt-in and never picked by auto. While it is on trial it is the one configured engine that falls
+ * back: when its native package does not load here, the run uses the auto choice and the note says so.
  */
-async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInstalled) {
+async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInstalled, hasDuckdb = duckdbLoadable) {
   // FULL edition: config.timescale set -> run the pack inside NF's TimescaleDB (engine "timescale", or "auto")
   if (wanted === 'timescale' || ((!wanted || wanted === 'auto') && timescaleConfig)) return { kind: 'timescale', note: '' };
   if (wanted === 'sqlite' || wanted === 'pglite') return { kind: wanted, note: '' };
+  if (wanted === 'duckdb') {
+    if (hasDuckdb()) return { kind: 'duckdb', note: '' };
+    // a box with a Timescale store falls back to the timescale engine, which reads the saved tuning too
+    const auto = await pickEngine(http, 'auto', timescaleConfig, hasPglite, hasDuckdb);
+    return { kind: auto.kind, note: `engine duckdb: @duckdb/node-api is not installed or has no native build for this box; using ${auto.kind}`
+      + (auto.note ? ` (${auto.note})` : '') };
+  }
   let kind = 'sqlite';
   try {
     const { data } = await http.get('/api/v1/platform/info');
@@ -925,7 +947,8 @@ async function loadRoleLimitOverrides({ engine, pack, log }) {
 
 /**
  * @typedef {{ engine?: string, windowHours?: number, equips?: string[], dryRun?: boolean,
- *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object, writeRetryMs?: number }} FddConfig
+ *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object, writeRetryMs?: number,
+ *   duckdbMemoryLimit?: string, duckdbThreads?: number | string }} FddConfig
  * @param {{ sdk: any, config?: FddConfig, createEngine?: Function, pack?: any, now?: number, hasPglite?: () => boolean }} args
  */
 async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn, now = Date.now(), hasPglite }) {
@@ -968,7 +991,9 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   const queue = { meta: [], values: [], series: [] };    // writes, flushed in batches after all equips ran
   const occCache = { logged: new Set() };    // NF schedules (read once per run) and which sites were logged
   const warnedUnits = new Set();
-  const engine = await createEngine({ kind, pack, config: config.timescale });
+  const engine = await createEngine({ kind, pack, config: kind === 'duckdb'
+    ? { memoryLimit: config.duckdbMemoryLimit, threads: config.duckdbThreads, timescale: config.timescale }   // timescale: saved tuning store
+    : config.timescale });
   try {
     const tuning = await loadRoleLimitOverrides({ engine, pack, log });
     summary.role_limits = tuning.summary;
@@ -1495,4 +1520,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { applyOatPolicy, runFdd, loadRoleLimitOverrides, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { applyOatPolicy, runFdd, loadRoleLimitOverrides, modelProblemOf, loadModel, pickEngine, pgliteInstalled, duckdbLoadable, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });
