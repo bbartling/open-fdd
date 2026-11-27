@@ -60,6 +60,8 @@ def test_packaged_copy_matches_the_repo_file():
     repo = ROOT / "roles" / "openfdd-roles.json"
     packaged = ROOT / "open_fdd" / "data" / "openfdd-roles.json"
     assert roles_path() == repo
+    assert packaged.is_symlink()
+    assert packaged.resolve() == repo.resolve()
     assert packaged.read_bytes() == repo.read_bytes()
 
 
