@@ -603,10 +603,33 @@ class SqlEvidenceCollector:
             kw["point_table"] = self.point_table
         return csql.HistoryMap(**kw)
 
+    def _distinct_sites(self) -> list[str]:
+        """Site ids present in the table, when it has a site column."""
+        _expr, col = self._site_select()
+        if not col:
+            return []
+        cur = self.conn.cursor()
+        cur.execute(
+            f"SELECT DISTINCT {col} FROM {self._ident(self.table)} WHERE {col} IS NOT NULL AND {col} <> ''"
+        )
+        return sorted({str(row[0]) for row in cur.fetchall() if row[0] not in (None, "")})
+
     def load(self, *, site_id: str | None = None) -> DataFrameEvidenceCollector:
         csql = confidence_sql_module()
         if csql is None:
             return self._load_simple(site_id=site_id)
+        # Episode SQL groups by equipment and rule, not site. Load each site on its own
+        # so two plants that reuse an equipment id stay separate faults.
+        if site_id is None:
+            sites = self._distinct_sites()
+            if len(sites) > 1:
+                faults: list[FaultEvidence] = []
+                deviations: list[PointDeviation] = []
+                for site in sites:
+                    part = self.load(site_id=site)
+                    faults.extend(part.all_faults())
+                    deviations.extend(part.all_deviations())
+                return DataFrameEvidenceCollector(faults=faults, point_deviations=deviations)
         src = self._source(csql, site_id)
         ph = csql.paramstyle(self.conn)
         sql, params = csql.episodes_sql(src, self.sensitivity_frac, ph)

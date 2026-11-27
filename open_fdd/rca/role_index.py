@@ -1,7 +1,8 @@
-"""Point-role index loaded from ``roles/openfdd-roles.json`` (1.1.0-draft.1).
+"""Point-role index loaded from ``roles/openfdd-roles.json``.
 
 Setpoint pairing uses the vocabulary's role names, legacy keys, aliases and Haystack
-class names. It does not guess from ``-sp`` or ``-setpoint`` suffixes.
+class names. It does not guess from ``-sp`` or ``-setpoint`` suffixes. The version
+string is whatever the loaded file declares.
 """
 
 from __future__ import annotations
@@ -12,7 +13,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-ROLES_VERSION = "1.1.0-draft.1"
 _SETPOINT_ASPECT = "s223:Aspect-Setpoint"
 
 
@@ -71,6 +71,11 @@ def load_role_index() -> dict[str, Any]:
         "by_id": by_id,
         "order": tuple(by_role),
     }
+
+
+def roles_version() -> str:
+    """Version string from the loaded vocabulary file."""
+    return str(load_role_index().get("version") or "")
 
 
 def canonical_role(point_id: str) -> str | None:
