@@ -14,9 +14,9 @@ evidence for that dataset, not proof for every input. Run it with `python -m pyt
 
 | | Rules |
 |---|---:|
-| SQL rules | **80** |
-| With a pandas twin | **74** |
-| Match on the synthetic suite | **61** |
+| SQL rules | **83** |
+| With a pandas twin | **77** |
+| Match on the synthetic suite | **64** |
 | Known divergence | **13** |
 | SQL only (no twin) | **6** |
 
@@ -115,6 +115,9 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="vav-reheat"></a>[VAV-REHEAT](sql-cookbook.html#vav-reheat) | match | match; differs only on stress-only data: pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start (0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL |
 | <a id="vlv-1"></a>[VLV-1](sql-cookbook.html#vlv-1) | match |  |
 | <a id="wx-1"></a>[WX-1](sql-cookbook.html#wx-1) | match | match; differs only on edge data: Gap handling: SQL flags \|oa_t - previous sample\| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a &gt;2 h gap is a spike in SQL only. |
+| <a id="xs-clip"></a>[XS-CLIP](sql-cookbook.html#xs-clip) | match |  |
+| <a id="xs-copy"></a>[XS-COPY](sql-cookbook.html#xs-copy) | match |  |
+| <a id="xs-mix"></a>[XS-MIX](sql-cookbook.html#xs-mix) | match |  |
 | <a id="zone-comfort-pct"></a>[ZONE-COMFORT-PCT](sql-cookbook.html#zone-comfort-pct) | SQL only | aggregate or utility analytic, no pandas function |
 
 ## Pinned deltas

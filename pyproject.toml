@@ -58,6 +58,7 @@ open-fdd-nf = "open_fdd.nf.cli:main"
 open-fdd-ml = "open_fdd.ml.cli:main"
 open-fdd-scorecard = "open_fdd.scorecard.cli:main"
 open-fdd-ontology-audit = "open_fdd.ontology_audit.cli:main"
+open-fdd-rca = "open_fdd.rca.cli:main"
 
 [project.optional-dependencies]
 ecm-web = [
@@ -90,7 +91,8 @@ nf = [
 ]
 # Read the NF app's RDF/Turtle export.
 rdf = [
-    "rdflib>=7.6.0",
+    "rdflib==7.6.0",
+    "pyoxigraph==0.5.13",
 ]
 # Offline SQL parity replay (borrowing sql/fdd on DuckDB); also the in-process DuckDB engine of the SQL analytics.
 duckdb = [
@@ -124,7 +126,8 @@ ml-copod = [
 ]
 # open-fdd-ontology-audit: requirements coverage audit and model doctor (#1569); SHACL is optional
 ontology = [
-    "rdflib>=7.6.0",
+    "rdflib==7.6.0",
+    "pyoxigraph==0.5.13",
     "openpyxl>=3.1.5",
 ]
 ontology-shacl = [
@@ -159,6 +162,7 @@ include = ["open_fdd*"]
 [tool.setuptools.package-data]
 "open_fdd" = ["data/*.json", "data/*.sql"]
 "open_fdd.ontology_audit" = ["data/*.json", "data/*.csv", "data/*.ttl"]
+"open_fdd.rca" = ["data/*.ttl", "data/*.json"]
 "open_fdd.scorecard" = ["*.sql"]
 "open_fdd.ecm_engineering" = [
     "data/*.xlsx",
