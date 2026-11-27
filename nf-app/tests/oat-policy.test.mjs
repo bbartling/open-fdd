@@ -22,7 +22,7 @@ const MODEL = [
   { uuid: "e", name: "AHU-1", pointType: "EQUIPMENT", attrs: { id: "AHU-1", siteRef: "site-a", markers: "equip,ahu" } },
 ];
 const LOCAL = pt("u-OAT", "OAT-LOCAL", ["outside", "air", "temp", "sensor"], { equipRef: "AHU-1", class: "outside-air-temp-sensor", unit: "degF" });
-const WEB = pt("u-WEB", "web-oat", ["weather", "outside", "air", "temp"], { unit: "degF" });
+const WEB = pt("u-WEB", "web-oat", ["weather", "outside", "air", "temp", "sensor"], { unit: "degF" });
 const VALVE = pt("u-VALVE", "CLG-VLV", ["cool", "valve", "cmd"], { equipRef: "AHU-1", class: "cool-valve-cmd", unit: "%" });
 
 function http(points) {
@@ -49,7 +49,7 @@ function http(points) {
 const PACK = {
   poll_seconds: STEP,
   contract: { history: [{ name: "equipment_id", type: "text" }, { name: "timestamp_utc", type: "timestamp" },
-    { name: "web_oa_t", type: "double" }, { name: "clg_valve_pct", type: "double" }, { name: "oa_t", type: "double" }] },
+    { name: "weather_service_air_temperature", type: "double" }, { name: "cooling_valve_position_command", type: "double" }, { name: "outdoor_air_intake_temperature", type: "double" }] },
   rules: {
     "MECH-OAT-1": { sql: "-", output_columns: ["equipment_id", "fault_hours"] },
     "OAT-METEO": { sql: "-", output_columns: ["equipment_id", "fault_hours", "fault_pct"] },
@@ -74,25 +74,25 @@ test("web weather bound: it is used and the local sensor is only the OAT-METEO c
   const { summary, seen } = await run([LOCAL, WEB, VALVE]);
   assert.deepEqual(summary.oat, { weather: "on", web: 1, local: 0, none: 0, local_points: [] });
   assert.ok(seen.queries.includes("MECH-OAT-1"));
-  const web = col(seen, "web_oa_t");
-  assert.ok(web.length === 1 && near(web[0], (10 - 32) * 5 / 9), `web_oa_t is the weather point (10 degF): ${web}`);
+  const web = col(seen, "weather_service_air_temperature");
+  assert.ok(web.length === 1 && near(web[0], (10 - 32) * 5 / 9), `weather_service_air_temperature is the weather point (10 degF): ${web}`);
 });
 
-test("no web weather but a local OA sensor: it feeds web_oa_t (local fallback), the comparison rule is not given itself", async () => {
+test("no web weather but a local OA sensor: it feeds weather_service_air_temperature (local fallback), the comparison rule is not given itself", async () => {
   const { summary, seen, logs } = await run([LOCAL, VALVE]);
   assert.equal(summary.oat.local, 1);
   assert.deepEqual(summary.oat.local_points, [{ site: "site-a", equip: "AHU-1", point: "outside air temp" }]);
   assert.ok(logs.some((l) => /using the local outside-air sensor "outside air temp"/.test(l)), logs.join("\n"));
-  assert.ok(seen.queries.includes("MECH-OAT-1"), "MECH-OAT-1 requires web_oa_t: runnable through the local sensor");
-  const web = col(seen, "web_oa_t");
-  assert.ok(web.length === 1 && near(web[0], (40 - 32) * 5 / 9), `web_oa_t is the local sensor (40 degF): ${web}`);
+  assert.ok(seen.queries.includes("MECH-OAT-1"), "MECH-OAT-1 requires weather_service_air_temperature: runnable through the local sensor");
+  const web = col(seen, "weather_service_air_temperature");
+  assert.ok(web.length === 1 && near(web[0], (40 - 32) * 5 / 9), `weather_service_air_temperature is the local sensor (40 degF): ${web}`);
 });
 
 test("weather:false ignores stale weather points and uses the local sensor; OAT-METEO skips with the reason", async () => {
   const { summary, seen, logs } = await run([LOCAL, WEB, VALVE], { weather: false });
   assert.equal(summary.oat.weather, "off");
   assert.equal(summary.oat.local, 1);
-  const web = col(seen, "web_oa_t");
+  const web = col(seen, "weather_service_air_temperature");
   assert.ok(web.length === 1 && near(web[0], (40 - 32) * 5 / 9), "the stale weather point (10 degF) is not used");
   assert.ok(!seen.queries.includes("OAT-METEO"), "OAT-METEO would compare the sensor with itself");
   assert.ok(logs.some((l) => /OAT-METEO skipped: no outside-air temperature \(weather disabled\)/.test(l)), logs.join("\n"));
@@ -115,7 +115,7 @@ test("weather on, nothing bound and no local sensor: unchanged (no new skip reas
 
 test("applyOatPolicy: the timescale engine cannot substitute (one role per point)", () => {
   const row = (id, required, optional, bound) => ({ rule: { id }, required, optional, bound, missing: required.filter((r) => !(bound[r] || []).length), pointInputs: true, runnable: true });
-  const rows = [row("MECH-OAT-1", ["web_oa_t"], [], { web_oa_t: [] })];
+  const rows = [row("MECH-OAT-1", ["weather_service_air_temperature"], [], { weather_service_air_temperature: [] })];
   rows[0].runnable = false;
   const r = hook.applyOatPolicy(rows, { localOat: { name: "x" }, weatherOn: false, canSubstitute: false });
   assert.equal(r.source, "none");
@@ -141,5 +141,5 @@ test("RCx and energy: the dashboard ignores weather points when the app option i
   const g = analytics.loadSandbox({ get: async () => ({ data: {} }) }, Date.now(), { weatherOff: true });
   assert.equal(g("weatherDisabled")(), true);
   assert.match(src("rcx.js"), /weatherDisabled\(\) \? \[\]/);
-  assert.match(src("energy.js"), /weatherDisabled\(\) \? null : b\.web_oa_t/);
+  assert.match(src("energy.js"), /weatherDisabled\(\) \? null : b\.weather_service_air_temperature/);
 });

@@ -10,30 +10,30 @@ const { createEngine, HELPERS } = require("../hooks/lib/engines.js");
 const pgPack = JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8"));
 const START = Date.UTC(2026, 0, 1);
 
-// Six hours, five-minute samples. Two humidity series on one AHU: oa_h in percent_0_100 reads 120 %RH for the
-// last three hours (out of the 0-100 band), zone_rh declared as a 0-1 fraction reads 0.5.
+// Six hours, five-minute samples. Two humidity series on one AHU: outdoor_air_intake_relative_humidity in percent_0_100 reads 120 %RH for the
+// last three hours (out of the 0-100 band), zone_air_relative_humidity declared as a 0-1 fraction reads 0.5.
 function input(oaUnit) {
   const history = [];
   const sensorHistory = [];
   for (let minute = 0; minute <= 360; minute += 5) {
     const ts = START + minute * 60_000;
     const oa = minute >= 180 ? 120 : 45;
-    history.push({ equipment_id: "ahu-1", ts, fan_status: 1, run_proof: 1, oa_h: oa, zone_rh: 0.5 });
-    sensorHistory.push({ equipment_id: "ahu-1", series_id: "s-oa-h", sensor_role: "oa_h", unit: oaUnit, ts, value: oa });
-    sensorHistory.push({ equipment_id: "ahu-1", series_id: "s-zone-rh", sensor_role: "zone_rh", unit: "fraction", ts, value: 0.5 });
+    history.push({ equipment_id: "ahu-1", ts, supply_fan_operating_status: 1, operating_status: 1, outdoor_air_intake_relative_humidity: oa, zone_air_relative_humidity: 0.5 });
+    sensorHistory.push({ equipment_id: "ahu-1", series_id: "s-oa-h", sensor_role: "outdoor_air_intake_relative_humidity", unit: oaUnit, ts, value: oa });
+    sensorHistory.push({ equipment_id: "ahu-1", series_id: "s-zone-rh", sensor_role: "zone_air_relative_humidity", unit: "fraction", ts, value: 0.5 });
   }
   return {
-    historyColumns: [{ name: "fan_status", type: "double" }, { name: "run_proof", type: "double" }, { name: "oa_h", type: "double" }, { name: "zone_rh", type: "double" }],
+    historyColumns: [{ name: "supply_fan_operating_status", type: "double" }, { name: "operating_status", type: "double" }, { name: "outdoor_air_intake_relative_humidity", type: "double" }, { name: "zone_air_relative_humidity", type: "double" }],
     history, weather: [], sensorHistory,
   };
 }
 
 test("helper: percent_0_100 declares relative humidity; fraction does not", () => {
   assert.equal(HELPERS.fdd_unit_declares_quantity("percent_0_100", "relative_humidity"), 1);
-  assert.equal(HELPERS.fdd_mask_sweep_val("oa_h", "percent_0_100", 55), 55);
-  assert.equal(HELPERS.fdd_mask_sweep_val("oa_h", "%RH", 55), 55);
+  assert.equal(HELPERS.fdd_mask_sweep_val("outdoor_air_intake_relative_humidity", "percent_0_100", 55), 55);
+  assert.equal(HELPERS.fdd_mask_sweep_val("outdoor_air_intake_relative_humidity", "%RH", 55), 55);
   for (const unit of ["fraction", "percent_0_1", "0-1", ""]) {
-    assert.equal(HELPERS.fdd_mask_sweep_val("zone_rh", unit, 0.5), null, unit);
+    assert.equal(HELPERS.fdd_mask_sweep_val("zone_air_relative_humidity", unit, 0.5), null, unit);
   }
 });
 
@@ -44,11 +44,11 @@ for (const [kind, pack] of [["duckdb", pgPack]]) {
       await eng.load(input("percent_0_100"));
       const rows = await eng.query("SV-RANGE");
       const oa = rows.find((r) => r.series_id === "s-oa-h");
-      assert.ok(oa, `oa_h series missing from SV-RANGE: ${JSON.stringify(rows)}`);
+      assert.ok(oa, `outdoor_air_intake_relative_humidity series missing from SV-RANGE: ${JSON.stringify(rows)}`);
       assert.ok(oa.covered_hours > 5.9, `covered ${oa.covered_hours}`);
       assert.ok(Math.abs(oa.fault_hours - 3) < 0.01, `fault ${oa.fault_hours}`);
       const zone = rows.find((r) => r.series_id === "s-zone-rh");
-      assert.ok(!zone || !(zone.covered_hours > 0), `fraction zone_rh must not be assessed: ${JSON.stringify(zone)}`);
+      assert.ok(!zone || !(zone.covered_hours > 0), `fraction zone_air_relative_humidity must not be assessed: ${JSON.stringify(zone)}`);
     } finally {
       await eng.close();
     }

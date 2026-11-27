@@ -99,14 +99,14 @@ def _proof_active(frame):
 
     from open_fdd.run_proof import derive_run_proof, proof_on
 
-    f = frame.rename(columns={"run_proof": "run-proof"}) if "run_proof" in frame.columns and "run-proof" not in frame.columns else frame
+    f = frame.rename(columns={"operating_status": "operating_status"}) if "operating_status" in frame.columns and "operating_status" not in frame.columns else frame
     f.attrs = dict(frame.attrs)
     series, source = derive_run_proof(f)
     if series is None:
         return None, ""
     active = proof_on(pd.to_numeric(series, errors="coerce"))
-    if "occupied" in f.columns:
-        occ = pd.to_numeric(f["occupied"], errors="coerce")
+    if "occupancy_status" in f.columns:
+        occ = pd.to_numeric(f["occupancy_status"], errors="coerce")
         if occ.notna().any():
             active &= occ.gt(0.5).fillna(False)
     return active.astype(bool), source
@@ -136,7 +136,7 @@ def review_episode(episode: dict, frame, *, train=None, training: dict | None = 
 
     if str(episode.get("verdict", "")).lower() not in ("fault", "true", "1", "confirmed"):
         gate("not_a_fault_episode", f"verdict is {episode.get('verdict')!r}; only saved faults are reviewed")
-    if episode.get("assessed") is False or episode.get("run_proof") is False:
+    if episode.get("assessed") is False or episode.get("operating_status") is False:
         gate("sql_episode_unassessed", "the saved SQL result says it was not assessed or lacked run proof")
     elif ("run_proof_source" in episode and episode.get("run_proof_source") in (None, "")) or str(
         episode.get("skip_reason", "")

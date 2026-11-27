@@ -9,7 +9,7 @@ import pandas as pd
 from open_fdd.analytics.role_map import apply_role_map
 from open_fdd.analytics.site_model import resolve_equipment_type
 
-AHU_SAT_ROLE = "ahu-discharge-air-temp"  # parent AHU discharge copied onto VAV frame for cross-equip rules
+AHU_SAT_ROLE = "air_handling_unit_discharge_air_temperature"  # parent AHU discharge copied onto VAV frame for cross-equip rules
 
 
 def invert_vav_to_ahu(vav_to_ahu: dict[str, str] | None) -> dict[str, list[str]]:
@@ -30,7 +30,7 @@ def enrich_frames_with_ahu_feeds(
     *,
     role_map: dict[str, Any] | None = None,
 ) -> list[str]:
-    """Copy parent AHU ``sat`` onto each VAV as ``ahu_sat`` when topology + series exist.
+    """Copy parent AHU ``discharge_air_temperature`` onto each VAV as ``air_handling_unit_discharge_air_temperature`` when topology + series exist.
 
     Mutates frames in place. Returns human-readable notes (for tests / report).
     """
@@ -44,14 +44,14 @@ def enrich_frames_with_ahu_feeds(
         vav_df = frames[vav_id]
         ahu_raw = frames[ahu_id]
         ahu_rm = {ahu_id: (rm.get(ahu_id) or ahu_raw.attrs.get("_role_map", {}).get(ahu_id) or {})}
-        if "discharge-air-temp" in ahu_raw.columns:
-            sat = pd.to_numeric(ahu_raw["discharge-air-temp"], errors="coerce")
+        if "discharge_air_temperature" in ahu_raw.columns:
+            discharge_air_temperature = pd.to_numeric(ahu_raw["discharge_air_temperature"], errors="coerce")
         else:
             mapped = apply_role_map(ahu_raw, ahu_id, {**rm, **ahu_rm} if rm else ahu_rm)
-            if "discharge-air-temp" not in mapped.columns:
+            if "discharge_air_temperature" not in mapped.columns:
                 continue
-            sat = pd.to_numeric(mapped["discharge-air-temp"], errors="coerce")
-        sat_aligned = sat.reindex(vav_df.index)
+            discharge_air_temperature = pd.to_numeric(mapped["discharge_air_temperature"], errors="coerce")
+        sat_aligned = discharge_air_temperature.reindex(vav_df.index)
         if sat_aligned.notna().sum() == 0:
             continue
         vav_df[AHU_SAT_ROLE] = sat_aligned
@@ -64,7 +64,7 @@ def stamp_feed_attrs(
     frames: dict[str, pd.DataFrame],
     vav_to_ahu: dict[str, str] | None,
 ) -> None:
-    """Set fed_by / feeds attrs on frames from topology (even without sat copy)."""
+    """Set fed_by / feeds attrs on frames from topology (even without discharge_air_temperature copy)."""
     children = invert_vav_to_ahu(vav_to_ahu)
     for eq_id, df in frames.items():
         et = resolve_equipment_type(eq_id, df=df)

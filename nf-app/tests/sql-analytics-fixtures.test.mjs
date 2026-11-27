@@ -30,7 +30,7 @@ const col = (frame, name) => frame.rows.filter((r) => r[name] != null).map((r) =
 test("fixture: runtime across a DST week, a data gap and a percent command", async () => {
   const c = CASES["runtime-dst-week-gap-percent-command"], o = c.options;
   const e1 = c.frames["equipment-1"], e2 = c.frames["equipment-2"];
-  const g = gridOf([["f1", col(e1, "fan-status")], ["o1", col(e1, "outside-air-temp")], ["p2", col(e2, "hw-pump-cmd")]]);
+  const g = gridOf([["f1", col(e1, "supply_fan_operating_status")], ["o1", col(e1, "outdoor_air_intake_temperature")], ["p2", col(e2, "hw-pump-cmd")]]);
   const plain = { weeks: o.week_starts, occupied: o.occupied_intervals };
   const got = await SA.runtimeFromGrid("duckdb", g, [{ key: "equipment-1", motor: "f1", oat: "o1", ...plain },
     { key: "equipment-2", motor: "p2", oat: null, ...plain }]);
@@ -48,9 +48,9 @@ test("fixture: runtime across a DST week, a data gap and a percent command", asy
 });
 
 test("fixture: economizer with a percent damper and MAT holes", async () => {
-  const c = CASES["economizer-percent-damper-mat-holes"], f = c.frames["equipment-1"];
-  const g = gridOf([["fan", col(f, "fan-status")], ["oa_t", col(f, "outside-air-temp")], ["rat", col(f, "return-air-temp")],
-    ["mat", col(f, "mixed-air-temp")], ["damper", col(f, "outside-air-damper")]]);
+  const c = CASES["economizer-percent-damper-mixed_air_temperature-holes"], f = c.frames["equipment-1"];
+  const g = gridOf([["fan", col(f, "supply_fan_operating_status")], ["outdoor_air_intake_temperature", col(f, "outdoor_air_intake_temperature")], ["return_air_temperature", col(f, "return_air_temperature")],
+    ["mixed_air_temperature", col(f, "mixed_air_temperature")], ["damper", col(f, "outdoor_air_intake_damper_position_command")]]);
   const { summary } = await SA.econFromGrid("duckdb", g);
   const w = c.expected.metrics.rows[0];
   assert.equal(summary.n, w.n_fan_on_samples);
@@ -63,7 +63,7 @@ test("fixture: economizer with a percent damper and MAT holes", async () => {
 for (const id of ["web-weather-outage", "web-weather-empty"]) {
   test(`fixture: BAS vs web OAT, ${id}`, async () => {
     const c = CASES[id], f = c.frames["equipment-1"];
-    const g = gridOf([["bas", col(f, "outside-air-temp")], ["web", c.web_weather.map((r) => [r.ts_ms, r.value_c])]]);
+    const g = gridOf([["bas", col(f, "outdoor_air_intake_temperature")], ["web", c.web_weather.map((r) => [r.ts_ms, r.value_c])]]);
     const { stats } = await SA.basFromGrid("duckdb", g, { maxAgeMs: c.options.max_age_seconds * 1000 });
     const w = c.expected["equipment-1"];
     assert.equal(stats.n, w.n);

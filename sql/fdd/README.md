@@ -41,26 +41,26 @@ The script prints SQL; it does not connect to your database. In an application i
 
 ## Input contract matters as much as dialect
 
-`input_contract.json` is the one source for declared role scales and the complete scratch schema. Generate the standalone DDL and the legacy `role_scales.json` compatibility view with `python scripts/nf/build_input_contract.py`; use `--check` in CI. The NF SQL pack builder reads the same source. The DDL includes `history`, the long-form `sensor_history`, `weather`, and both utility relations (contract version 2; the unused `authorized_series` / `equipment` relations were dropped, no rule reads them). `sensor_history` contains `(equipment_id, series_id, sensor_role, unit, timestamp_utc, value)`: one row per bound point sample, with `series_id` equal to the NF point UUID and `value` already in SI. Wide `history` remains the equipment proof and observed-end source for sweeps. Use a consistent timestamp grid when joining proof rows. Timestamp is `timestamp with time zone`; analogs and status/command inputs are numeric, not PostgreSQL booleans; `occ_mode` is text. Missing required roles must produce a skipped/not-applicable result, not fabricated data.
+`input_contract.json` is the one source for declared role scales and the complete scratch schema. Generate the standalone DDL and the legacy `role_scales.json` compatibility view with `python scripts/nf/build_input_contract.py`; use `--check` in CI. The NF SQL pack builder reads the same source. The DDL includes `history`, the long-form `sensor_history`, `weather`, and both utility relations (contract version 2; the unused `authorized_series` / `equipment` relations were dropped, no rule reads them). `sensor_history` contains `(equipment_id, series_id, sensor_role, unit, timestamp_utc, value)`: one row per bound point sample, with `series_id` equal to the NF point UUID and `value` already in SI. Wide `history` remains the equipment proof and observed-end source for sweeps. Use a consistent timestamp grid when joining proof rows. Timestamp is `timestamp with time zone`; analogs and status/command inputs are numeric, not PostgreSQL booleans; `occupancy_status` is text. Missing required roles must produce a skipped/not-applicable result, not fabricated data.
 
 Execute against **one authorized tenant and building at a time**. Most rules partition by `equipment_id`; the five sensor sweeps partition sample windows by `(equipment_id, series_id)`, with `sensor_role` used for thresholds and output labels. Weather joins partition by timestamp. An unscoped warehouse view would mix sites that reuse equipment IDs and could attach another site's weather. Scope all inputs before the rule query. Use transaction-local temporary views/tables or a validated CTE adapter with bound scope values. Select equipment by explicit metadata kind and mapped roles; IDs are exact keys, never prefix heuristics. Mixed equipment cadences need separate runs/resampling, not a single invented poll interval.
 
 ## Run proof gate (#1608)
 
-Rules marked `run_proof: gated` in `registry.yaml` (52 of 77) read one more `history` column, `run_proof` (0/1, or a 0-1 command fraction;
+Rules marked `operating_status: gated` in `registry.yaml` (52 of 77) read one more `history` column, `operating_status` (0/1, or a 0-1 command fraction;
 running when above 0.05), and count only samples while it says the equipment runs. A missing sample is not proof. The column is resolved
-from the model by `run_proof.json`: the equipment's own status role (fan, pump, chilled-water pump, chiller, compressor), then its own
+from the model by `operating_status.json`: the equipment's own status role (fan, pump, chilled-water pump, chiller, compressor), then its own
 command role, then the proof of the equipment that feeds it (`airRef`, `chilledWaterRef`, `hotWaterRef`, then Brick `isFedBy` / `feeds`,
 one hop). When no sample of an equipment has a proof, the rule returns that equipment with `fault_hours` NULL and `covered_hours` 0 (SKIPPED,
 reason `no_run_proof`); it used to store 0 fault hours (PASS). `require_run_proof` (alias `require_operational_gate`, default 1) switches
-the gate off per rule. Exempt rules carry `run_proof: exempt` and a `run_proof_note`. The pandas twins read the same signal
+the gate off per rule. Exempt rules carry `operating_status: exempt` and a `run_proof_note`. The pandas twins read the same signal
 (`open_fdd/run_proof.py`), and `tests/parity` checks that both sides skip the same equipment.
 
 The **effective** tuning decides the gate, not the catalog: a saved `require_run_proof` 0 (or the legacy alias at 0 when `require_run_proof` is unset) runs the rule ungated, so it is assessed, keeps its fault timeline, and is never counted as `no_run_proof`. A skipped equipment is stored in `fdd.rule_result` as `SKIPPED` / `no_run_proof` with NULL hours on the summary and per-sensor rows: unknown, never an assessed zero. A proof that is bound but OFF (or stale) for the whole window is different: the rule is assessed, with 0 covered hours. Exceptions are deliberate: command/status-mismatch rules and runtime-outside-schedule / always-on rules are exempt because the proof *is* the signal (they must see off samples), and so are zone, weather and meter rules that judge no running equipment; each carries its `run_proof_note`.
 
 ## Sensor sweep result grain and silence
 
-All five sensor sweeps return one row per assessable bound sensor series: `(equipment_id, series_id, sensor_role, fault_hours, covered_hours)`. The canonical per-sweep role lists are in `open_fdd/data/sensor_sweep_roles.json`; SQL rendering, the generated NF rule catalog, and the pandas oracle read the same lists. `zone_flow` is never a sweep target. `duct_static` is assessed only by SV-RANGE and SV-SPIKE. Other bound roles can still provide operating-state context to rules but do not create sensor result rows. Two bound points with the same assessable role remain separate results. `series_id` is the point UUID; `sensor_role` describes the point and selects its rule threshold. A separate series result prevents a healthy sensor from masking a faulty peer and lets callers identify the exact point. Each sample in `sensor_history` carries its own SI unit; unsupported units and invalid/mixed-unit samples are masked. An assessable series with no covered interval returns `fault_hours = NULL` and `covered_hours = 0`.
+All five sensor sweeps return one row per assessable bound sensor series: `(equipment_id, series_id, sensor_role, fault_hours, covered_hours)`. The canonical per-sweep role lists are in `open_fdd/data/sensor_sweep_roles.json`; SQL rendering, the generated NF rule catalog, and the pandas oracle read the same lists. `discharge_air_volume_flow_rate` is never a sweep target. `discharge_air_static_pressure` is assessed only by SV-RANGE and SV-SPIKE. Other bound roles can still provide operating-state context to rules but do not create sensor result rows. Two bound points with the same assessable role remain separate results. `series_id` is the point UUID; `sensor_role` describes the point and selects its rule threshold. A separate series result prevents a healthy sensor from masking a faulty peer and lets callers identify the exact point. Each sample in `sensor_history` carries its own SI unit; unsupported units and invalid/mixed-unit samples are masked. An assessable series with no covered interval returns `fault_hours = NULL` and `covered_hours = 0`.
 
 ## Sensor sweep limits: one SI source (#1581)
 
@@ -146,31 +146,32 @@ For incremental runs, load sufficient pre-window history for rolling windows, st
 
 The equations can be ported to SQL engines with CTEs, window functions and adequate numeric/date functions. They cannot run unchanged on every SQL database. Implement a dialect adapter for safe casts, double types, NaN/invalid values, text conversion, month/timezone functions, window bounds and statistical aggregates. PostgreSQL `IS DISTINCT FROM`, PL/pgSQL helpers and `to_char` are not universal. MySQL 8, SQL Server, BigQuery, Snowflake, Redshift and SQLite need their own execution and numerical tests; SQLite also needs a strategy for sample standard deviation. Keep tuning metadata and fixtures shared across dialects.
 
-## Input contract: one declared scale per column (#1541)
+## Input contract: one declared scale per column (#1541, roles 1.1.0)
 
-The `history` columns are bare `DOUBLE PRECISION`, so a stored `1` could mean 1 % or full scale, and the rules used to guess by magnitude (`> 1.0` / `>= 1.5` meant percent, `pid_hunt_1` guessed the other way). That guess was wrong exactly at the boundary. Every column now has ONE declared scale, and no rule guesses:
+The `history` columns are bare `DOUBLE PRECISION`. Every column has one declared scale from `roles/openfdd-roles.json`, and no rule guesses by magnitude:
 
-| Scale | Roles | Meaning |
-|---|---|---|
-| `fraction` | `fan_cmd`, `return_fan`, `chw_pump_cmd`, `cw_pump_cmd`, `tower_fan_cmd`, `chiller_cmd`, `clg_valve_pct`, `htg_valve_pct`, `reheat_valve_pct`, `damper_pct`, `damper_cmd`, `oa_damper_pct` | 0-1; 1 is 100 %, 0.01 is 1 %. The `_pct` in a name is historical |
-| `boolean` | `fan_status`, `chiller_status`, `chw_pump_status`, `pump_status`, `compressor_status`, `boiler_status`, `loop_enabled`, `clg_available`, `building_zone_load_satisfied`, `building_ahu_load_satisfied` | 0 or 1 (a resampled bucket is the on-fraction in [0, 1]) |
-| `percent_rh` | `oa_h`, `ra_h`, `zone_rh`, `ma_h`, `sa_h`, `web_oa_h` | relative humidity 0-100: a physical quantity, not a command (SV-RANGE and the sensor sweep are %RH) |
-| `text` | `occ_mode` | categorical string |
-| `si:<unit>` | every other role: temperatures `si:degC`, `duct_static`/`chw_dp` `si:Pa`, flows `si:L/s`, `electric_kw`/`chiller_power` `si:kW`, `kwh` `si:kWh`, `chiller_amps`/`chiller_current` `si:A`, `zone_co2` `si:ppm`, `*_request_sum` `si:count` | physical SI, unchanged |
+| Scale | Meaning |
+|---|---|
+| `PERCENT` | Damper, valve and fan-speed roles, 0–100. A fraction source (0–1) is multiplied by 100 once on ingest. |
+| `boolean` | Start/stop commands and operating statuses, 0 or 1. On for a command is `> 0.5`; on for a status is `> 0.05`. A percent source is divided by 100 once. |
+| `PERCENT_RH` | Relative humidity 0–100. A physical quantity, not a command. |
+| `DEG_C`, `PA`, `L-PER-SEC`, `KiloW`, `KiloW-HR`, `A`, `PPM`, `NUM`, `K` | Physical SI. The token is the QUDT local name. |
 
-The role scales live in `input_contract.json`; `role_scales.json` is a generated compatibility view for existing tooling, and `input_contract.sql` is generated from the same declarations. `scripts/nf/build_rule_catalog.py` copies each scale into `nf-app/static/fdd-catalog.json` as `roles.<role>.scale` and fails when a role has none, so the hook, the docs and the Timescale path use the canonical declaration.
+`occupancy_status` is boolean. `supply_fan_speed_command` is `PERCENT` and is a history column; it is not a `rule_input` in roles 1.1.0. Saved point roles and tuning still resolve through `legacy_keys`.
 
-**Ingest rule** (`siPlan` in `nf-app/hooks/fdd.js`; `hooks/lib/timescale.js` applies exactly its decisions, it never decides itself). Decided per role from the point's declared unit and kind:
+The role scales live in `input_contract.json`; `role_scales.json` is a generated compatibility view, and `input_contract.sql` is generated from the same declarations. `scripts/nf/build_rule_catalog.py` copies each scale into `nf-app/static/fdd-catalog.json` as `roles.<role>.scale`.
 
-- `fraction`: unit `%`/`percent` -> divide by 100. Unit `ratio`/`fraction`/`0-1` -> as is. Kind Bool -> as is (0/1 is a valid fraction). **No unit (or an unrelated unit) -> the role is skipped and logged once per point, never guessed**; a rule that requires it is not assessed (no result is written, a previously published result goes stale). BACnet analog outputs normally carry the percent unit.
-- `boolean`: kind Bool -> as is. Number/Enum: a `%` unit is divided by 100 first. The value must then lie in [0, 1]; a value outside it (a 0-100 analog, an enum 1/2/3) is **rejected** (not thresholded at 0.5, not rescaled) and the sample is treated as missing. Thresholding would turn a 0.4 on-fraction bucket into "off" and a 3-state enum into data it is not.
-- `percent_rh`, `si:<unit>`, `text`: the existing SI conversion by unit (`units.js toSI`); temperature/pressure/flow roles with a missing or foreign unit are skipped.
+**Ingest rule** (`siPlan` in `nf-app/hooks/fdd.js`; `hooks/lib/timescale.js` applies exactly its decisions). Decided per role from the point's declared unit and kind:
 
-A caller that feeds the SQL directly (a warehouse view, the pandas oracle, the parity harness, `synthetic_dataset.js`) must supply fractions and 0/1 itself.
+- `PERCENT`: unit `%`/`percent` -> as is. Unit `ratio`/`fraction`/`0-1` -> multiply by 100. **No unit (or an unrelated unit) -> the role is skipped and logged once per point, never guessed**; a rule that requires it is not assessed.
+- `boolean`: kind Bool, or a unitless 0/1, stays 0/1. A `%` unit is divided by 100 first. A known non-percent quantity unit (for example °C) is skipped. The value must then lie in [0, 1].
+- `PERCENT_RH` and the physical scales: SI conversion by unit (`units.js toSI`). Temperature, pressure and flow roles with a missing or foreign unit are skipped.
 
-**Thresholds** that are commands or positions are fractions too (`tuning_catalog.json` unit `frac`: `FULL_OPEN_PCT` 0.975, `ECON1_DAMPER_MAX` 0.05, `FAN_ON_MIN` 0.01, `PUMP_HI` 0.87, `REHEAT_PCT` 0.25, ...). `*_pct` parameters with unit `pct` are percent points of something that is not a command (coverage, OA fraction from temperatures `OA_MIN_PCT`, PID-HUNT span/deadband/variation).
+A caller that feeds the SQL directly (a warehouse view, the pandas oracle, the parity harness, `synthetic_dataset.js`) must supply PERCENT 0–100, boolean 0/1 and SI itself.
 
-**PID-HUNT-1** measures the control output in percent points because its span, deadband and total-variation parameters are percent points. It now converts the fraction to points once (`fraction * 100`) at the top of the rule. Before, a stored `1` stayed 1 point while `0.99` became 99 points, so a 0 <-> 1 % wiggle looked like a full-stroke swing.
+**Thresholds** that compare to a damper, valve or speed column are percent points (`OA_MIN_PCT` 21, `ECON1_DAMPER_MAX` 5, `REHEAT_PCT` 25, PID-HUNT span 20 / deadband 1 / variation 500). The four old boolean gates (`fan_on_min`, `pump_hi`, `tower_fan_hi`, `load_sat_hi`) are retired; those commands compare to 0.5. A saved fraction threshold is multiplied by 100 once, guarded by `fdd.schema_meta.core_version`.
+
+**PID-HUNT-1** measures the control output in percent points because its span, deadband and total-variation parameters are percent points. The column is already PERCENT, so the rule does not multiply it again. A 0–1 % wiggle stays a 1 point span and is below `MINIMUM_SPAN_PCT`.
 
 ## Verification
 

@@ -52,19 +52,20 @@ after(async () => {
 });
 
 function valueFor(role, spec) {
-  if (spec.type === "text") return role === "occ_mode" ? "occupied" : "sample";
+  if (spec.type === "text") return role === "occupancy_status" ? "occupancy_status" : "sample";
   switch (spec.scale) {
     case "fraction": return 0.5;
     case "boolean": return 1;
-    case "percent_rh": return 50;
-    case "si:degC": return 20;
-    case "si:Pa": return 100;
-    case "si:L/s": return 100;
-    case "si:kW": return 10;
-    case "si:kWh": return 1;
-    case "si:A": return 2;
-    case "si:ppm": return 800;
-    case "si:count": return 1;
+    case "percent_rh": case "PERCENT_RH": return 50;
+    case "PERCENT": return 50;
+    case "si:degC": case "DEG_C": return 20;
+    case "si:Pa": case "PA": return 100;
+    case "si:L/s": case "L-PER-SEC": return 100;
+    case "si:kW": case "KiloW": return 10;
+    case "si:kWh": case "KiloW-HR": return 1;
+    case "si:A": case "A": return 2;
+    case "si:ppm": case "PPM": return 800;
+    case "si:count": case "NUM": return 1;
     default: throw new Error(`fixture has no value for ${role} (${spec.scale})`);
   }
 }
@@ -86,13 +87,13 @@ test("scratch DDL prepares and executes every PostgreSQL rule with SI fixtures",
   await insertRow("history", { ...base, ...roleValues, timestamp_utc: "2026-10-01T00:00:00Z" });
   await insertRow("history", { ...base, ...roleValues, timestamp_utc: "2026-10-01T00:05:00Z" });
   await insertRow("history", { ...base, ...roleValues, timestamp_utc: "2026-10-01T00:10:00Z" });
-  await insertRow("weather", { timestamp_utc: "2026-10-01T00:00:00Z", oa_t: 20, web_oa_t: 20, web_oa_dp: 10 });
-  await insertRow("utility_interval", { timestamp_utc: "2026-10-01T00:00:00Z", kwh: 1 });
-  await insertRow("utility_monthly", { billing_period: "2026-10", kwh: 1 });
+  await insertRow("weather", { timestamp_utc: "2026-10-01T00:00:00Z", outdoor_air_intake_temperature: 20, weather_service_air_temperature: 20, weather_service_air_dew_point_temperature: 10 });
+  await insertRow("utility_interval", { timestamp_utc: "2026-10-01T00:00:00Z", electric_energy: 1 });
+  await insertRow("utility_monthly", { billing_period: "2026-10", electric_energy: 1 });
   for (const [series_id, values] of [["sensor-1", [20, 20, 20]], ["sensor-2", [20, 75, 75]]]) {
     for (const [index, timestamp_utc] of ["00:00:00Z", "00:05:00Z", "00:10:00Z"].entries()) {
       await insertRow("sensor_history", {
-        equipment_id: "fixture-equipment", series_id, sensor_role: "sat", unit: "degC",
+        equipment_id: "fixture-equipment", series_id, sensor_role: "discharge_air_temperature", unit: "degC",
         timestamp_utc: `2026-10-01T${timestamp_utc}`, value: values[index],
       });
     }

@@ -39,7 +39,7 @@ def main() -> None:
                    ex:equipment ?equip ;
                    ex:role ?role ;
                    ex:pointKey ?key .
-            FILTER(?role IN ("sat", "duct_static"))
+            FILTER(?role IN ("discharge_air_temperature", "discharge_air_static_pressure"))
         } ORDER BY ?equip ?key
     """
     selected = [(str(row.equip), str(row.key)) for row in graph.query(query)]

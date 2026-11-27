@@ -2,8 +2,8 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- xs_clip.sql — Cross-sensor consistency (#1780): a transmitter clipped at a round full scale (an instrumentation
 -- finding, not a range fault: the value may be inside the SV-RANGE bounds).
--- Roles and their round step (SI): zone_co2 (CO2_ROUND ppm), duct_static (STATIC_ROUND Pa), zone_flow (FLOW_ROUND L/s).
--- duct_static and zone_flow count only fan-on samples (fan_status, else fan_cmd, else run_proof, else every sample).
+-- Roles and their round step (SI): zone_air_co2 (CO2_ROUND ppm), discharge_air_static_pressure (STATIC_ROUND Pa), discharge_air_volume_flow_rate (FLOW_ROUND L/s).
+-- discharge_air_static_pressure and discharge_air_volume_flow_rate count only fan-on samples (supply_fan_operating_status, else supply_fan_command, else operating_status, else every sample).
 -- A role is clipped when its highest counted value is a positive multiple of its round step, at least CLIP_SHARE
 -- percent of its counted samples sit at that value (within 1e-6; CLIP_SHARE is 0-100, QUDT PERCENT), and the series
 -- is not flat (some sample is lower). A design maximum
@@ -14,16 +14,16 @@ WITH v AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    zone_co2 AS v1,
-    CASE WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN duct_static END
-         WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN duct_static END
-         WHEN run_proof IS NOT NULL THEN CASE WHEN run_proof > 0.05 THEN duct_static END
-         ELSE duct_static END AS v2,
-    CASE WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN zone_flow END
-         WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN zone_flow END
-         WHEN run_proof IS NOT NULL THEN CASE WHEN run_proof > 0.05 THEN zone_flow END
-         ELSE zone_flow END AS v3,
-    CASE WHEN zone_co2 IS NULL AND duct_static IS NULL AND zone_flow IS NULL THEN 0 ELSE 1 END AS has_role
+    zone_air_co2 AS v1,
+    CASE WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN discharge_air_static_pressure END
+         WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > {{FAN_ON_MIN}} THEN discharge_air_static_pressure END
+         WHEN operating_status IS NOT NULL THEN CASE WHEN operating_status > 0.05 THEN discharge_air_static_pressure END
+         ELSE discharge_air_static_pressure END AS v2,
+    CASE WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN discharge_air_volume_flow_rate END
+         WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > {{FAN_ON_MIN}} THEN discharge_air_volume_flow_rate END
+         WHEN operating_status IS NOT NULL THEN CASE WHEN operating_status > 0.05 THEN discharge_air_volume_flow_rate END
+         ELSE discharge_air_volume_flow_rate END AS v3,
+    CASE WHEN zone_air_co2 IS NULL AND discharge_air_static_pressure IS NULL AND discharge_air_volume_flow_rate IS NULL THEN 0 ELSE 1 END AS has_role
   FROM history
 ),
 tops AS (

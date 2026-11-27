@@ -6,18 +6,19 @@
 -- Fault hours integrate eligible forward deltas and do not add a phantom
 -- interval after the last sample. {{WINDOW_ROWS}} / {{WINDOW_ROWS_PRECEDING}}
 -- are derived from WINDOW_HOURS + POLL_SECONDS (literal ROWS bounds).
--- Inputs are fractions 0-1 (input_contract.sql); the control output is converted to percent points (x 100)
+-- Control outputs arrive as PERCENT 0-100 (the ingest converts a fraction source once). Span, deadband
+-- and variation thresholds are percent points; do not scale the column again.
 -- exactly here, once, because the *_PCT parameters (span, deadband, total variation) are percent points.
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
 rps AS (
-  SELECT equipment_id, timestamp_utc, MAX(run_proof) AS run_proof
+  SELECT equipment_id, timestamp_utc, MAX(operating_status) AS operating_status
   FROM history
   GROUP BY equipment_id, timestamp_utc
 ),
@@ -26,33 +27,33 @@ h AS (
     equipment_id,
     timestamp_utc,
     CASE
-      WHEN oa_damper_pct IS NOT NULL THEN
-        oa_damper_pct * 100.0
-      WHEN clg_valve_pct IS NOT NULL THEN
-        clg_valve_pct * 100.0
-      WHEN htg_valve_pct IS NOT NULL THEN
-        htg_valve_pct * 100.0
-      WHEN damper_pct IS NOT NULL THEN
-        damper_pct * 100.0
+      WHEN outdoor_air_intake_damper_position_command IS NOT NULL THEN
+        outdoor_air_intake_damper_position_command
+      WHEN cooling_valve_position_command IS NOT NULL THEN
+        cooling_valve_position_command
+      WHEN heating_valve_position_command IS NOT NULL THEN
+        heating_valve_position_command
+      WHEN damper_position IS NOT NULL THEN
+        damper_position
       ELSE NULL
     END AS out_pct,
     LAG(
       CASE
-        WHEN oa_damper_pct IS NOT NULL THEN
-          oa_damper_pct * 100.0
-        WHEN clg_valve_pct IS NOT NULL THEN
-          clg_valve_pct * 100.0
-        WHEN htg_valve_pct IS NOT NULL THEN
-          htg_valve_pct * 100.0
-        WHEN damper_pct IS NOT NULL THEN
-          damper_pct * 100.0
+        WHEN outdoor_air_intake_damper_position_command IS NOT NULL THEN
+          outdoor_air_intake_damper_position_command
+        WHEN cooling_valve_position_command IS NOT NULL THEN
+          cooling_valve_position_command
+        WHEN heating_valve_position_command IS NOT NULL THEN
+          heating_valve_position_command
+        WHEN damper_position IS NOT NULL THEN
+          damper_position
         ELSE NULL
       END
     ) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_out,
-    COALESCE(loop_enabled, 1.0) AS loop_on,
+    COALESCE(operating_mode_status, 1.0) AS loop_on,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -117,7 +118,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
       WHEN loop_on IS NOT NULL AND loop_on <= 0.05 THEN 0
       WHEN out_pct IS NULL THEN 0
@@ -130,7 +131,7 @@ base AS (
       ELSE 1
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM win
   LEFT JOIN rps USING (equipment_id, timestamp_utc)
 ),

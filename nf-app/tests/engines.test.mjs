@@ -166,8 +166,8 @@ test("all five SV sweeps keep same-role points separate and return coverage per 
     assert.ok(rows.length > 1, `${rid} has multiple per-sensor rows`);
     assert.equal(new Set(rows.map((r) => r.series_id)).size, rows.length, `${rid} keeps unique series IDs`);
     assert.ok(rows.every((r) => Object.hasOwn(r, "covered_hours")), `${rid} exposes covered hours`);
-    const sat = rows.filter((r) => r.sensor_role === "sat");
-    assert.equal(sat.length, 2, `${rid} retains duplicate SAT bindings as two sensor rows`);
+    const discharge_air_temperature = rows.filter((r) => r.sensor_role === "discharge_air_temperature");
+    assert.equal(discharge_air_temperature.length, 2, `${rid} retains duplicate SAT bindings as two sensor rows`);
   }
 });
 
@@ -190,9 +190,10 @@ test("pack-*.json are fresh (build_sql_pack.py --check)", (t) => {
 });
 
 // ---- one declared scale per column (issue #1541) ----------------------------------------------
-// sql/fdd/role_scales.json: command/position roles are FRACTIONS 0-1, statuses are 0/1, humidity %RH 0-100, the rest
-// physical SI. The SQL rules no longer guess a scale by magnitude. The hook's siPlan brings each point to its role's
-// scale from the DECLARED unit/kind: "%" -> /100, ratio/fraction -> as is, no unit -> role skipped (not assessed).
+// sql/fdd/role_scales.json: damper, valve and fan-speed roles are PERCENT 0-100, start/stop commands and statuses
+// are 0/1, humidity is %RH 0-100, the rest physical SI. siPlan brings each point to that scale from the declared
+// unit: a PERCENT role keeps "%", multiplies a fraction unit by 100, and skips a missing unit. A boolean role
+// divides a "%" unit by 100 and skips a missing unit unless the point kind is Bool.
 const hook = require("../hooks/fdd.js");
 const catalog = JSON.parse(readFileSync(new URL("../static/fdd-catalog.json", import.meta.url), "utf8"));
 const GRID_STEP = 300, GRID_N = 288, GRID_T0 = Date.parse("2026-11-05T00:00:00Z");
@@ -201,7 +202,7 @@ const GRID = Array.from({ length: GRID_N }, (_, i) => GRID_T0 + i * GRID_STEP * 
 /** spec: {role: {value|fn(i), units, kind?}} -> { input, plan } through the hook's real siPlan + buildInput. */
 function hookInput(pack, spec, logs = []) {
   // the resolved run proof (#1608: own status, own command or the feeding equipment) is on unless the test says otherwise
-  spec = { run_proof: { value: 1, units: "", kind: "Bool" }, ...spec };
+  spec = { operating_status: { value: 1, units: "", kind: "Bool" }, ...spec };
   const roles = {}, hist = {};
   for (const [role, s] of Object.entries(spec)) {
     roles[role] = { uuid: role, name: role, units: s.units, kind: s.kind };
@@ -222,63 +223,66 @@ async function runRule(kind, rule, spec, logs) {
 }
 const fh = (r) => (r.row ? Number(r.row.fault_hours) : 0);
 
-const FC1_BASE = { duct_static: { value: 100, units: "Pa" }, duct_static_sp: { value: 250, units: "Pa" } };   // far below setpoint
+const FC1_BASE = { discharge_air_static_pressure: { value: 100, units: "Pa" }, discharge_air_static_pressure_setpoint: { value: 250, units: "Pa" } };   // far below setpoint
 const PCT_CASES = [[0, false], [0.5, false], [1, false], [2, false], [99, true], [100, true]];
 for (const [kind] of ENGINES) {
-  test(`FC1 full-fan gate, declared-% fan command through the hook (${kind}): 0/0.5/1/2 % are not full fan, 99/100 % are`, async () => {
+  test(`FC1 full-fan gate, declared-% fan speed through the hook (${kind}): 0/0.5/1/2 % are not full fan, 99/100 % are`, async () => {
     for (const [pct, full] of PCT_CASES) {
-      const r = await runRule(kind, "FC1", { ...FC1_BASE, fan_cmd: { value: pct, units: "%" } });
+      const r = await runRule(kind, "FC1", { ...FC1_BASE, supply_fan_speed_command: { value: pct, units: "%" } });
       assert.equal(fh(r) > 0, full, `fan ${pct} % -> fault_hours ${fh(r)}`);
     }
   });
 
   test(`FC1 on fraction inputs (${kind}): 0.01 is not full fan, 0.99 is, no magnitude guess`, async () => {
     for (const [frac, full] of [[0.01, false], [0.02, false], [0.5, false], [0.99, true], [1, true]]) {
-      const r = await runRule(kind, "FC1", { ...FC1_BASE, fan_cmd: { value: frac, units: "ratio" } });
-      assert.equal(r.plan.convert.fan_cmd(frac), frac, "a ratio unit is passed through as is");
+      const r = await runRule(kind, "FC1", { ...FC1_BASE, supply_fan_speed_command: { value: frac, units: "ratio" } });
+      assert.equal(r.plan.convert.supply_fan_speed_command(frac), frac * 100, "a fraction unit is scaled to PERCENT");
       assert.equal(fh(r) > 0, full, `fan fraction ${frac} -> fault_hours ${fh(r)}`);
     }
   });
 
-  test(`FC1 with a UNITLESS fan command (${kind}): the role is skipped and logged, the rule is not assessed`, async () => {
+  test(`FC1 with a UNITLESS fan speed (${kind}): the role is skipped and logged, the rule is not assessed`, async () => {
     const logs = [];
     for (const v of [1, 80, 0.8]) {
-      const r = await runRule(kind, "FC1", { ...FC1_BASE, fan_cmd: { value: v, units: "" } }, logs);
-      assert.ok(r.plan.skipped.has("fan_cmd"), `unitless fan_cmd=${v} is skipped`);
-      assert.equal(r.input.history.some((row) => "fan_cmd" in row), false, "no fan_cmd value reaches SQL");
-      // FC1 requires fan_cmd: with the role gone the hook filters the rule out (see runFdd), so no result is published
-      const bound = ["duct_static", "duct_static_sp", "fan_cmd"].filter((x) => !r.plan.skipped.has(x));
-      assert.deepEqual(bound, ["duct_static", "duct_static_sp"]);
+      const r = await runRule(kind, "FC1", { ...FC1_BASE, supply_fan_speed_command: { value: v, units: "" } }, logs);
+      assert.ok(r.plan.skipped.has("supply_fan_speed_command"), `unitless supply_fan_speed_command=${v} is skipped`);
+      assert.equal(r.input.history.some((row) => "supply_fan_speed_command" in row), false, "no speed value reaches SQL");
+      // FC1 requires supply_fan_speed_command: with the role gone the hook filters the rule out (see runFdd)
+      const bound = ["discharge_air_static_pressure", "discharge_air_static_pressure_setpoint", "supply_fan_speed_command"].filter((x) => !r.plan.skipped.has(x));
+      assert.deepEqual(bound, ["discharge_air_static_pressure", "discharge_air_static_pressure_setpoint"]);
     }
-    assert.ok(logs.some((m) => /fan_cmd.*no unit/.test(m)), `logged: ${logs.join(" | ")}`);
+    assert.ok(logs.some((m) => /supply_fan_speed_command.*no unit/.test(m)), `logged: ${logs.join(" | ")}`);
   });
 
   // one valve (VAV-3 reheat), one damper (ECON-1 stuck closed), one pump (CHW-2 dp low at max pump speed)
   test(`valve / damper / pump rules on declared-% and fraction inputs (${kind})`, async () => {
-    const reheat = (cmd) => ({ oa_t: { value: 30, units: "°C" }, zone_flow: { value: 100, units: "L/s" }, fan_status: { value: 1, units: "", kind: "Bool" }, reheat_valve_pct: cmd });
+    const reheat = (cmd) => ({ outdoor_air_intake_temperature: { value: 30, units: "°C" }, discharge_air_volume_flow_rate: { value: 100, units: "L/s" }, supply_fan_operating_status: { value: 1, units: "", kind: "Bool" }, terminal_unit_heating_valve_position_command: cmd });
     for (const [cmd, fault] of [[{ value: 1, units: "%" }, false], [{ value: 0.01, units: "ratio" }, false], [{ value: 99, units: "%" }, true], [{ value: 0.99, units: "fraction" }, true]]) {
       assert.equal(fh(await runRule(kind, "VAV-3", reheat(cmd))) > 0, fault, `VAV-3 reheat ${JSON.stringify(cmd)}`);
     }
-    const econ = (cmd) => ({ oa_t: { value: 25, units: "°C" }, fan_cmd: { value: 100, units: "%" }, oa_damper_pct: cmd });
+    const econ = (cmd) => ({ outdoor_air_intake_temperature: { value: 25, units: "°C" }, supply_fan_command: { value: 100, units: "%" }, outdoor_air_intake_damper_position_command: cmd });
     for (const [cmd, fault] of [[{ value: 1, units: "%" }, true], [{ value: 0.01, units: "ratio" }, true], [{ value: 99, units: "%" }, false], [{ value: 0.99, units: "ratio" }, false]]) {
       assert.equal(fh(await runRule(kind, "ECON-1", econ(cmd))) > 0, fault, `ECON-1 damper ${JSON.stringify(cmd)} (stuck closed = < 5 % open)`);
     }
-    const pump = (cmd) => ({ chw_dp: { value: 1000, units: "Pa" }, chw_dp_sp: { value: 50000, units: "Pa" }, pump_status: { value: 1, units: "", kind: "Bool" }, chw_pump_cmd: cmd });
+    const pump = (cmd) => ({ chilled_water_pressure_delta: { value: 1000, units: "Pa" }, chilled_water_pressure_delta_setpoint: { value: 50000, units: "Pa" }, pump_operating_status: { value: 1, units: "", kind: "Bool" }, chilled_water_pump_command: cmd });
     for (const [cmd, fault] of [[{ value: 1, units: "%" }, false], [{ value: 0.01, units: "ratio" }, false], [{ value: 99, units: "%" }, true], [{ value: 0.99, units: "ratio" }, true]]) {
       assert.equal(fh(await runRule(kind, "CHW-2", pump(cmd))) > 0, fault, `CHW-2 pump ${JSON.stringify(cmd)}`);
     }
     // a unitless valve / damper / pump command is skipped, so the rule has no input for it (not assessed)
-    for (const [rule, spec, role] of [["VAV-3", reheat({ value: 99, units: "" }), "reheat_valve_pct"], ["ECON-1", econ({ value: 1, units: "" }), "oa_damper_pct"], ["CHW-2", pump({ value: 99, units: "" }), "chw_pump_cmd"]]) {
+    for (const [rule, spec, role] of [["VAV-3", reheat({ value: 99, units: "" }), "terminal_unit_heating_valve_position_command"], ["ECON-1", econ({ value: 1, units: "" }), "outdoor_air_intake_damper_position_command"]]) {
       const r = await runRule(kind, rule, spec);
       assert.ok(r.plan.skipped.has(role), `${rule}: unitless ${role} skipped`);
     }
+    // A start/stop command is boolean. With no unit the value must already be 0/1; 99 is rejected, not treated as 99%.
+    const pumpBare = await runRule(kind, "CHW-2", pump({ value: 99, units: "" }));
+    assert.equal(pumpBare.plan.convert.chilled_water_pump_command(99), null);
   });
 
   // PID-HUNT-1 compares the control output in PERCENT POINTS (span / deadband / variation parameters are points):
   // fraction x 100 happens once in the rule. Before #1541 it guessed: a stored 1 stayed 1 point, 0.99 became 99.
   test(`PID-HUNT-1 semantics (${kind}): a full-stroke flip is hunting, a 0 <-> 1 % wiggle is not`, async () => {
     const fan = { value: 1, units: "", kind: "Bool" };
-    const flip = (hi, units) => ({ oa_damper_pct: { fn: (i) => (i % 2 ? hi : 0), units }, fan_status: fan });
+    const flip = (hi, units) => ({ outdoor_air_intake_damper_position_command: { fn: (i) => (i % 2 ? hi : 0), units }, supply_fan_operating_status: fan });
     assert.ok(fh(await runRule(kind, "PID-HUNT-1", flip(100, "%"))) > 0, "0 <-> 100 % flips every sample: hunting");
     assert.ok(fh(await runRule(kind, "PID-HUNT-1", flip(1, "ratio"))) > 0, "0 <-> 1.0 fraction (full stroke): hunting");
     assert.equal(fh(await runRule(kind, "PID-HUNT-1", flip(1, "%"))), 0, "0 <-> 1 % (declared) is a 1 point span, below MINIMUM_SPAN_PCT: not hunting");
@@ -288,42 +292,44 @@ for (const [kind] of ENGINES) {
 
 test("siPlan: role scales decide, per declared unit and kind (fraction / boolean / humidity / physical)", () => {
   const roles = {
-    fan_cmd: { uuid: "a", units: "%" }, oa_damper_pct: { uuid: "b", units: "percent" },
-    chw_pump_cmd: { uuid: "c", units: "ratio" }, tower_fan_cmd: { uuid: "d", units: "", kind: "Bool" },
-    htg_valve_pct: { uuid: "e", units: "" }, clg_valve_pct: { uuid: "f", units: "degC" },
-    oa_h: { uuid: "g", units: "%RH" }, zone_rh: { uuid: "h", units: "%" },
-    fan_status: { uuid: "i", units: "", kind: "Bool" }, pump_status: { uuid: "j", units: "%" }, chiller_status: { uuid: "k", units: "" },
-    sat: { uuid: "l", units: "degF" },
+    supply_fan_command: { uuid: "a", units: "%" }, outdoor_air_intake_damper_position_command: { uuid: "b", units: "percent" },
+    chilled_water_pump_command: { uuid: "c", units: "ratio" }, cooling_tower_fan_command: { uuid: "d", units: "", kind: "Bool" },
+    heating_valve_position_command: { uuid: "e", units: "" }, cooling_valve_position_command: { uuid: "f", units: "degC" },
+    outdoor_air_intake_relative_humidity: { uuid: "g", units: "%RH" }, zone_air_relative_humidity: { uuid: "h", units: "%" },
+    supply_fan_operating_status: { uuid: "i", units: "", kind: "Bool" }, pump_operating_status: { uuid: "j", units: "%" }, chiller_operating_status: { uuid: "k", units: "" },
+    discharge_air_temperature: { uuid: "l", units: "degF" },
   };
   const plan = hook.siPlan(roles, catalog);
-  assert.equal(plan.convert.fan_cmd(50), 0.5);
-  assert.equal(plan.convert.oa_damper_pct(100), 1);
-  assert.equal(plan.convert.chw_pump_cmd(0.25), 0.25, "ratio unit: already a fraction");
-  assert.equal(plan.convert.tower_fan_cmd(1), 1, "Bool kind: 0/1 is a valid fraction");
-  assert.ok(plan.skipped.has("htg_valve_pct"), "unitless fraction role: skipped, never guessed");
-  assert.ok(plan.skipped.has("clg_valve_pct"), "a fraction role bound to a temperature unit is a wrong binding");
-  assert.equal(plan.convert.oa_h(55), 55, "humidity stays %RH 0-100");
-  assert.equal(plan.convert.zone_rh(40), 40);
-  assert.equal(plan.unit.fan_cmd, "fraction");
-  assert.equal(plan.unit.oa_h, "%");
+  assert.equal(plan.convert.supply_fan_command(50), 0.5, "a declared-% start/stop command is divided to 0/1");
+  assert.equal(plan.convert.outdoor_air_intake_damper_position_command(100), 100, "a declared-% position stays PERCENT");
+  assert.equal(plan.convert.chilled_water_pump_command(0.25), 0.25, "ratio unit on a boolean command stays 0-1");
+  assert.equal(plan.convert.cooling_tower_fan_command(1), 1, "Bool kind: 0/1 is a valid command");
+  assert.ok(plan.skipped.has("heating_valve_position_command"), "unitless PERCENT role: skipped, never guessed");
+  assert.ok(plan.skipped.has("cooling_valve_position_command"), "a PERCENT role bound to a temperature unit is a wrong binding");
+  assert.equal(plan.convert.outdoor_air_intake_relative_humidity(55), 55, "humidity stays %RH 0-100");
+  assert.equal(plan.convert.zone_air_relative_humidity(40), 40);
+  assert.equal(plan.unit.supply_fan_command, "bool");
+  assert.equal(plan.unit.outdoor_air_intake_damper_position_command, "PERCENT");
+  assert.equal(plan.unit.outdoor_air_intake_relative_humidity, "%");
   // boolean roles: values must be 0/1 on-fractions; anything else is rejected, not thresholded or rescaled
-  assert.equal(plan.convert.fan_status(1), 1);
-  assert.equal(plan.convert.fan_status(0.6), 0.6, "a resampled bucket is an on-fraction");
-  assert.equal(plan.convert.fan_status(2), null, "enum / analog value outside 0..1 is rejected");
-  assert.equal(plan.convert.fan_status(75), null);
-  assert.equal(plan.convert.chiller_status(1), 1);
-  assert.equal(plan.convert.chiller_status(3), null);
-  assert.equal(plan.convert.pump_status(100), 1, "a declared-% status is /100 first");
-  assert.equal(plan.convert.pump_status(50), 0.5);
-  assert.deepEqual([...plan.bool].sort(), ["chiller_status", "fan_status", "pump_status"]);
-  assert.deepEqual([...plan.scaled].sort(), ["fan_cmd", "oa_damper_pct", "pump_status"]);
-  assert.ok(Math.abs(plan.convert.sat(212) - 100) < 1e-9, "physical roles keep the SI conversion");
+  assert.equal(plan.convert.supply_fan_operating_status(1), 1);
+  assert.equal(plan.convert.supply_fan_operating_status(0.6), 0.6, "a resampled bucket is an on-fraction");
+  assert.equal(plan.convert.supply_fan_operating_status(2), null, "enum / analog value outside 0..1 is rejected");
+  assert.equal(plan.convert.supply_fan_operating_status(75), null);
+  assert.equal(plan.convert.chiller_operating_status(1), 1);
+  assert.equal(plan.convert.chiller_operating_status(3), null);
+  assert.equal(plan.convert.pump_operating_status(100), 1, "a declared-% status is /100 first");
+  assert.equal(plan.convert.pump_operating_status(50), 0.5);
+  assert.deepEqual([...plan.bool].sort(), ["chilled_water_pump_command", "chiller_operating_status", "cooling_tower_fan_command", "pump_operating_status", "supply_fan_command", "supply_fan_operating_status"]);
+  assert.deepEqual([...plan.scaled].sort(), ["pump_operating_status", "supply_fan_command"]);
+  assert.ok(plan.percent.has("outdoor_air_intake_damper_position_command"));
+  assert.ok(Math.abs(plan.convert.discharge_air_temperature(212) - 100) < 1e-9, "physical roles keep the SI conversion");
 });
 
 test("rejected boolean values never reach SQL (history row only keeps what passed)", () => {
-  const { input } = hookInput(pgPack, { fan_status: { fn: (i) => (i % 2 ? 2 : 1), units: "" }, sat: { value: 55, units: "degF" } });
-  assert.ok(input.history.every((r) => r.fan_status === undefined || r.fan_status === 1));
-  assert.ok(input.history.some((r) => r.fan_status === undefined) && input.history.every((r) => r.sat !== undefined));
+  const { input } = hookInput(pgPack, { supply_fan_operating_status: { fn: (i) => (i % 2 ? 2 : 1), units: "" }, discharge_air_temperature: { value: 55, units: "degF" } });
+  assert.ok(input.history.every((r) => r.supply_fan_operating_status === undefined || r.supply_fan_operating_status === 1));
+  assert.ok(input.history.some((r) => r.supply_fan_operating_status === undefined) && input.history.every((r) => r.discharge_air_temperature !== undefined));
 });
 
 test("every history column has a declared scale and every SQL rule reads only fraction/boolean for commands", () => {
@@ -347,7 +353,7 @@ test("FAULT-ELAPSED-HOURS: a non-default comfort band changes fault_samples, hou
   const wide = render({ zone_t_lo: 18, zone_t_hi: 26 });
   if (!wide) return; // python not available
   assert.doesNotMatch(wide, /24\.444444|< 20\.0/, "no hard-coded band left in the rendered SQL");
-  // zone_t ramps 16 -> 30 °C over the day; hourly-ish samples on the 5 min grid
+  // zone_air_temperature ramps 16 -> 30 °C over the day; hourly-ish samples on the 5 min grid
   const grid = Array.from({ length: 288 }, (_, i) => Date.parse("2026-11-05T00:00:00Z") + i * 300e3);
   const run = async (params) => {
     const p = rendered(params);
@@ -355,7 +361,7 @@ test("FAULT-ELAPSED-HOURS: a non-default comfort band changes fault_samples, hou
     try {
       await e.load({
         historyColumns: p.contract.history.filter((c) => c.name !== "equipment_id" && c.name !== "timestamp_utc").map((c) => ({ name: c.name, type: c.type })),
-        history: grid.map((ts, i) => ({ equipment_id: "Z", ts, zone_t: 16 + (14 * i) / 287 })),
+        history: grid.map((ts, i) => ({ equipment_id: "Z", ts, zone_air_temperature: 16 + (14 * i) / 287 })),
         weather: [],
       });
       return (await e.query("FAULT-ELAPSED-HOURS"))[0];

@@ -2,30 +2,30 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- chw4_flow_high.sql — Flow high at max pump
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
 h AS (
   SELECT
-    run_proof,
+    operating_status,
     equipment_id,
     timestamp_utc,
-    chw_flow,
-    chw_pump_cmd AS pump,
-    pump_status, chiller_status
+    chilled_water_volume_flow_rate,
+    chilled_water_pump_command AS pump,
+    pump_operating_status, chiller_operating_status
   FROM history
 ),
 proof AS (
   SELECT *,
     CASE
-      WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
-      WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
+      WHEN pump_operating_status IS NOT NULL THEN CASE WHEN pump_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chiller_operating_status IS NOT NULL THEN CASE WHEN chiller_operating_status > 0.05 THEN 1 ELSE 0 END
       WHEN pump IS NOT NULL THEN CASE WHEN pump > 0.05 THEN 1 ELSE 0 END
-      WHEN run_proof IS NOT NULL THEN CASE WHEN run_proof > 0.05 THEN 1 ELSE 0 END
+      WHEN operating_status IS NOT NULL THEN CASE WHEN operating_status > 0.05 THEN 1 ELSE 0 END
       ELSE NULL
     END AS proof_on
   FROM h
@@ -35,14 +35,14 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN proof_on IS NULL OR proof_on = 0 THEN 0
-      WHEN chw_flow IS NULL OR pump IS NULL THEN 0
-      WHEN pump >= {{PUMP_HI}} AND chw_flow > {{FLOW_HI}} THEN 1
+      WHEN chilled_water_volume_flow_rate IS NULL OR pump IS NULL THEN 0
+      WHEN pump >= 0.5 AND chilled_water_volume_flow_rate > {{FLOW_HI}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM proof
 ),
 elapsed_hold AS (

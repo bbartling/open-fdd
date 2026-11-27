@@ -9,7 +9,7 @@ ASSESSED = ("PASS", "FAULT")
 _HINTS = {
     "NOT_APPLICABLE_EQUIPMENT_TYPE": "not applicable to the equipment type",
     "SKIPPED_MISSING_ROLES": "missing input roles",
-    "SKIPPED_NO_RUN_PROOF": "no run proof (map fan_status / fan_cmd or a run_proof role)",
+    "SKIPPED_NO_RUN_PROOF": "no run proof (map supply_fan_operating_status / supply_fan_command or a operating_status role)",
     "SKIPPED_EQUIPMENT_OFF": "the equipment was never proven on",
     "NOT_ASSESSED_NO_OCCUPANCY": "no occupancy role or schedule",
     "ERROR": "rule error",

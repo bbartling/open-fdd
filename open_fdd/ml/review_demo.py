@@ -43,19 +43,19 @@ def synthetic_ahu(days: int = 10, stuck_from_day: int | None = 7, seed: int = 0)
     rng = np.random.default_rng(seed)
     idx = pd.date_range("2026-01-05", periods=n, freq="5min", tz="UTC")
     oat = 10 + 12 * np.sin(np.arange(n) / DAY * 2 * np.pi) + rng.normal(0, 0.3, n)
-    rat = 22 + rng.normal(0, 0.2, n)
+    return_air_temperature = 22 + rng.normal(0, 0.2, n)
     damper = np.clip(0.1 + 0.8 * (oat < 15) * (oat > 2), 0.1, 1.0)
     actual = damper.copy()
     if stuck_from_day is not None:
         actual[stuck_from_day * DAY:] = 0.1
-    mat = actual * oat + (1 - actual) * rat + rng.normal(0, 0.1, n)
-    valve = np.clip((mat - 13) / 10, 0, 1)
-    sat = mat - 10 * valve + rng.normal(0, 0.1, n)
+    mixed_air_temperature = actual * oat + (1 - actual) * return_air_temperature + rng.normal(0, 0.1, n)
+    valve = np.clip((mixed_air_temperature - 13) / 10, 0, 1)
+    discharge_air_temperature = mixed_air_temperature - 10 * valve + rng.normal(0, 0.1, n)
     fan = np.where((np.arange(n) % DAY) < OFF_ROWS_PER_DAY, 0.0, 1.0)  # off 00:00-05:00 UTC daily
     return pd.DataFrame({
-        "discharge-air-temp": sat, "discharge-air-temp-sp": 13.0, "mixed-air-temp": mat, "return-air-temp": rat,
-        "outside-air-temp": oat, "outside-air-damper": damper, "cooling-valve": valve,
-        "fan-cmd": (0.7 + 0.1 * valve) * fan, "fan-status": fan, "occupied": 1.0,
+        "discharge_air_temperature": discharge_air_temperature, "discharge_air_temperature_setpoint": 13.0, "mixed_air_temperature": mixed_air_temperature, "return_air_temperature": return_air_temperature,
+        "outdoor_air_intake_temperature": oat, "outdoor_air_intake_damper_position_command": damper, "cooling_valve_position_command": valve,
+        "supply_fan_command": (0.7 + 0.1 * valve) * fan, "supply_fan_operating_status": fan, "occupancy_status": 1.0,
     }, index=idx)
 
 

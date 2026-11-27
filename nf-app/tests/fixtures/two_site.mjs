@@ -17,9 +17,9 @@
 //             except a dip to 8 degC for 08:00-08:30, so a 2 h bucket (28 d view, 07:00-09:00 local) averages ~11 degC
 //             and moves the event out of the `<10` bin into `10-16`; a 30 min bucket (7 d view) keeps it in `<10`
 //             but is wider than the event (20 min on in 30 min).
-//   gaps      fan_status null Tue 2026-10-27 10:00-13:00 (36 samples); mat null Wed 2026-11-04 10:00-12:00 (24).
+//   gaps      supply_fan_operating_status null Tue 2026-10-27 10:00-13:00 (36 samples); mixed_air_temperature null Wed 2026-11-04 10:00-12:00 (24).
 //             A gap longer than 3600 s contributes nothing (4.x / SQL held_seconds rule), nulls are not "off".
-//   fault     Fri 2026-11-06 14:00-15:30 fan_cmd = 100 % but fan_status = 0 (CMD-1 raw fault). With the 10 min confirm
+//   fault     Fri 2026-11-06 14:00-15:30 supply_fan_command = 100 % but supply_fan_operating_status = 0 (CMD-1 raw fault). With the 10 min confirm
 //             it is confirmed from the 14:05 row to the 15:25 row and reads ok from 15:30. At `fault.nowMs`
 //             (Fri 20:00) the rolling 24 h fault_pct is still ~5.9 % although the fault cleared 4.5 h earlier.
 //   site-b    runs exactly 07:00-17:00 Mon-Fri: zero after-hours, no holiday, no low-OAT cooling, no fault.
@@ -72,11 +72,11 @@ const edgeIndex = (oat) => { const i = OAT_EDGES_C.findIndex((e) => oat < e); re
 // ---- roles ---------------------------------------------------------------------------------------
 // role -> [kind, declared unit in SI sites, declared unit in imperial sites]
 const ROLES = {
-  fan_status: ["Bool", "", ""], fan_cmd: ["Number", "%", "%"], oa_t: ["Number", "°C", "°F"], rat: ["Number", "°C", "°F"],
-  mat: ["Number", "°C", "°F"], sat: ["Number", "°C", "°F"], sat_sp: ["Number", "°C", "°F"], oa_damper_pct: ["Number", "%", "%"],
-  compressor_status: ["Bool", "", ""],
+  supply_fan_operating_status: ["Bool", "", ""], supply_fan_command: ["Number", "%", "%"], outdoor_air_intake_temperature: ["Number", "°C", "°F"], return_air_temperature: ["Number", "°C", "°F"],
+  mixed_air_temperature: ["Number", "°C", "°F"], discharge_air_temperature: ["Number", "°C", "°F"], discharge_air_temperature_setpoint: ["Number", "°C", "°F"], outdoor_air_intake_damper_position_command: ["Number", "%", "%"],
+  compressor_operating_status: ["Bool", "", ""],
 };
-const TEMP_ROLES = new Set(["oa_t", "rat", "mat", "sat", "sat_sp"]);
+const TEMP_ROLES = new Set(["outdoor_air_intake_temperature", "return_air_temperature", "mixed_air_temperature", "discharge_air_temperature", "discharge_air_temperature_setpoint"]);
 
 /** Build the dataset. Deterministic; takes ~100 ms. */
 export function buildTwoSite() {
@@ -110,18 +110,18 @@ export function buildTwoSite() {
       if (def.planted && p.ymd === COOL_DAY && m >= 360 && m < 720) oat = m >= 480 && m < 510 ? 8 : 12;
       const status = fanPlan && !fault ? 1 : 0, cmd = fanPlan ? 1 : 0;
       const damper = fanPlan ? 0.3 : 0;
-      const rat = 22 + 0.5 * Math.sin((2 * Math.PI * m) / 1440);
+      const return_air_temperature = 22 + 0.5 * Math.sin((2 * Math.PI * m) / 1440);
       const saw = ((Math.floor((ms - startMs) / STEP_MS) % 5) - 2) / 2;
-      const mat = rat + damper * (oat - rat) + 0.5 + 0.2 * saw;
+      const mixed_air_temperature = return_air_temperature + damper * (oat - return_air_temperature) + 0.5 + 0.2 * saw;
       const comp = (fanPlan && !fault && oat >= OAT_EDGES_C[1]) || lowEvent ? 1 : 0;
       t.push(ms); flags.push({ occ, holiday, pulse, fault });
-      si.fan_status.push(def.planted && p.ymd === FAN_GAP_DAY && m >= 600 && m < 780 ? null : status);
-      si.fan_cmd.push(cmd);
-      si.oa_t.push(oat); si.rat.push(rat);
-      si.mat.push(def.planted && p.ymd === MAT_GAP_DAY && m >= 600 && m < 720 ? null : mat);
-      si.sat.push(fanPlan ? 13 : 20); si.sat_sp.push(13);
-      si.oa_damper_pct.push(damper * 100);   // % (0-100); fan_cmd above is a 0-1 fraction in `si`, declared % in `series`
-      si.compressor_status.push(comp);
+      si.supply_fan_operating_status.push(def.planted && p.ymd === FAN_GAP_DAY && m >= 600 && m < 780 ? null : status);
+      si.supply_fan_command.push(cmd);
+      si.outdoor_air_intake_temperature.push(oat); si.return_air_temperature.push(return_air_temperature);
+      si.mixed_air_temperature.push(def.planted && p.ymd === MAT_GAP_DAY && m >= 600 && m < 720 ? null : mixed_air_temperature);
+      si.discharge_air_temperature.push(fanPlan ? 13 : 20); si.discharge_air_temperature_setpoint.push(13);
+      si.outdoor_air_intake_damper_position_command.push(damper * 100);   // % (0-100); supply_fan_command above is a 0-1 fraction in `si`, declared % in `series`
+      si.compressor_operating_status.push(comp);
       si.occ.push(occ ? 1 : 0);
     }
 
@@ -135,11 +135,11 @@ export function buildTwoSite() {
         dis: `AHU-1 ${cat.name}`, markers: ["point", "his", ...cat.markers].join(","), class: cat.classes[0] || "", equipRef: "AHU-1", siteRef: def.id,
         unit: def.imperial ? uImp : uSi, kind } };
       points[role] = rec; pointRecs.push(rec);
-      // declared-unit history: imperial sites store degF; fan_cmd is declared "%" (0-100)
+      // declared-unit history: imperial sites store degF; supply_fan_command is declared "%" (0-100)
       series[role] = t.map((ms, i) => {
         let v = si[role][i];
         if (v == null) return [ms, null];
-        if (role === "fan_cmd") v *= 100;
+        if (role === "supply_fan_command") v *= 100;
         if (def.imperial && TEMP_ROLES.has(role)) v = F(v);
         return [ms, v];
       });
@@ -155,9 +155,9 @@ export function buildTwoSite() {
         dis: `${def.id} lighting`, markers: "point,his,lighting,cmd", class: "lighting-cmd", siteRef: def.id, unit: "", kind: "Bool" } };
       pointRecs.push(lightRec);
     }
-    // history rows in SI (what the SQL pack sees); fan_cmd as a 0-1 fraction
-    const rows = t.map((ms, i) => ({ ts: ms, fan_status: si.fan_status[i], fan_cmd: si.fan_cmd[i], oa_t: si.oa_t[i], rat: si.rat[i], mat: si.mat[i],
-      sat: si.sat[i], sat_sp: si.sat_sp[i], oa_damper_pct: si.oa_damper_pct[i] / 100, compressor_status: si.compressor_status[i] }));
+    // history rows in SI (what the SQL pack sees); supply_fan_command as a 0-1 fraction
+    const rows = t.map((ms, i) => ({ ts: ms, supply_fan_operating_status: si.supply_fan_operating_status[i], supply_fan_command: si.supply_fan_command[i], outdoor_air_intake_temperature: si.outdoor_air_intake_temperature[i], return_air_temperature: si.return_air_temperature[i], mixed_air_temperature: si.mixed_air_temperature[i],
+      discharge_air_temperature: si.discharge_air_temperature[i], discharge_air_temperature_setpoint: si.discharge_air_temperature_setpoint[i], outdoor_air_intake_damper_position_command: si.outdoor_air_intake_damper_position_command[i] / 100, compressor_operating_status: si.compressor_operating_status[i] }));
     sites[def.id] = { ...def, startMs, endMs, weekStarts, siteUuid, equipUuid, siteRec, equipRec, points, lightRec, t, si, series, rows, flags };
   }
 
@@ -218,7 +218,7 @@ export function coolingBins(t, active, oat, { capSec = GAP_MAX_SEC } = {}) {
 }
 
 /**
- * CMD-1 on SI history rows (cmd1_fan_mismatch.sql): raw = (fan_cmd >= 0.05) <> (fan_status > 0.5), null input = not assessed;
+ * CMD-1 on SI history rows (cmd1_fan_mismatch.sql): raw = (supply_fan_command >= 0.05) <> (supply_fan_operating_status > 0.5), null input = not assessed;
  * confirmed once the raw-fault streak has held >= confirmSec (held = the row's interval, 0 over a gap > capSec).
  * Returns per row { ts, assessed, raw, held, confirmed } .
  */
@@ -226,8 +226,8 @@ export function cmd1(rows, { confirmSec = 600, capSec = GAP_MAX_SEC } = {}) {
   const out = [];
   let prevRaw = null, prevGap = 0, elapsed = 0;
   for (let i = 0; i < rows.length; i++) {
-    const r = rows[i], assessed = r.fan_cmd != null && r.fan_status != null;
-    const raw = assessed && (r.fan_cmd >= 0.05) !== (r.fan_status > 0.5) ? 1 : 0;
+    const r = rows[i], assessed = r.supply_fan_command != null && r.supply_fan_operating_status != null;
+    const raw = assessed && (r.supply_fan_command >= 0.05) !== (r.supply_fan_operating_status > 0.5) ? 1 : 0;
     const dt = i + 1 < rows.length ? (rows[i + 1].ts - r.ts) / 1000 : null;
     const held = dt != null && dt > 0 && dt <= capSec ? dt : 0, gap = dt != null && dt > capSec ? 1 : 0;
     elapsed = raw === prevRaw && !prevGap ? elapsed + held : held;
@@ -250,13 +250,13 @@ export function rollingFaultPct(rows, atMs, windowHours = 24, opts) {
 
 /**
  * Economizer truth with the pandas reference's definitions (economizer_free_cooling_diagnostics, #1649): n = fan-on
- * samples (> 0.05); identifiable = fan on, oa_t and rat present, |oat - rat| >= 50/9 K (MAT not needed);
- * resid = mat - (rat + damper * (oat - rat)) on identifiable samples with mat and a damper.
+ * samples (> 0.05); identifiable = fan on, outdoor_air_intake_temperature and return_air_temperature present, |oat - return_air_temperature| >= 50/9 K (MAT not needed);
+ * resid = mixed_air_temperature - (return_air_temperature + damper * (oat - return_air_temperature)) on identifiable samples with mixed_air_temperature and a damper.
  */
 export function economizer(rows) {
-  const on = rows.filter((r) => r.fan_status != null && r.fan_status > ON);
-  const ident = on.filter((r) => r.oa_t != null && r.rat != null && Math.abs(r.oa_t - r.rat) >= ECON_DT_MIN_C);
-  const resid = ident.filter((r) => r.mat != null && r.oa_damper_pct != null).map((r) => r.mat - (r.rat + r.oa_damper_pct * (r.oa_t - r.rat)));
+  const on = rows.filter((r) => r.supply_fan_operating_status != null && r.supply_fan_operating_status > ON);
+  const ident = on.filter((r) => r.outdoor_air_intake_temperature != null && r.return_air_temperature != null && Math.abs(r.outdoor_air_intake_temperature - r.return_air_temperature) >= ECON_DT_MIN_C);
+  const resid = ident.filter((r) => r.mixed_air_temperature != null && r.outdoor_air_intake_damper_position_command != null).map((r) => r.mixed_air_temperature - (r.return_air_temperature + r.outdoor_air_intake_damper_position_command * (r.outdoor_air_intake_temperature - r.return_air_temperature)));
   return { n: on.length, nIdent: ident.length, medianResidK: median(resid), maeResidK: resid.length ? resid.reduce((a, b) => a + Math.abs(b), 0) / resid.length : null };
 }
 
@@ -268,7 +268,7 @@ function computeTruth(sites) {
   for (const [id, s] of Object.entries(sites)) {
     const occAt = new Map(s.t.map((ms, i) => [ms, s.flags[i].occ]));
     const wk = (ms) => { let k = 0; for (let i = 0; i < s.weekStarts.length; i++) if (ms >= s.weekStarts[i]) k = i; return k; };
-    const fan = s.series.fan_status;
+    const fan = s.series.supply_fan_operating_status;
     const weeks = s.weekStarts.map((startMs, k) => {
       const inWeek = (ms) => wk(ms) === k;
       const run = hoursOn(fan, { where: inWeek }), inSched = hoursOn(fan, { where: (ms) => inWeek(ms) && occAt.get(ms) }), after = hoursOn(fan, { where: (ms) => inWeek(ms) && !occAt.get(ms) });
@@ -276,9 +276,9 @@ function computeTruth(sites) {
       return { startMs, scheduleHours: Math.round(sched * 1000) / 1000, runHours: run, inScheduleHours: inSched, afterHoursHours: after,
         coveredHours: coveredHours(fan.filter(([ms]) => inWeek(ms))) };
     });
-    const bins = coolingBins(s.t, s.si.compressor_status, s.si.oa_t);
+    const bins = coolingBins(s.t, s.si.compressor_operating_status, s.si.outdoor_air_intake_temperature);
     // the low-OAT event alone (the only compressor run below 10 degC)
-    const lowIdx = s.t.map((ms, i) => i).filter((i) => s.si.compressor_status[i] === 1 && s.si.oa_t[i] < OAT_EDGES_C[0]);
+    const lowIdx = s.t.map((ms, i) => i).filter((i) => s.si.compressor_operating_status[i] === 1 && s.si.outdoor_air_intake_temperature[i] < OAT_EDGES_C[0]);
     const out = { weeks, afterHoursFanHours: weeks.reduce((a, w) => a + w.afterHoursHours, 0),
       cooling: { edgesC: OAT_EDGES_C.slice(), binHours: bins, belowTenHours: bins[0], eventSamples: lowIdx.length, eventStartMs: lowIdx.length ? s.t[lowIdx[0]] : null,
         eventHours: lowIdx.length * STEP_SEC / 3600 },
@@ -293,9 +293,9 @@ function computeTruth(sites) {
         rollingFaultPctAtNow: pct, laneAtNow: lane.filter(([ms]) => ms < nowMs).at(-1)[1] };
       out.planted = {
         pulse: { startMs: s.t[s.flags.findIndex((f) => f.pulse)], samples: s.flags.filter((f) => f.pulse).length, hours: s.flags.filter((f) => f.pulse).length * STEP_SEC / 3600 },
-        holiday: { ymd: HOLIDAY, fanHours: s.flags.reduce((a, f, i) => a + (f.holiday && s.si.fan_status[i] === 1 ? STEP_SEC / 3600 : 0), 0) },
-        fanStatusGap: { startMs: s.t[s.si.fan_status.findIndex((v) => v == null)], samples: s.si.fan_status.filter((v) => v == null).length },
-        matGap: { samples: s.si.mat.filter((v) => v == null).length },
+        holiday: { ymd: HOLIDAY, fanHours: s.flags.reduce((a, f, i) => a + (f.holiday && s.si.supply_fan_operating_status[i] === 1 ? STEP_SEC / 3600 : 0), 0) },
+        fanStatusGap: { startMs: s.t[s.si.supply_fan_operating_status.findIndex((v) => v == null)], samples: s.si.supply_fan_operating_status.filter((v) => v == null).length },
+        matGap: { samples: s.si.mixed_air_temperature.filter((v) => v == null).length },
       };
     }
     truth[id] = round9(out);

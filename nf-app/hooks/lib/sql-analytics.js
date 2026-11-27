@@ -135,7 +135,7 @@ function renderMechBins(engine, plan, { siteId = "local", startMs = null, endMs 
 function renderEconomizer(engine, roles, { siteId = "local", dtMinC = ECON_DIAG_DT_MIN_C, startMs = null, endMs = null,
   maxGapSeconds = ELAPSED_MAX_GAP_SECONDS } = {}) {
   checkEngine(engine);
-  for (const [, role] of roles) if (!["fan", "oat", "rat", "mat", "damper"].includes(role)) throw new Error(`unknown economizer role ${role}`);
+  for (const [, role] of roles) if (!["fan", "oat", "return_air_temperature", "mixed_air_temperature", "damper_position"].includes(role)) throw new Error(`unknown economizer role ${role}`);
   const dt = Number(dtMinC);
   if (!Number.isFinite(dt) || dt < 0) throw new Error("dt_min_c must be a non-negative number");
   return render("economizer_metrics", {
@@ -151,7 +151,7 @@ function renderEconomizer(engine, roles, { siteId = "local", dtMinC = ECON_DIAG_
 /** sql_economizer.render_economizer_points_sql (same roles and checks as the metrics query, no gap limit). */
 function renderEconomizerPoints(engine, roles, { siteId = "local", dtMinC = ECON_DIAG_DT_MIN_C, startMs = null, endMs = null } = {}) {
   checkEngine(engine);
-  for (const [, role] of roles) if (!["fan", "oat", "rat", "mat", "damper"].includes(role)) throw new Error(`unknown economizer role ${role}`);
+  for (const [, role] of roles) if (!["fan", "oat", "return_air_temperature", "mixed_air_temperature", "damper_position"].includes(role)) throw new Error(`unknown economizer role ${role}`);
   const dt = Number(dtMinC);
   if (!Number.isFinite(dt) || dt < 0) throw new Error("dt_min_c must be a non-negative number");
   return render("economizer_points", {
@@ -260,7 +260,7 @@ async function runtimeFromGrid(engine, g, specs) {
   specs.forEach((s, i) => {
     const eq = `e${i}`;
     const motor = g.cols[s.motor] || [];
-    points.push({ point_key: `${eq}/m`, equipment_id: eq, role: "fan_status" });
+    points.push({ point_key: `${eq}/m`, equipment_id: eq, role: "supply_fan_operating_status" });
     for (let j = 0; j < t.length; j++) if (motor[j] != null && Number.isFinite(Number(motor[j]))) samples.push([`${eq}/m`, t[j], Number(motor[j])]);
     if (s.oat && g.cols[s.oat]) {
       points.push({ point_key: `${eq}/o`, equipment_id: eq, role: "outside_air_temp" });
@@ -321,11 +321,11 @@ async function mechFromGrid(engine, g, specs) {
 
 /**
  * Economizer rows (the chart points) and the per-equip metrics from one equip's aligned grid
- * g = { t, cols: { oa_t, rat, mat, fan, sat, damper } }. Every value is computed by economizer_points.sql /
- * economizer_metrics.sql; sat only passes through for display. Rows keep the view's shape.
+ * g = { t, cols: { outdoor_air_intake_temperature, return_air_temperature, mixed_air_temperature, fan, discharge_air_temperature, damper } }. Every value is computed by economizer_points.sql /
+ * economizer_metrics.sql; discharge_air_temperature only passes through for display. Rows keep the view's shape.
  */
 async function econFromGrid(engine, g) {
-  const t = g.t, roleOf = { fan: "fan", oa_t: "oat", rat: "rat", mat: "mat", damper: "damper" };
+  const t = g.t, roleOf = { fan: "fan", outdoor_air_intake_temperature: "oat", return_air_temperature: "return_air_temperature", mixed_air_temperature: "mixed_air_temperature", damper: "damper_position" };
   const points = [], samples = [], roles = [];
   for (const [col, role] of Object.entries(roleOf)) {
     const v = g.cols[col];
@@ -334,20 +334,20 @@ async function econFromGrid(engine, g) {
     roles.push(["E", role, col]);
     for (let j = 0; j < t.length; j++) if (v[j] != null && Number.isFinite(Number(v[j]))) samples.push([col, t[j], Number(v[j])]);
   }
-  if (!roles.some((r) => r[1] === "fan") || !roles.some((r) => r[1] === "oat") || !roles.some((r) => r[1] === "rat")) {
+  if (!roles.some((r) => r[1] === "fan") || !roles.some((r) => r[1] === "oat") || !roles.some((r) => r[1] === "return_air_temperature")) {
     return { rows: [], summary: { n: 0, nIdent: 0, medianResid: null, maeResid: null } };
   }
   const eng = dialectOf(engine);
   const db = await openCore(engine, points, samples);
   try {
-    const sat = new Map((g.cols.sat || []).map((v, j) => [t[j], v]));
+    const discharge_air_temperature = new Map((g.cols.discharge_air_temperature || []).map((v, j) => [t[j], v]));
     const pts = await db.query(renderEconomizerPoints(eng, roles));
-    const rows = pts.filter((r) => r.mat != null).map((r) => {
+    const rows = pts.filter((r) => r.mixed_air_temperature != null).map((r) => {
       const ts = Number(r.t), resid = r.mat_resid == null ? null : Number(r.mat_resid);
-      return { t: ts, oa: Number(r.oat), rat: Number(r.rat), mat: Number(r.mat), sat: sat.get(ts) ?? null,
-        damperPct: r.damper_pct == null ? null : Number(r.damper_pct), dOR: Number(r.d_or), dMR: Number(r.d_mr),
+      return { t: ts, oa: Number(r.oat), return_air_temperature: Number(r.return_air_temperature), mixed_air_temperature: Number(r.mixed_air_temperature), discharge_air_temperature: discharge_air_temperature.get(ts) ?? null,
+        damperPct: r.damper_position == null ? null : Number(r.damper_position), dOR: Number(r.d_or), dMR: Number(r.d_mr),
         ident: !!Number(r.identifiable), oaFrac: r.oa_frac_pct == null ? null : Number(r.oa_frac_pct),
-        matPred: resid == null ? null : Number(r.mat) - resid, matResid: resid };
+        matPred: resid == null ? null : Number(r.mixed_air_temperature) - resid, matResid: resid };
     });
     const m = (await db.query(renderEconomizer(eng, roles)))[0];
     const summary = m ? { n: Number(m.n_fan_on), nIdent: Number(m.n_identifiable),
@@ -388,8 +388,8 @@ async function basFromGrid(engine, g, { bandC = BAS_WEB_BAND_C, maxAgeMs = null 
   if (!samples.some((s) => s[0] === "bas") || !samples.some((s) => s[0] === "web")) return empty;
   const eng = dialectOf(engine);
   const pairs = [["E", "bas", "web", Math.floor(maxAgeMs == null ? webMaxAgeMs(t, bas, web) : maxAgeMs)]];
-  const db = await openCore(engine, [{ point_key: "bas", equipment_id: "E", role: "oa_t" },
-    { point_key: "web", equipment_id: null, role: "web_oa_t" }], samples);
+  const db = await openCore(engine, [{ point_key: "bas", equipment_id: "E", role: "outdoor_air_intake_temperature" },
+    { point_key: "web", equipment_id: null, role: "weather_service_air_temperature" }], samples);
   try {
     const rows = (await db.query(renderBasWebPoints(eng, pairs))).map((r) =>
       ({ t: Number(r.t), bas: Number(r.bas), web: Number(r.web), d: Number(r.d) }));

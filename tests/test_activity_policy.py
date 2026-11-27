@@ -19,17 +19,17 @@ def _idx(n: int) -> pd.DatetimeIndex:
 
 
 def test_status_on_off_null_are_separate_states():
-    frame = pd.DataFrame({"fan-status": [1.0, 0.0, NAN, 1.0]}, index=_idx(4))
+    frame = pd.DataFrame({"supply_fan_operating_status": [1.0, 0.0, NAN, 1.0]}, index=_idx(4))
     act = activity(frame)
     assert act.state.tolist() == ["on", "off", "unknown", "on"]
     r = act.receipt()
-    assert (r["proof_source"], r["proof_kind"], r["threshold"]) == ("fan-status", "status", 0.05)
+    assert (r["proof_source"], r["proof_kind"], r["threshold"]) == ("supply_fan_operating_status", "status", 0.05)
     assert (r["on_rows"], r["off_rows"], r["unknown_rows"], r["assessed_rows"]) == (2, 1, 1, 2)
     assert r["assessed_fraction"] == 0.5
 
 
 def test_absent_proof_is_unknown_and_unassessed_unless_ungated():
-    frame = pd.DataFrame({"discharge-air-temp": [13.0, 14.0, 15.0]}, index=_idx(3))
+    frame = pd.DataFrame({"discharge_air_temperature": [13.0, 14.0, 15.0]}, index=_idx(3))
     act = activity(frame)
     assert act.source == "none"
     assert act.state.eq("unknown").all()
@@ -42,37 +42,37 @@ def test_absent_proof_is_unknown_and_unassessed_unless_ungated():
 
 
 def test_status_wins_over_command_with_no_row_level_fallback():
-    frame = pd.DataFrame({"fan-status": [0.0, NAN, 1.0], "fan-cmd": [1.0, 1.0, 0.0]}, index=_idx(3))
+    frame = pd.DataFrame({"supply_fan_operating_status": [0.0, NAN, 1.0], "supply_fan_command": [1.0, 1.0, 0.0]}, index=_idx(3))
     act = activity(frame)
-    assert act.source == "fan-status"
+    assert act.source == "supply_fan_operating_status"
     assert act.state.tolist() == ["off", "unknown", "on"]
     # A status column with no data at all is absent, so the command is the declared source.
-    frame["fan-status"] = NAN
+    frame["supply_fan_operating_status"] = NAN
     act = activity(frame)
-    assert (act.source, act.source_kind) == ("fan-cmd", "command")
+    assert (act.source, act.source_kind) == ("supply_fan_command", "command")
     assert act.state.tolist() == ["on", "on", "off"]
 
 
 def test_short_alias_names_and_occupancy():
     frame = pd.DataFrame(
-        {"fan_status": [1.0, 1.0, 1.0, 0.0], "occ_mode": [1.0, 0.0, NAN, 1.0]}, index=_idx(4)
+        {"supply_fan_operating_status": [1.0, 1.0, 1.0, 0.0], "occupancy_status": [1.0, 0.0, NAN, 1.0]}, index=_idx(4)
     )
     act = activity(frame)
-    assert act.source == "fan-status"
-    assert act.occupancy_source == "occupied"
+    assert act.source == "supply_fan_operating_status"
+    assert act.occupancy_source == "occupancy_status"
     assert act.state.tolist() == ["on", "unoccupied", "unknown", "off"]
 
 
 def test_resolved_run_proof_and_other_equipment_status():
-    # canonical precedence (run_proof.json / derive_run_proof): the resolved run-proof column beats an own status
-    pump = pd.DataFrame({"pump-status": [1.0, 0.0], "run-proof": [0.0, 1.0]}, index=_idx(2))
+    # canonical precedence (operating_status.json / derive_run_proof): the resolved run-proof column beats an own status
+    pump = pd.DataFrame({"pump_operating_status": [1.0, 0.0], "operating_status": [0.0, 1.0]}, index=_idx(2))
     act = activity(pump)
-    assert (act.source, act.source_kind, act.state.tolist()) == ("run-proof", "run_proof", ["off", "on"])
-    only_pump = pump.drop(columns=["run-proof"])
-    assert (activity(only_pump).source, activity(only_pump).state.tolist()) == ("pump-status", ["on", "off"])
-    resolved = pd.DataFrame({"run-proof": [1.0, 0.0, NAN], "chw-pump-cmd": [0.0, 1.0, 1.0]}, index=_idx(3))
+    assert (act.source, act.source_kind, act.state.tolist()) == ("operating_status", "operating_status", ["off", "on"])
+    only_pump = pump.drop(columns=["operating_status"])
+    assert (activity(only_pump).source, activity(only_pump).state.tolist()) == ("pump_operating_status", ["on", "off"])
+    resolved = pd.DataFrame({"operating_status": [1.0, 0.0, NAN], "chilled_water_pump_command": [0.0, 1.0, 1.0]}, index=_idx(3))
     act = activity(resolved)
-    assert (act.source, act.source_kind) == ("run-proof", "run_proof")
+    assert (act.source, act.source_kind) == ("operating_status", "operating_status")
     assert act.state.tolist() == ["on", "off", "unknown"]
 
 
@@ -80,56 +80,56 @@ def test_fractional_status_uses_the_contract_threshold():
     """A status of 0.3 is running under the contract (> 0.05), the same as the rules' run-proof gate."""
     from open_fdd.run_proof import derive_run_proof, proof_on
 
-    frame = pd.DataFrame({"fan-status": [0.3, 0.04, 0.06, NAN]}, index=_idx(4))
+    frame = pd.DataFrame({"supply_fan_operating_status": [0.3, 0.04, 0.06, NAN]}, index=_idx(4))
     act = activity(frame)
     assert act.threshold == 0.05
     assert act.state.tolist() == ["on", "off", "on", "unknown"]
     series, column = derive_run_proof(frame)
-    assert column == "fan-status"
+    assert column == "supply_fan_operating_status"
     assert proof_on(series).tolist()[:3] == [True, False, True]
 
 
 def test_run_proof_resolved_frame_without_proof_stays_no_proof():
     """A frame the binding layer resolved as "no proof bound" does not fall back to its status or command columns."""
-    frame = pd.DataFrame({"fan-status": [1.0, 1.0], "fan-cmd": [1.0, 1.0]}, index=_idx(2))
+    frame = pd.DataFrame({"supply_fan_operating_status": [1.0, 1.0], "supply_fan_command": [1.0, 1.0]}, index=_idx(2))
     frame.attrs["run_proof_resolved"] = True
     act = activity(frame)
     assert act.source == "none" and act.state.eq("unknown").all() and act.skip_reason() == "no_run_proof"
-    frame["run-proof"] = [0.0, 1.0]
+    frame["operating_status"] = [0.0, 1.0]
     act = activity(frame)
-    assert (act.source, act.state.tolist()) == ("run-proof", ["off", "on"])
+    assert (act.source, act.state.tolist()) == ("operating_status", ["off", "on"])
 
 
 def test_skip_reasons_and_empty_receipt():
-    absent = activity(pd.DataFrame({"discharge-air-temp": [13.0]}, index=_idx(1)))
+    absent = activity(pd.DataFrame({"discharge_air_temperature": [13.0]}, index=_idx(1)))
     assert absent.skip_reason() == "no_run_proof"
-    idle = activity(pd.DataFrame({"fan-status": [0.0, 0.0]}, index=_idx(2)))
+    idle = activity(pd.DataFrame({"supply_fan_operating_status": [0.0, 0.0]}, index=_idx(2)))
     assert idle.skip_reason() == "no_active_rows"
-    occ_unknown = activity(pd.DataFrame({"fan-status": [1.0, 1.0], "occupied": [NAN, 1.0]}, index=_idx(2)))
+    occ_unknown = activity(pd.DataFrame({"supply_fan_operating_status": [1.0, 1.0], "occupancy_status": [NAN, 1.0]}, index=_idx(2)))
     assert occ_unknown.state.tolist() == ["unknown", "on"]
     # every row unknown (status missing, or running with occupancy missing): reported apart from "never on"
-    all_unknown = activity(pd.DataFrame({"fan-status": [1.0, NAN], "occupied": [NAN, 1.0]}, index=_idx(2)))
+    all_unknown = activity(pd.DataFrame({"supply_fan_operating_status": [1.0, NAN], "occupancy_status": [NAN, 1.0]}, index=_idx(2)))
     assert all_unknown.state.tolist() == ["unknown", "unknown"]
     assert all_unknown.skip_reason() == "no_known_proof"
-    unknown = activity(pd.DataFrame({"fan-status": [1.0, 1.0], "occupied": [NAN, 0.0]}, index=_idx(2)))
+    unknown = activity(pd.DataFrame({"supply_fan_operating_status": [1.0, 1.0], "occupancy_status": [NAN, 0.0]}, index=_idx(2)))
     assert unknown.state.tolist() == ["unknown", "unoccupied"]
-    empty = activity(pd.DataFrame({"fan-status": pd.Series([], dtype=float)}, index=_idx(0)))
+    empty = activity(pd.DataFrame({"supply_fan_operating_status": pd.Series([], dtype=float)}, index=_idx(0)))
     assert empty.receipt()["assessed_fraction"] is None
 
 
 def test_site_roles():
     assert is_site_role("outside_air_temp") and is_site_role("outside_air_humidity")
-    assert is_site_role("outside-air-temp") and is_site_role("oa_t") and is_site_role("outside-air-humidity")
-    assert not is_site_role("outside-air-damper") and not is_site_role("oa_damper_pct")
-    assert not is_site_role("discharge-air-temp")
+    assert is_site_role("outdoor_air_intake_temperature") and is_site_role("outdoor_air_intake_temperature") and is_site_role("outdoor_air_intake_relative_humidity")
+    assert not is_site_role("outdoor_air_intake_damper_position_command") and not is_site_role("outdoor_air_intake_damper_position_command")
+    assert not is_site_role("discharge_air_temperature")
 
 
 def test_ml_active_mask_uses_the_shared_policy():
     from open_fdd.ml.detectors import active_mask
 
-    frame = pd.DataFrame({"fan_status": [1.0, 0.0, NAN], "sat": [13.0, 13.0, 13.0]}, index=_idx(3))
+    frame = pd.DataFrame({"supply_fan_operating_status": [1.0, 0.0, NAN], "discharge_air_temperature": [13.0, 13.0, 13.0]}, index=_idx(3))
     assert active_mask(frame).tolist() == [True, False, False]
-    assert not active_mask(frame.drop(columns=["fan_status"])).any()
+    assert not active_mask(frame.drop(columns=["supply_fan_operating_status"])).any()
 
 
 def _folder(tmp_path, name, fan, *, with_fan=True, n=4 * 288):
@@ -145,10 +145,10 @@ def _folder(tmp_path, name, fan, *, with_fan=True, n=4 * 288):
     )
     for spike in (500, 700, 900):
         hist.loc[spike, ["SAT", "OAT"]] = [30.0, 30.0]
-    points = {"sat": "SAT", "mat": "MAT", "oa_t": "OAT"}
+    points = {"discharge_air_temperature": "SAT", "mixed_air_temperature": "MAT", "outdoor_air_intake_temperature": "OAT"}
     if with_fan:
         hist["FAN"] = fan(n)
-        points["fan_status"] = "FAN"
+        points["supply_fan_operating_status"] = "FAN"
     folder = tmp_path / name
     folder.mkdir()
     hist.to_csv(folder / "history_wide.csv", index=False)
@@ -178,13 +178,13 @@ def test_screen_skips_an_idle_unit_and_agrees_with_ml_detect(tmp_path):
     assert res.activity["off_rows"] == 4 * 288 and res.activity["assessed_rows"] == 0
     assert int(active_mask(role_frame_from_folder(idle)).sum()) == res.activity["assessed_rows"]
     saved = json.loads((tmp_path / "s" / "activity.json").read_text(encoding="utf-8"))
-    assert saved["proof_source"] == "fan-status"
+    assert saved["proof_source"] == "supply_fan_operating_status"
     readme = (tmp_path / "s" / "README.md").read_text(encoding="utf-8")
     assert "## Activity" in readme and "Policy: **proof**" in readme
 
     loose = screen_folder(idle, tmp_path / "u", methods=["zscore"], top_n=0, max_days=0, activity_policy="ungated")
-    sat = _rows(loose.scoreboard, "SAT").iloc[0]
-    assert (sat["skipped_reason"], sat["gate"]) == ("", "ungated") and sat["anomaly_minutes"] > 0
+    discharge_air_temperature = _rows(loose.scoreboard, "SAT").iloc[0]
+    assert (discharge_air_temperature["skipped_reason"], discharge_air_temperature["gate"]) == ("", "ungated") and discharge_air_temperature["anomaly_minutes"] > 0
     assert "Policy: **ungated**" in (tmp_path / "u" / "README.md").read_text(encoding="utf-8")
 
 
@@ -208,8 +208,8 @@ def test_screen_gated_runs_on_proven_rows_only_and_sql_matches(tmp_path):
     a = screen_folder(half, tmp_path / "p", methods=["zscore"], top_n=0, max_days=0)
     b = screen_folder(half, tmp_path / "q", methods=["zscore"], top_n=0, max_days=0, engine="sql")
     pd.testing.assert_frame_equal(a.scoreboard, b.scoreboard)
-    sat = _rows(a.scoreboard, "SAT").iloc[0]
-    assert sat["assessed_rows"] == 2 * 288
+    discharge_air_temperature = _rows(a.scoreboard, "SAT").iloc[0]
+    assert discharge_air_temperature["assessed_rows"] == 2 * 288
     assert a.activity["on_rows"] == 2 * 288 and a.activity["off_rows"] == 2 * 288
     loose = screen_folder(half, tmp_path / "r", methods=["zscore"], top_n=0, max_days=0, activity_policy="ungated")
     assert _rows(loose.scoreboard, "SAT").iloc[0]["assessed_rows"] == 4 * 288
@@ -222,7 +222,7 @@ def test_ml_detect_summary_reports_activity(tmp_path, capsys):
     assert main(["detect", str(idle), "--method", "zscore", "--out", str(tmp_path / "d")]) == 0
     summary = json.loads((tmp_path / "d" / "summary.json").read_text(encoding="utf-8"))
     assert summary["active_rows"] == 0 and summary["flagged_rows"] == 0
-    assert summary["activity"]["proof_source"] == "fan-status"
+    assert summary["activity"]["proof_source"] == "supply_fan_operating_status"
     assert summary["activity"]["off_rows"] == 4 * 288
 
 

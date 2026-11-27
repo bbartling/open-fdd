@@ -1,25 +1,25 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- reset1_sat_oa_reset.sql — SAT SP not tracking OA reset curve
--- expected = RESET_SAT_AT_REF + RESET_SLOPE * (oa_t - RESET_OAT_REF)
+-- expected = RESET_SAT_AT_REF + RESET_SLOPE * (outdoor_air_intake_temperature - RESET_OAT_REF)
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
 h AS (
   SELECT
-    run_proof,
+    operating_status,
     equipment_id,
     timestamp_utc,
-    sat_sp,
-    oa_t,
+    discharge_air_temperature_setpoint,
+    outdoor_air_intake_temperature,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -29,14 +29,14 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
-      WHEN sat_sp IS NULL OR oa_t IS NULL THEN 0
-      WHEN abs(sat_sp - ({{RESET_SAT_AT_REF}} + {{RESET_SLOPE}} * (oa_t - {{RESET_OAT_REF}}))) > {{RESET_ERR}} THEN 1
+      WHEN discharge_air_temperature_setpoint IS NULL OR outdoor_air_intake_temperature IS NULL THEN 0
+      WHEN abs(discharge_air_temperature_setpoint - ({{RESET_SAT_AT_REF}} + ({{RESET_SLOPE}} / 100.0) * (outdoor_air_intake_temperature - {{RESET_OAT_REF}}))) > {{RESET_ERR}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM h
 ),
 elapsed_hold AS (

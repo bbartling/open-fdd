@@ -63,11 +63,11 @@ def _frames():
         "AHU-2": frame({"amps": np.where(busy > 0, 12.0, 0.4), "oat": oat}, "AHU"),
     }
     role_map = {
-        "CH-1": {"chiller-status": "ch_s", "outside-air-temp": "oat"},
-        "RTU-1": {"compressor-stage-1": "s1", "compressor-stage-2": "s2", "outside-air-temp": "oat"},
-        "HP-1": {"compressor-status": "comp", "heat-pump-cooling-status": "mode", "outside-air-temp": "oat"},
-        "AHU-1": {"compressor-status": "cs", "compressor-cmd": "cc", "outside-air-temp": "oat"},
-        "AHU-2": {"compressor-current": "amps", "outside-air-temp": "oat"},
+        "CH-1": {"chiller_operating_status": "ch_s", "outdoor_air_intake_temperature": "oat"},
+        "RTU-1": {"compressor-stage-1": "s1", "compressor-stage-2": "s2", "outdoor_air_intake_temperature": "oat"},
+        "HP-1": {"compressor_operating_status": "comp", "heat-pump-cooling-status": "mode", "outdoor_air_intake_temperature": "oat"},
+        "AHU-1": {"compressor_operating_status": "cs", "compressor-cmd": "cc", "outdoor_air_intake_temperature": "oat"},
+        "AHU-2": {"compressor-current": "amps", "outdoor_air_intake_temperature": "oat"},
     }
     return frames, role_map
 
@@ -82,7 +82,7 @@ def test_packaged_sql_is_the_repo_file():
 
 
 def test_render_quotes_and_checks():
-    plan = build_plan([("o'ahu", "AHU", {"compressor-status": "k'1", "outside-air-temp": "oat"})])
+    plan = build_plan([("o'ahu", "AHU", {"compressor_operating_status": "k'1", "outdoor_air_intake_temperature": "oat"})])
     sql = render_mech_bins_sql("sqlite", plan, site_id="s'1", start_ms=1, end_ms=2)
     assert "'o''ahu'" in sql and "'k''1'" in sql and "'s''1'" in sql and "t >= 1" in sql and "{" not in sql
     empty = render_mech_bins_sql("duckdb", build_plan([]))
@@ -96,9 +96,9 @@ def test_render_quotes_and_checks():
 
 def test_plan_follows_the_pandas_ladder():
     # a heat pump without a cooling-mode role, and a VAV, are not cooling devices
-    assert build_plan([("HP-9", "HP", {"compressor-status": "a"}), ("VAV-1", "VAV", {"compressor-status": "b"})]
+    assert build_plan([("HP-9", "HP", {"compressor_operating_status": "a"}), ("VAV-1", "VAV", {"compressor_operating_status": "b"})]
                       ).candidates == []
-    plan = build_plan([("CH-1", "CHW_PLANT", {"compressor-status": "cs", "chiller-amps": "amps"})])
+    plan = build_plan([("CH-1", "CHW_PLANT", {"compressor_operating_status": "cs", "chiller_electric_current": "amps"})])
     assert [(r[1], r[2], r[3], r[4], r[5]) for r in plan.candidates] == [(1, 1, "cs", "on", None),
                                                                         (3, 0, "amps", "above", 5.0)]
     stages = build_plan([("RTU-1", "RTU", {"compressor-stage-1": "s1", "dx-stage": "s4"})])
@@ -138,7 +138,7 @@ def test_gap_and_oat_as_of_rules():
     times = [T0 + i * H // 2 for i in range(6)] + [T0 + 5 * H // 2 + 2 * H + 1]
     samples = [("local", "cs", t, 1.0) for t in times]
     samples += [("local", "oat", T0 + i * H, 25.0) for i in range(3)]
-    rows = _run(_pts("cs", "oat"), samples, [("AHU-1", "AHU", {"compressor-status": "cs", "outside-air-temp": "oat"})])
+    rows = _run(_pts("cs", "oat"), samples, [("AHU-1", "AHU", {"compressor_operating_status": "cs", "outdoor_air_intake_temperature": "oat"})])
     assert len(rows) == 1 and rows[0]["bin_label"] == "21-27"
     assert rows[0]["on_ms"] == 5 * H // 2  # five half-hour intervals; the 2 h + 1 ms hole counts 0
     assert rows[0]["valid_ms"] == 5 * H // 2 and rows[0]["span_ms"] == times[-1] - T0
@@ -146,9 +146,9 @@ def test_gap_and_oat_as_of_rules():
 
 def test_no_oat_or_never_on_gives_no_rows():
     samples = [("local", "cs", T0 + i * H // 2, 1.0) for i in range(4)]
-    assert _run(_pts("cs"), samples, [("AHU-1", "AHU", {"compressor-status": "cs"})]) == []
+    assert _run(_pts("cs"), samples, [("AHU-1", "AHU", {"compressor_operating_status": "cs"})]) == []
     off = [("local", "cs", T0 + i * H // 2, 0.0) for i in range(4)] + [("local", "oat", T0, 30.0)]
-    assert _run(_pts("cs", "oat"), off, [("AHU-1", "AHU", {"compressor-status": "cs", "outside-air-temp": "oat"})]) == []
+    assert _run(_pts("cs", "oat"), off, [("AHU-1", "AHU", {"compressor_operating_status": "cs", "outdoor_air_intake_temperature": "oat"})]) == []
 
 
 @pytest.mark.skipif(not _postgres_configured(), reason="needs POSTGRES_TEST_URL and OPENFDD_PG_TEST_DISPOSABLE=1")

@@ -26,7 +26,7 @@ globalThis.document = { getElementById: (id) => el(id) };
 globalThis.confirm = () => true;
 
 const SITE = "s1", EQUIP = "AHU-9", RULE = "SV-RANGE", SCOPE = `equip:${EQUIP}`;
-const ctxFor = (equip = EQUIP) => ({ site: SITE, equip, equipLabel: equip, ruleId: RULE, bound: { sat: [{ uuid: "u1" }] }, catalog });
+const ctxFor = (equip = EQUIP) => ({ site: SITE, equip, equipLabel: equip, ruleId: RULE, bound: { discharge_air_temperature: [{ uuid: "u1" }] }, catalog });
 const panel = () => el("fddTunersPanel").innerHTML;
 const status = () => tuning._state().status;   // what every redraw renders into #tunStatus
 
@@ -65,7 +65,7 @@ test("#1611: the save confirmation survives the reload that follows the save", a
 test("#1622: one Save writes rule parameters and SV-LIMITS in one hook call, or neither", async () => {
   const s = server();
   await open();
-  edit({ param: ["confirm_min", 20], sweep: ["discharge-air-temp", "hi", 30, "degC"] });
+  edit({ param: ["confirm_min", 20], sweep: ["discharge_air_temperature", "hi", 30, "degC"] });
   await el("tunSave").onclick();
   assert.equal(s.writes().length, 1, JSON.stringify(s.writes()));
   assert.equal(activeRev(s.client, RULE), 1);
@@ -74,7 +74,7 @@ test("#1622: one Save writes rule parameters and SV-LIMITS in one hook call, or 
 
   // someone else saves SV-LIMITS meanwhile; this tab's next Save is refused as a whole
   await s.hook({ action: "save", site: SITE, scope: SCOPE, rule_id: "SV-LIMITS", overrides: JSON.stringify({ version: 1, roles: {} }), expected_revision: 1 });
-  edit({ param: ["confirm_min", 25], sweep: ["discharge-air-temp", "hi", 31, "degC"] });
+  edit({ param: ["confirm_min", 25], sweep: ["discharge_air_temperature", "hi", 31, "degC"] });
   await el("tunSave").onclick();
   assert.match(status(), /conflict/i);
   assert.equal(activeRev(s.client, RULE), 1, "rule parameters were not written either");
@@ -85,7 +85,7 @@ test("#1622: a failing second write rolls back the first (hook level, both actio
   const s = server({ failInsert: (rid) => rid === "SV-LIMITS" });
   for (const action of ["save", "reset"]) {
     const ans = await s.hook({ action, site: SITE, scope: SCOPE, rule_id: RULE, overrides: action === "save" ? JSON.stringify({ version: 1, params: { confirm_min: 20 } }) : undefined,
-      expected_revision: 0, limits_overrides: JSON.stringify({ version: 1, roles: { "discharge-air-temp": { hi: 30 } } }), limits_expected_revision: 0 });
+      expected_revision: 0, limits_overrides: JSON.stringify({ version: 1, roles: { "discharge_air_temperature": { hi: 30 } } }), limits_expected_revision: 0 });
     assert.equal(ans.ok, false, action);
     assert.match(ans.error, /simulated write failure/);
     assert.equal(s.client.rows.length, 0, `${action}: nothing stored`);
@@ -95,7 +95,7 @@ test("#1622: a failing second write rolls back the first (hook level, both actio
 test("#1622: Reset is one atomic call too, and an unknown outcome reloads the committed state", async () => {
   const s = server();
   await open();
-  edit({ param: ["confirm_min", 20], sweep: ["discharge-air-temp", "hi", 30, "degC"] });
+  edit({ param: ["confirm_min", 20], sweep: ["discharge_air_temperature", "hi", 30, "degC"] });
   await el("tunSave").onclick();
   const before = s.writes().length;
   await el("tunReset").onclick();

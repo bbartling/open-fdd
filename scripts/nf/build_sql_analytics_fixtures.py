@@ -93,7 +93,7 @@ def expected(case):
         web = case['web_weather']
         series = pd.Series([r['value_c'] for r in web],
                            index=pd.to_datetime([r['ts_ms'] for r in web], unit='ms', utc=True), dtype=float)
-        return clean({key: bas_vs_web_oat_stats(df['outside-air-temp'], series,
+        return clean({key: bas_vs_web_oat_stats(df['outdoor_air_intake_temperature'], series,
                                                max_age_seconds=options['max_age_seconds'])
                       for key, df in frames.items()})
     raise ValueError(tool)
@@ -114,7 +114,7 @@ def build_cases():
     hours = hours.delete(50)  # A 2-hour gap is unknown; it must not be clipped to one hour.
     ms = lambda t: int(t.timestamp() * 1000)
     add('runtime-dst-week-gap-percent-command', 'motor_run_hours_weekly', {
-        'equipment-1': frame('AHU', hours, {'fan-status': 1.0, 'fan-cmd': 0.0, 'outside-air-temp': 12.0}),
+        'equipment-1': frame('AHU', hours, {'supply_fan_operating_status': 1.0, 'supply_fan_command': 0.0, 'outdoor_air_intake_temperature': 12.0}),
         'equipment-2': frame('BOILER', hours, {'hw-pump-cmd': [100.0 if i % 2 else 0.0 for i in range(len(hours))]}),
     }, options={'timezone': 'America/Chicago', 'week_starts': [ms(start), ms(end)],
                 'occupied_intervals': [[ms(start + pd.Timedelta(hours=8)), ms(start + pd.Timedelta(hours=17))]]})
@@ -122,19 +122,19 @@ def build_cases():
     index = pd.date_range('2026-07-06', periods=13, freq='5min', tz='UTC')
     oat = [8., 10., 12., 16., 18., 22., 26., 28., 30., 32., 34., 36., 38.]
     add('cooling-individual-percent-and-heat-pump-mode', 'mech_cooling_oat_bins', {
-        'equipment-1': frame('AHU', index, {'compressor-status': 0., 'compressor-cmd': 100., 'outside-air-temp': oat}),
-        'equipment-2': frame('HP', index, {'compressor-status': 1.,
-            'heat-pump-cooling-status': [0.] * 6 + [1.] * 7, 'outside-air-temp': oat}),
+        'equipment-1': frame('AHU', index, {'compressor_operating_status': 0., 'compressor-cmd': 100., 'outdoor_air_intake_temperature': oat}),
+        'equipment-2': frame('HP', index, {'compressor_operating_status': 1.,
+            'heat-pump-cooling-status': [0.] * 6 + [1.] * 7, 'outdoor_air_intake_temperature': oat}),
         'equipment-3': frame('RTU', index, {'compressor-stage-1': [0., 1.] * 6 + [0.],
-            'compressor-stage-2': [1., 0.] * 6 + [1.], 'outside-air-temp': oat}),
+            'compressor-stage-2': [1., 0.] * 6 + [1.], 'outdoor_air_intake_temperature': oat}),
     })
 
-    common = {'fan-status': [1.] * 10 + [0.] * 3, 'outside-air-temp': [10.] * 13,
-              'return-air-temp': [22.] * 13, 'outside-air-damper': [25.] * 13}
-    add('economizer-percent-damper-mat-holes', 'economizer_free_cooling_diagnostics', {
-        'equipment-1': frame('AHU', index, {**common, 'mixed-air-temp': [None if i % 4 == 0 else 19. for i in range(13)]}),
+    common = {'supply_fan_operating_status': [1.] * 10 + [0.] * 3, 'outdoor_air_intake_temperature': [10.] * 13,
+              'return_air_temperature': [22.] * 13, 'outdoor_air_intake_damper_position_command': [25.] * 13}
+    add('economizer-percent-damper-mixed_air_temperature-holes', 'economizer_free_cooling_diagnostics', {
+        'equipment-1': frame('AHU', index, {**common, 'mixed_air_temperature': [None if i % 4 == 0 else 19. for i in range(13)]}),
     })
-    add('economizer-missing-mat', 'economizer_free_cooling_diagnostics', {
+    add('economizer-missing-mixed_air_temperature', 'economizer_free_cooling_diagnostics', {
         'equipment-1': frame('AHU', index, common),
     })
 
@@ -142,7 +142,7 @@ def build_cases():
     web = [{'ts_ms': int(t), 'value_c': 20.} for i, t in enumerate(weather_index.as_unit('ms').asi8) if i < 6 or i >= 30]
     for name, observations in [('web-weather-outage', web), ('web-weather-empty', [])]:
         add(name, 'bas_vs_web_oat_stats', {
-            'equipment-1': frame('AHU', weather_index, {'outside-air-temp': 21.5}),
+            'equipment-1': frame('AHU', weather_index, {'outdoor_air_intake_temperature': 21.5}),
         }, web_weather=observations, options={'max_age_seconds': 1200})
     return {'schema_version': 1, 'source': 'repository pandas analytics; deterministic synthetic data only',
             'timestamp_unit': 'UTC epoch milliseconds',

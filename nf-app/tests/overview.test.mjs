@@ -330,7 +330,7 @@ test("scopedEquipmentInventory includes all modeled I/O, preserves zero/false, i
     points: [
       mkPoint("p-temp", { equipRef: "rtu-1", tags: ["point", "temp", "sensor", "his"], units: "°C", cls: "SupplyAirTemperatureSensor", dis: "SAT", latest: { ts: freshTs, double: 0 } }),
       mkPoint("p-sp", { equipRef: "rtu-1", tags: ["point", "temp", "sp", "his"], units: "°C", dis: "SAT Sp", latest: { ts: freshTs, double: 13 } }),
-      mkPoint("p-cmd", { equipRef: "rtu-1", tags: ["point", "damper", "cmd"], units: "%", dis: "OA Damper Cmd", latest: { ts: freshTs, double: 25 } }),
+      mkPoint("p-cmd", { equipRef: "rtu-1", tags: ["point", "damper_position", "cmd"], units: "%", dis: "OA Damper Cmd", latest: { ts: freshTs, double: 25 } }),
       mkPoint("p-bool", { equipRef: "rtu-1", tags: ["point", "fan", "sensor", "his"], kind: "Bool", units: "", dis: "Fan Status", latest: { ts: freshTs, boolean: false } }),
       mkPoint("p-enum", { equipRef: "rtu-1", tags: ["point", "mode", "sensor", "his"], kind: "Enum", units: "", dis: "Unit Mode", latest: { ts: freshTs, enumerated: 2 } }),
       mkPoint("p-text", { equipRef: "rtu-1", tags: ["point", "alarm", "sensor"], kind: "Str", units: "", dis: "Alarm Text", latest: { ts: freshTs, characterString: "Normal" } }),

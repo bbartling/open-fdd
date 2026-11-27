@@ -2,18 +2,18 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- ahu_ducthi.sql — Duct static pressure high
 -- Equation: static > SP + DUCT_HIGH_MARGIN.
--- Gate: fan-on from fan_status then fan_cmd. Missing fan stays NULL
+-- Gate: fan-on from supply_fan_operating_status then supply_fan_command. Missing fan stays NULL
 -- (do not ELSE 1). Pressure-on substitutes only when fan proof is absent,
 -- never when status/cmd is proven 0 (frozen overnight static).
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    duct_static, duct_static_sp,
-    fan_cmd AS fan,
+    discharge_air_static_pressure, discharge_air_static_pressure_setpoint,
+    supply_fan_command AS fan,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE NULL
     END AS fan_on
   FROM history
@@ -23,12 +23,12 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN duct_static IS NULL OR duct_static_sp IS NULL THEN 0
+      WHEN discharge_air_static_pressure IS NULL OR discharge_air_static_pressure_setpoint IS NULL THEN 0
       WHEN fan_on = 0 THEN 0
-      WHEN fan_on = 1 AND duct_static > duct_static_sp + {{DUCT_HIGH_MARGIN}} THEN 1
+      WHEN fan_on = 1 AND discharge_air_static_pressure > discharge_air_static_pressure_setpoint + {{DUCT_HIGH_MARGIN}} THEN 1
       WHEN fan_on IS NULL
-           AND ABS(duct_static) > {{PRESSURE_ON_MIN}}
-           AND duct_static > duct_static_sp + {{DUCT_HIGH_MARGIN}} THEN 1
+           AND ABS(discharge_air_static_pressure) > {{PRESSURE_ON_MIN}}
+           AND discharge_air_static_pressure > discharge_air_static_pressure_setpoint + {{DUCT_HIGH_MARGIN}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

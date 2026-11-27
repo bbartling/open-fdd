@@ -57,7 +57,7 @@ test("a Haystack 4 hot-water plant binds the boiler rules exactly like a boiler-
   const boiler = rulesOf("equip,boiler");
   const ids = boiler.map(([id]) => id);
   for (const id of ["SV-RANGE", "PID-HUNT-1", "TRIM-3", "SCHED-247"]) assert.ok(ids.includes(id), id);
-  assert.ok(boiler.find(([id]) => id === "SV-RANGE")[2].includes("hw_supply_t"));
+  assert.ok(boiler.find(([id]) => id === "SV-RANGE")[2].includes("supply_hot_water_temperature"));
   assert.deepEqual(rulesOf("equip,hot,water,heat,plant,hot-water-plant"), boiler);
   assert.deepEqual(rulesOf("equip,hot,water,plant"), boiler);
   assert.deepEqual(rulesOf("equip,hotWaterPlant"), boiler);

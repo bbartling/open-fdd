@@ -1,7 +1,7 @@
 // node --test nf-app/tests/fault-timeline.test.mjs
 // 5.0.3: the fault lane is a per-timestamp confirmed-fault TIMELINE (1 confirmed / 0 ok / gap = not assessed), not the
 // rolling fault_pct. Two-site fixture (tests/fixtures/two_site.mjs): the real FDD hook (DuckDB engine, real pack) runs on
-// fake NF HTTP, rcx.js reads what it wrote, VAV-1 gets a synthesized occ_mode from the site schedule.
+// fake NF HTTP, rcx.js reads what it wrote, VAV-1 gets a synthesized occupancy_status from the site schedule.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -107,7 +107,7 @@ test("cleared fault: the timeline is confirmedLane (1 confirmed, 0 ok), 0 after 
 });
 
 // ---- 2. null telemetry ---------------------------------------------------------------------------------------
-test("null telemetry is a gap in the timeline, never a 0: fan_status null 10:00-13:00 writes no sample", async () => {
+test("null telemetry is a gap in the timeline, never a 0: supply_fan_operating_status null 10:00-13:00 writes no sample", async () => {
   const now = wall(2026, 10, 27, 20, 0, "America/Chicago");
   const { http, summary, logs } = await runHook(now);
   assert.equal(summary.errors, 0, logs.join("\n"));
@@ -166,7 +166,7 @@ test("rcxFaultData reads the timeline: cleared fault reads 0 after the clear; un
   assert.ok(lane.filter(([t]) => t >= T.clearedMs).every(([, v]) => v === 0), "cleared reads 0");
   assert.equal(lane.filter(([, v]) => v === 1).length, 17);
   assert.deepEqual(lane, expectedLane(A, NOW_A).filter(([, v]) => v != null), "no gaps inside this window: native samples");
-  // ...and the fan_status gap (other window) shows up as a null, not a 0
+  // ...and the supply_fan_operating_status gap (other window) shows up as a null, not a 0
   const now2 = wall(2026, 10, 27, 20, 0, "America/Chicago");
   const run2 = await runHook(now2);
   const r2 = rcx(written(run2.http), now2);
@@ -314,9 +314,9 @@ test("timelineSamples: held 0, a missing required input and already-written time
 
 test("sensor sweep timeline preserves a silence interval while another role reports healthy samples", () => {
   const rows = [
-    { equipment_id: "fixture", sensor_role: "sat", ts_epoch: 300, held_seconds: 900, confirmed: 1 },
-    { equipment_id: "fixture", sensor_role: "rat", ts_epoch: 0, held_seconds: 600, confirmed: 0 },
-    { equipment_id: "fixture", sensor_role: "rat", ts_epoch: 900, held_seconds: 600, confirmed: 0 },
+    { equipment_id: "fixture", sensor_role: "discharge_air_temperature", ts_epoch: 300, held_seconds: 900, confirmed: 1 },
+    { equipment_id: "fixture", sensor_role: "return_air_temperature", ts_epoch: 0, held_seconds: 600, confirmed: 0 },
+    { equipment_id: "fixture", sensor_role: "return_air_temperature", ts_epoch: 900, held_seconds: 600, confirmed: 0 },
   ];
   assert.deepEqual(hook.timelineSamples(rows, { equipId: "fixture", after: 300000, assessed: () => false }), [
     { ms: 600000, value: 1 }, { ms: 900000, value: 1 }, { ms: 1200000, value: 0 },
@@ -330,8 +330,8 @@ function vavSetup(site, { occPoint = false, nowMs }) {
   const equip = { uuid: `vav-${site.id}`, name: "VAV-9", layer: "model", pointType: "EQUIPMENT", attrs: { id: "VAV-9", dis: "VAV-9", markers: "equip,vav", siteRef: site.id } };
   const pt = (id, role, extra = {}) => ({ uuid: `${id}-${site.id}`, name: id, layer: "default", pointType: "POINT", attrs: {
     dis: id, markers: ["point", "his", ...catalog.roles[role].markers].join(","), class: catalog.roles[role].classes[0], equipRef: "VAV-9", siteRef: site.id, ...extra } });
-  const points = [pt("zt", "zone_t", { unit: "°C", kind: "Number" })];
-  if (occPoint) points.push(pt("occ", "occ_mode", { unit: "", kind: "Bool" }));
+  const points = [pt("zt", "zone_air_temperature", { unit: "°C", kind: "Number" })];
+  if (occPoint) points.push(pt("occ", "occupancy_status", { unit: "", kind: "Bool" }));
   const flat = new Set(points.map((p) => p.uuid));
   return {
     equip,
@@ -361,13 +361,13 @@ function vavSetup(site, { occPoint = false, nowMs }) {
 }
 const flagsAt = (site, ms) => site.flags[site.t.indexOf(ms)];
 
-test("VAV-1 without an occ_mode point: occupied limits only while the schedule says occupied, holidays are unoccupied, source = schedule", async () => {
+test("VAV-1 without an occupancy_status point: occupied limits only while the schedule says occupied, holidays are unoccupied, source = schedule", async () => {
   // Wed 2026-10-21 .. Fri 2026-10-23 20:00: Thu 10-22 is site-a's NF holiday
   const now = wall(2026, 10, 23, 20, 0, "America/Chicago");
   const { http } = vavSetup(A, { nowMs: now });
   const { summary, logs } = await runHook(now, { http, config: { windowHours: 72, equips: ["VAV-9"] } });
   assert.equal(summary.errors, 0, logs.join("\n"));
-  assert.ok(logs.some((l) => /occ_mode synthesized from schedule/.test(l)), logs.join("\n"));
+  assert.ok(logs.some((l) => /occupancy_status synthesized from schedule/.test(l)), logs.join("\n"));
   const w = written(http);
   assert.equal(resultRec(w, "site-a", "VAV-1", "VAV-9").attrs.fddOccSource, "schedule");
   const samples = w.data.get(timelineRec(w, "site-a", "VAV-1", "VAV-9").uuid);
@@ -395,7 +395,7 @@ test("VAV-1 on a site with no NF schedule: the 4.x default calendar in the site 
   const { http } = vavSetup(B, { nowMs: now });
   const { summary, logs } = await runHook(now, { http, config: { windowHours: 48, equips: ["VAV-9"] } });
   assert.equal(summary.errors, 0, logs.join("\n"));
-  assert.ok(logs.some((l) => /occ_mode synthesized from default/.test(l) && /America\/New_York/.test(l)), logs.join("\n"));
+  assert.ok(logs.some((l) => /occupancy_status synthesized from default/.test(l) && /America\/New_York/.test(l)), logs.join("\n"));
   const w = written(http);
   assert.equal(resultRec(w, "site-b", "VAV-1", "VAV-9").attrs.fddOccSource, "default");
   const samples = w.data.get(timelineRec(w, "site-b", "VAV-1", "VAV-9").uuid);
@@ -406,12 +406,12 @@ test("VAV-1 on a site with no NF schedule: the 4.x default calendar in the site 
   for (const [t, v] of samples) if (v === 1) assert.equal(flagsAt(B, t).occ, true);
 });
 
-test("VAV-1 with an occ_mode point: the point wins, nothing is synthesized, source = point", async () => {
+test("VAV-1 with an occupancy_status point: the point wins, nothing is synthesized, source = point", async () => {
   const now = wall(2026, 10, 21, 20, 0, "America/Chicago");
   const { http } = vavSetup(A, { occPoint: true, nowMs: now });
   const { summary, logs } = await runHook(now, { http, config: { windowHours: 24, equips: ["VAV-9"] } });
   assert.equal(summary.errors, 0, logs.join("\n"));
-  assert.ok(!logs.some((l) => /occ_mode synthesized/.test(l)));
+  assert.ok(!logs.some((l) => /occupancy_status synthesized/.test(l)));
   const w = written(http);
   assert.equal(resultRec(w, "site-a", "VAV-1", "VAV-9").attrs.fddOccSource, "point");
   const samples = w.data.get(timelineRec(w, "site-a", "VAV-1", "VAV-9").uuid);
@@ -420,7 +420,7 @@ test("VAV-1 with an occ_mode point: the point wins, nothing is synthesized, sour
   assert.equal(samples.find(([t]) => t === t3)[1], 1);
 });
 
-test("VAV-2 keeps its required occ_mode: no point, not run (nothing synthesized for it)", async () => {
+test("VAV-2 keeps its required occupancy_status: no point, not run (nothing synthesized for it)", async () => {
   const now = wall(2026, 10, 21, 20, 0, "America/Chicago");
   const { http } = vavSetup(A, { nowMs: now });
   await runHook(now, { http, config: { windowHours: 24, equips: ["VAV-9"] } });
@@ -523,7 +523,7 @@ test("#1636: a saved occupancy calendar wins over the NF schedule (holiday ignor
   const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, createEngine: withCalendar,
     config: { engine: "duckdb", windowHours: 72, equips: ["VAV-9"] }, now });
   assert.equal(summary.errors, 0, logs.join("\n"));
-  assert.ok(logs.some((l) => /occ_mode synthesized from calendar \(occupancy calendar 100 h\/week \(America\/Chicago\) rev 7/.test(l)), logs.join("\n"));
+  assert.ok(logs.some((l) => /occupancy_status synthesized from calendar \(occupancy calendar 100 h\/week \(America\/Chicago\) rev 7/.test(l)), logs.join("\n"));
   assert.deepEqual(summary.occupancy["site-a"], { source: "calendar", revision: 7 });
   const w = written(http);
   assert.equal(resultRec(w, "site-a", "VAV-1", "VAV-9").attrs.fddOccSource, "calendar");
@@ -538,5 +538,5 @@ test("#1636: a saved occupancy calendar wins over the NF schedule (holiday ignor
   const logs2 = [];
   await hook.runFdd({ sdk: { http: http2, logEvent: (m) => logs2.push(m) }, config: { engine: "duckdb", windowHours: 72, equips: ["VAV-9"] }, now,
     createEngine: async (o) => ({ ...(await createEngine(o)), ruleConfigOverrides: async () => [resetRow] }) });
-  assert.ok(logs2.some((l) => /occ_mode synthesized from schedule/.test(l)), logs2.join("\n"));
+  assert.ok(logs2.some((l) => /occupancy_status synthesized from schedule/.test(l)), logs2.join("\n"));
 });

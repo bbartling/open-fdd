@@ -72,7 +72,7 @@ const TAG_LIB = {
   phIoT: [
     "site", "space", "equip", "point", "sensor", "cmd", "sp", "his", "cur", "writable",
     "discharge", "outside", "zone", "return", "mixed", "exhaust", "inlet", "economizer",
-    "damper", "fan", "run", "heat", "cool", "stage", "valve", "enable", "occ", "unocc",
+    "damper_position", "fan", "run", "heat", "cool", "stage", "valve", "enable", "occ", "unocc",
     "ahu", "fcu", "vav", "weather", "weatherStation", "elec", "meter", "chilled", "hot",
     "plant", "boiler", "chiller", "hot-water-plant", "chilled-water-plant", "steam-plant",
   ],

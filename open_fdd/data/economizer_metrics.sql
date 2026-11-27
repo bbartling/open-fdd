@@ -2,7 +2,7 @@
 -- Portable SQL: PostgreSQL / TimescaleDB, DuckDB and SQLite >= 3.28 (window functions, no extensions).
 -- Rendered by open_fdd.analytics.sql_economizer.render_economizer_sql. Python binds the roles per equipment from bound
 -- roles (never point names) and substitutes them as an inline table:
---   {roles}  equipment_id, role, point_key with role in fan | oat | rat | mat | damper. Every 'fan' point is OR'ed
+--   {roles}  equipment_id, role, point_key with role in fan | oat | return_air_temperature | mixed_air_temperature | damper_position. Every 'fan' point is OR'ed
 --            (fan status and fan command); oat is the one outdoor-air point pandas resolves (BAS before web unless
 --            prefer_web_oat); damper is the outside-air damper.
 -- {ts_ms} is the engine's ts-to-epoch-ms expression; all time math is integer milliseconds.
@@ -19,7 +19,7 @@
 --   * MAT residual on identifiable rows with MAT and a damper value: MAT - (RAT + damper * (OAT - RAT)); the median uses the
 --     middle row (or the mean of the two middle rows), and the MAE is the mean absolute residual.
 -- The archived 4.x query (sql/analytics/postgres/queries/economizer_deltas.sql at tag v4.0.11-central) returned the
--- per-sample deltas with fan_status only; this port returns the per-equipment metrics with the pandas fan rule.
+-- per-sample deltas with supply_fan_operating_status only; this port returns the per-equipment metrics with the pandas fan rule.
 WITH roles AS (
 {roles}
 ),
@@ -35,7 +35,7 @@ win AS (
 damper_scale AS (
   SELECT point_key, CASE WHEN MAX(value) > 1.0 THEN 100.0 ELSE 1.0 END AS div
   FROM win
-  WHERE role = 'damper'
+  WHERE role = 'damper_position'
   GROUP BY point_key
 ),
 grid AS (
@@ -44,26 +44,26 @@ grid AS (
                   THEN CASE WHEN (CASE WHEN w.value > 1.5 THEN w.value / 100.0 ELSE w.value END) > 0.05 THEN 1 ELSE 0 END
                   ELSE 0 END) AS fan_on,
          MAX(CASE WHEN w.role = 'oat' THEN w.value END) AS oat,
-         MAX(CASE WHEN w.role = 'rat' THEN w.value END) AS rat,
-         MAX(CASE WHEN w.role = 'mat' THEN w.value END) AS mat,
-         MAX(CASE WHEN w.role = 'damper' THEN w.value / d.div END) AS damper
+         MAX(CASE WHEN w.role = 'return_air_temperature' THEN w.value END) AS return_air_temperature,
+         MAX(CASE WHEN w.role = 'mixed_air_temperature' THEN w.value END) AS mixed_air_temperature,
+         MAX(CASE WHEN w.role = 'damper_position' THEN w.value / d.div END) AS damper
   FROM win w
   LEFT JOIN damper_scale d ON d.point_key = w.point_key
   GROUP BY w.equipment_id, w.t
 ),
 timed AS (
-  SELECT equipment_id, t, fan_on, oat, rat, mat, damper,
+  SELECT equipment_id, t, fan_on, oat, return_air_temperature, mixed_air_temperature, damper,
          LEAD(t) OVER (PARTITION BY equipment_id ORDER BY t) - t AS dt_ms
   FROM grid
 ),
 scored AS (
   SELECT equipment_id, fan_on,
          CASE WHEN fan_on = 1 AND dt_ms > 0 AND dt_ms <= {max_gap_ms} THEN dt_ms ELSE 0 END AS on_ms,
-         CASE WHEN fan_on = 1 AND oat IS NOT NULL AND rat IS NOT NULL
-                   AND ABS(oat - rat) >= {dt_min} THEN 1 ELSE 0 END AS ident,
-         CASE WHEN fan_on = 1 AND oat IS NOT NULL AND rat IS NOT NULL AND mat IS NOT NULL
-                   AND ABS(oat - rat) >= {dt_min} AND damper IS NOT NULL
-              THEN mat - (rat + damper * (oat - rat)) END AS resid
+         CASE WHEN fan_on = 1 AND oat IS NOT NULL AND return_air_temperature IS NOT NULL
+                   AND ABS(oat - return_air_temperature) >= {dt_min} THEN 1 ELSE 0 END AS ident,
+         CASE WHEN fan_on = 1 AND oat IS NOT NULL AND return_air_temperature IS NOT NULL AND mixed_air_temperature IS NOT NULL
+                   AND ABS(oat - return_air_temperature) >= {dt_min} AND damper IS NOT NULL
+              THEN mixed_air_temperature - (return_air_temperature + damper * (oat - return_air_temperature)) END AS resid
   FROM timed
 ),
 ranked AS (

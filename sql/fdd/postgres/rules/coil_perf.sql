@@ -4,52 +4,52 @@
 -- temperature by MIN_DT. One rule for any coil-bearing equipment, applied by bound roles (never by equipment names).
 --
 -- Mode per sample:
---   heating: heating valve (htg_valve_pct, else reheat_valve_pct) >= VALVE_OPEN and the cooling valve, if bound, <= VALVE_SHUT
+--   heating: heating valve (heating_valve_position_command, else terminal_unit_heating_valve_position_command) >= VALVE_OPEN and the cooling valve, if bound, <= VALVE_SHUT
 --   cooling: cooling valve >= VALVE_OPEN and the heating / reheat valves, if bound, <= VALVE_SHUT
 -- Temperature pair, the first complete one in this order (entering -> leaving):
---   1. dedicated coil sensors (heating_coil_entering_temp / _leaving_temp, cooling_coil_entering_temp / _leaving_temp)
---   2. air handler: mat -> sat
---   3. VAV reheat: vav_inlet_t -> vav_discharge_t
---   4. fan coil / zone: zone_t -> sat
--- Fault: heating and (leave - enter) < MIN_DT, or cooling and (enter - leave) < MIN_DT, with the fan on (fan_status, else
--- fan_cmd) and, where zone_flow is bound, airflow above FLOW_ON_MIN.
+--   1. dedicated coil sensors (heating_coil_inlet_air_temperature / _leaving_temp, cooling_coil_inlet_air_temperature / _leaving_temp)
+--   2. air handler: mixed_air_temperature -> discharge_air_temperature
+--   3. VAV reheat: terminal_unit_inlet_air_temperature -> terminal_unit_discharge_air_temperature
+--   4. fan coil / zone: zone_air_temperature -> discharge_air_temperature
+-- Fault: heating and (leave - enter) < MIN_DT, or cooling and (enter - leave) < MIN_DT, with the fan on (supply_fan_operating_status, else
+-- supply_fan_command) and, where discharge_air_volume_flow_rate is bound, airflow above FLOW_ON_MIN.
 -- No coil valve or no temperature pair on any sample -> assessment 'no_coil_valve' / 'no_temperature_pair':
 -- fault_hours NULL, covered_hours 0 (never a silent pass). Run-proof gated like the other air-side rules (#1608).
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
 h AS (
   SELECT
-    run_proof,
+    operating_status,
     equipment_id,
     timestamp_utc,
-    COALESCE(htg_valve_pct, reheat_valve_pct) AS htg,
-    clg_valve_pct AS clg,
-    htg_valve_pct,
-    reheat_valve_pct,
-    zone_flow,
+    COALESCE(heating_valve_position_command, terminal_unit_heating_valve_position_command) AS htg,
+    cooling_valve_position_command AS clg,
+    heating_valve_position_command,
+    terminal_unit_heating_valve_position_command,
+    discharge_air_volume_flow_rate,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on,
     CASE
-      WHEN heating_coil_leaving_temp IS NOT NULL AND heating_coil_entering_temp IS NOT NULL THEN heating_coil_leaving_temp - heating_coil_entering_temp
-      WHEN sat IS NOT NULL AND mat IS NOT NULL THEN sat - mat
-      WHEN vav_discharge_t IS NOT NULL AND vav_inlet_t IS NOT NULL THEN vav_discharge_t - vav_inlet_t
-      WHEN sat IS NOT NULL AND zone_t IS NOT NULL THEN sat - zone_t
+      WHEN heating_coil_outlet_air_temperature IS NOT NULL AND heating_coil_inlet_air_temperature IS NOT NULL THEN heating_coil_outlet_air_temperature - heating_coil_inlet_air_temperature
+      WHEN discharge_air_temperature IS NOT NULL AND mixed_air_temperature IS NOT NULL THEN discharge_air_temperature - mixed_air_temperature
+      WHEN terminal_unit_discharge_air_temperature IS NOT NULL AND terminal_unit_inlet_air_temperature IS NOT NULL THEN terminal_unit_discharge_air_temperature - terminal_unit_inlet_air_temperature
+      WHEN discharge_air_temperature IS NOT NULL AND zone_air_temperature IS NOT NULL THEN discharge_air_temperature - zone_air_temperature
       ELSE NULL
     END AS heat_rise,
     CASE
-      WHEN cooling_coil_leaving_temp IS NOT NULL AND cooling_coil_entering_temp IS NOT NULL THEN cooling_coil_entering_temp - cooling_coil_leaving_temp
-      WHEN sat IS NOT NULL AND mat IS NOT NULL THEN mat - sat
-      WHEN vav_discharge_t IS NOT NULL AND vav_inlet_t IS NOT NULL THEN vav_inlet_t - vav_discharge_t
-      WHEN sat IS NOT NULL AND zone_t IS NOT NULL THEN zone_t - sat
+      WHEN cooling_coil_outlet_air_temperature IS NOT NULL AND cooling_coil_inlet_air_temperature IS NOT NULL THEN cooling_coil_inlet_air_temperature - cooling_coil_outlet_air_temperature
+      WHEN discharge_air_temperature IS NOT NULL AND mixed_air_temperature IS NOT NULL THEN mixed_air_temperature - discharge_air_temperature
+      WHEN terminal_unit_discharge_air_temperature IS NOT NULL AND terminal_unit_inlet_air_temperature IS NOT NULL THEN terminal_unit_inlet_air_temperature - terminal_unit_discharge_air_temperature
+      WHEN discharge_air_temperature IS NOT NULL AND zone_air_temperature IS NOT NULL THEN zone_air_temperature - discharge_air_temperature
       ELSE NULL
     END AS cool_drop
   FROM history
@@ -69,19 +69,19 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
-      WHEN zone_flow IS NOT NULL AND zone_flow <= {{FLOW_ON_MIN}} THEN 0
+      WHEN discharge_air_volume_flow_rate IS NOT NULL AND discharge_air_volume_flow_rate <= {{FLOW_ON_MIN}} THEN 0
       WHEN htg IS NOT NULL AND htg >= {{VALVE_OPEN}} AND (clg IS NULL OR clg <= {{VALVE_SHUT}})
        AND heat_rise IS NOT NULL AND heat_rise < {{MIN_DT}} THEN 1
       WHEN clg IS NOT NULL AND clg >= {{VALVE_OPEN}}
-       AND (htg_valve_pct IS NULL OR htg_valve_pct <= {{VALVE_SHUT}})
-       AND (reheat_valve_pct IS NULL OR reheat_valve_pct <= {{VALVE_SHUT}})
+       AND (heating_valve_position_command IS NULL OR heating_valve_position_command <= {{VALVE_SHUT}})
+       AND (terminal_unit_heating_valve_position_command IS NULL OR terminal_unit_heating_valve_position_command <= {{VALVE_SHUT}})
        AND cool_drop IS NOT NULL AND cool_drop < {{MIN_DT}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM h
 ),
 elapsed_hold AS (

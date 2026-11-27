@@ -3,7 +3,7 @@
 
 Inputs (all in git, no NF needed):
   sql/fdd/registry.yaml            rules: id, required/optional roles, equipment kinds, parameters
-  sql/fdd/role_map.json            role -> Haystack-style name (sat -> discharge-air-temp)
+  sql/fdd/role_map.json            role -> Haystack-style name (discharge_air_temperature -> discharge-air-temp)
   nf-app/rules/nf_classes.json     NF ontology class names (from /api/v1/equipment/classes)
   nf-app/rules/role_overrides.json hand mapping for roles NF names differently
   sql/fdd/input_contract.json     role scales and typed scratch relations
@@ -55,9 +55,9 @@ def build() -> dict:
     kinds = overrides.pop("_equipment_kinds")
     kinds.pop("_doc", None)
     registry = yaml.safe_load((ROOT / "sql/fdd/registry.yaml").read_text(encoding="utf-8"))
-    run_proof = json.loads((ROOT / "sql/fdd/run_proof.json").read_text(encoding="utf-8"))
-    run_proof.pop("_doc", None)
-    bad_proof = sorted({x for g in run_proof["own"].values() for x in g} - set(role_map))
+    operating_status = json.loads((ROOT / "sql/fdd/run_proof.json").read_text(encoding="utf-8"))
+    operating_status.pop("_doc", None)
+    bad_proof = sorted({x for g in operating_status["own"].values() for x in g} - set(role_map))
     if bad_proof:
         raise SystemExit(f"sql/fdd/run_proof.json names roles absent from role_map.json: {bad_proof}")
 
@@ -82,7 +82,8 @@ def build() -> dict:
     if no_scale or extra:
         raise SystemExit(f"sql/fdd/input_contract.json must declare exactly the catalog roles: missing {no_scale}, unknown {extra}")
     for role, scale in scales.items():
-        if not (scale in ("fraction", "boolean", "percent_rh", "text") or scale.startswith("si:")):
+        qudt = {"DEG_C", "PA", "L-PER-SEC", "PERCENT", "PERCENT_RH", "PPM", "KiloW", "KiloW-HR", "A", "NUM", "K"}
+        if not (scale in ("fraction", "boolean", "enumeration", "percent_rh", "text") or scale in qudt or scale.startswith("si:")):
             raise SystemExit(f"input_contract.json: {role} has an invalid scale {scale!r}")
         roles[role]["scale"] = scale
 
@@ -104,7 +105,7 @@ def build() -> dict:
             "unmapped_roles": missing,
             "confirm_seconds": r.get("confirm_seconds", 0),
             "parameters": {k: v.get("default") for k, v in (r.get("parameters") or {}).items()},
-            "run_proof": r.get("run_proof", "exempt"),
+            "operating_status": r.get("operating_status", "exempt"),
             **({"run_proof_note": r["run_proof_note"]} if r.get("run_proof_note") else {}),
         })
     return {
@@ -114,7 +115,7 @@ def build() -> dict:
         "equipment_kinds": kinds,
         "roles": roles,
         "sensor_sweep_roles": sensor_sweep_roles,
-        "run_proof": run_proof,
+        "operating_status": operating_status,
         "rules": rules,
     }
 

@@ -2,26 +2,26 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- vav_ahu_leave.sql — VAV leave vs parent AHU SAT (fedBy)
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
 h AS (
   SELECT
-    run_proof,
+    operating_status,
     equipment_id,
     timestamp_utc,
-    vav_discharge_t,
-    ahu_sat,
-    zone_flow,
-    fan_cmd,
-    fan_status,
+    terminal_unit_discharge_air_temperature,
+    air_handling_unit_discharge_air_temperature,
+    discharge_air_volume_flow_rate,
+    supply_fan_command,
+    supply_fan_operating_status,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -31,15 +31,15 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
-      WHEN vav_discharge_t IS NULL OR ahu_sat IS NULL THEN 0
-      WHEN COALESCE(zone_flow, 0) > {{FLOW_ON_MIN}}
-       AND ABS(vav_discharge_t - ahu_sat) > {{DELTA}} THEN 1
+      WHEN terminal_unit_discharge_air_temperature IS NULL OR air_handling_unit_discharge_air_temperature IS NULL THEN 0
+      WHEN COALESCE(discharge_air_volume_flow_rate, 0) > {{FLOW_ON_MIN}}
+       AND ABS(terminal_unit_discharge_air_temperature - air_handling_unit_discharge_air_temperature) > {{DELTA}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM h
 ),
 elapsed_hold AS (

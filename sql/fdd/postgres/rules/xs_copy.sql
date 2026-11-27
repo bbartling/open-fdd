@@ -1,7 +1,7 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- xs_copy.sql — Cross-sensor consistency (#1780): two temperature roles of one unit carry the same (copied) signal.
--- Pairs: rat/sat, mat/sat, mat/rat, zone_t/sat, zone_t/vav_discharge_t. A pair matches at a sample when both are bound
+-- Pairs: return_air_temperature/discharge_air_temperature, mixed_air_temperature/discharge_air_temperature, mixed_air_temperature/return_air_temperature, zone_air_temperature/discharge_air_temperature, zone_air_temperature/terminal_unit_discharge_air_temperature. A pair matches at a sample when both are bound
 -- and |a - b| <= COPY_TOL. A run of consecutive matching samples is a copy when the first role moves by at least
 -- CHANGE_MIN over the run (max - min): two flat series that agree are a flatline (SV-FLATLINE), not a copy.
 -- Fault: any pair in a copy run, held for CONFIRM_SECONDS (hours, not a few samples). Both roles are named; blame is
@@ -10,13 +10,13 @@ WITH m AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    rat, mat, zone_t,
-    CASE WHEN rat IS NOT NULL AND sat IS NOT NULL THEN CASE WHEN ABS(rat - sat) <= {{COPY_TOL}} THEN 1 ELSE 0 END END AS m1,
-    CASE WHEN mat IS NOT NULL AND sat IS NOT NULL THEN CASE WHEN ABS(mat - sat) <= {{COPY_TOL}} THEN 1 ELSE 0 END END AS m2,
-    CASE WHEN mat IS NOT NULL AND rat IS NOT NULL THEN CASE WHEN ABS(mat - rat) <= {{COPY_TOL}} THEN 1 ELSE 0 END END AS m3,
-    CASE WHEN zone_t IS NOT NULL AND sat IS NOT NULL THEN CASE WHEN ABS(zone_t - sat) <= {{COPY_TOL}} THEN 1 ELSE 0 END END AS m4,
-    CASE WHEN zone_t IS NOT NULL AND vav_discharge_t IS NOT NULL
-         THEN CASE WHEN ABS(zone_t - vav_discharge_t) <= {{COPY_TOL}} THEN 1 ELSE 0 END END AS m5
+    return_air_temperature, mixed_air_temperature, zone_air_temperature,
+    CASE WHEN return_air_temperature IS NOT NULL AND discharge_air_temperature IS NOT NULL THEN CASE WHEN ABS(return_air_temperature - discharge_air_temperature) <= {{COPY_TOL}} THEN 1 ELSE 0 END END AS m1,
+    CASE WHEN mixed_air_temperature IS NOT NULL AND discharge_air_temperature IS NOT NULL THEN CASE WHEN ABS(mixed_air_temperature - discharge_air_temperature) <= {{COPY_TOL}} THEN 1 ELSE 0 END END AS m2,
+    CASE WHEN mixed_air_temperature IS NOT NULL AND return_air_temperature IS NOT NULL THEN CASE WHEN ABS(mixed_air_temperature - return_air_temperature) <= {{COPY_TOL}} THEN 1 ELSE 0 END END AS m3,
+    CASE WHEN zone_air_temperature IS NOT NULL AND discharge_air_temperature IS NOT NULL THEN CASE WHEN ABS(zone_air_temperature - discharge_air_temperature) <= {{COPY_TOL}} THEN 1 ELSE 0 END END AS m4,
+    CASE WHEN zone_air_temperature IS NOT NULL AND terminal_unit_discharge_air_temperature IS NOT NULL
+         THEN CASE WHEN ABS(zone_air_temperature - terminal_unit_discharge_air_temperature) <= {{COPY_TOL}} THEN 1 ELSE 0 END END AS m5
   FROM history
 ),
 inputs AS (
@@ -46,11 +46,11 @@ runs AS (
 ),
 spans AS (
   SELECT runs.*,
-    MAX(rat) OVER (PARTITION BY equipment_id, r1) - MIN(rat) OVER (PARTITION BY equipment_id, r1) AS s1,
-    MAX(mat) OVER (PARTITION BY equipment_id, r2) - MIN(mat) OVER (PARTITION BY equipment_id, r2) AS s2,
-    MAX(mat) OVER (PARTITION BY equipment_id, r3) - MIN(mat) OVER (PARTITION BY equipment_id, r3) AS s3,
-    MAX(zone_t) OVER (PARTITION BY equipment_id, r4) - MIN(zone_t) OVER (PARTITION BY equipment_id, r4) AS s4,
-    MAX(zone_t) OVER (PARTITION BY equipment_id, r5) - MIN(zone_t) OVER (PARTITION BY equipment_id, r5) AS s5
+    MAX(return_air_temperature) OVER (PARTITION BY equipment_id, r1) - MIN(return_air_temperature) OVER (PARTITION BY equipment_id, r1) AS s1,
+    MAX(mixed_air_temperature) OVER (PARTITION BY equipment_id, r2) - MIN(mixed_air_temperature) OVER (PARTITION BY equipment_id, r2) AS s2,
+    MAX(mixed_air_temperature) OVER (PARTITION BY equipment_id, r3) - MIN(mixed_air_temperature) OVER (PARTITION BY equipment_id, r3) AS s3,
+    MAX(zone_air_temperature) OVER (PARTITION BY equipment_id, r4) - MIN(zone_air_temperature) OVER (PARTITION BY equipment_id, r4) AS s4,
+    MAX(zone_air_temperature) OVER (PARTITION BY equipment_id, r5) - MIN(zone_air_temperature) OVER (PARTITION BY equipment_id, r5) AS s5
   FROM runs
 ),
 base AS (

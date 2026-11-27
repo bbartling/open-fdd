@@ -82,21 +82,21 @@ def build_evidence_packet(
     context: dict[str, Any] = {}
 
     # VAV-5 style: damper closed + non-zero flow (0.0 is a valid reading — do not use `or`)
-    damper = _first_num(spot, ("damper", "damper-position", "damper_pct"))
-    flow = _first_num(spot, ("zone-airflow", "airflow", "flow"))
-    zone_t = _first_num(spot, ("zone-air-temp", "zone_t", "mean_zone_t"))
+    damper = _first_num(spot, ("damper_position", "damper-position", "damper_position"))
+    flow = _first_num(spot, ("discharge_air_volume_flow_rate", "airflow", "flow"))
+    zone_air_temperature = _first_num(spot, ("zone_air_temperature", "zone_air_temperature", "mean_zone_t"))
 
     if cand.rule_id in {"VAV-5", "VAV5"} or "airflow" in (cand.rule_label or "").lower():
         if damper is not None and flow is not None:
-            telemetry_evidence["damper_pct"] = damper
+            telemetry_evidence["damper_position"] = damper
             telemetry_evidence["airflow"] = flow
             if damper <= 5.0 and flow >= 50.0:
                 msg = f"Damper≈{damper:.1f}% with measured airflow≈{flow:.0f} — supports bias/feedback issue"
-                corroboration.append(EvidenceItem("support", msg, weight=20.0, source="telemetry", values={"damper": damper, "flow": flow}))
+                corroboration.append(EvidenceItem("support", msg, weight=20.0, source="telemetry", values={"damper_position": damper, "flow": flow}))
                 items.append(corroboration[-1])
             elif damper <= 5.0 and flow < 5.0:
                 msg = f"Damper≈{damper:.1f}% and airflow≈{flow:.0f} — condition may not reconstruct (possible FP / gate)"
-                contradiction.append(EvidenceItem("contradict", msg, weight=-20.0, source="telemetry", values={"damper": damper, "flow": flow}))
+                contradiction.append(EvidenceItem("contradict", msg, weight=-20.0, source="telemetry", values={"damper_position": damper, "flow": flow}))
                 items.append(contradiction[-1])
 
     if comfort_row:
@@ -118,9 +118,9 @@ def build_evidence_packet(
         if comfort_row.get("flag_dead_sensor") or comfort_row.get("dead_sensor?") or comfort_row.get("outlier"):
             sensor_quality["issues"].append("dead_or_outlier_zone_sensor")
 
-    if zone_t is not None and zone_t < IMPLAUSIBLE_ZONE_T_F:
+    if zone_air_temperature is not None and zone_air_temperature < IMPLAUSIBLE_ZONE_T_F:
         sensor_quality["issues"].append("implausible_zone_temperature_spot")
-        sensor_quality["spot_zone_t"] = zone_t
+        sensor_quality["spot_zone_t"] = zone_air_temperature
 
     # Fan-off static anomaly: only score duct-static rules. Other rules on the same
     # AHU get a context note only — avoids identical "duct static" evidence on every finding.

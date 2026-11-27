@@ -1,30 +1,30 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- economizer_fault.sql — ECON-2 economizing when outdoor unfavorable + confirm
--- CAST DOUBLE. oa_damper_pct is a fraction 0-1 (input_contract.sql): a 20 % minimum OA position arrives as 0.20
+-- CAST DOUBLE. outdoor_air_intake_damper_position_command is a fraction 0-1 (input_contract.sql): a 20 % minimum OA position arrives as 0.20
 -- and does not fire vs ECON2_DAMPER 0.42. No magnitude guess.
 -- Pandas econ2 has no fan gate.
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
 base AS (
   SELECT
-    run_proof,
+    operating_status,
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
-      WHEN oa_t IS NOT NULL AND oa_damper_pct IS NOT NULL
-       AND CAST(oa_t AS DOUBLE PRECISION) > {{ECON2_OAT_HI}}
-       AND CAST(oa_damper_pct AS DOUBLE PRECISION) > {{ECON2_DAMPER}}
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
+      WHEN outdoor_air_intake_temperature IS NOT NULL AND outdoor_air_intake_damper_position_command IS NOT NULL
+       AND CAST(outdoor_air_intake_temperature AS DOUBLE PRECISION) > {{ECON2_OAT_HI}}
+       AND CAST(outdoor_air_intake_damper_position_command AS DOUBLE PRECISION) > {{ECON2_DAMPER}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM history
 ),
 elapsed_hold AS (

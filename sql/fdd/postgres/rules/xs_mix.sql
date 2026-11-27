@@ -1,28 +1,28 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- xs_mix.sql — Cross-sensor consistency (#1780): mixed-air temperature outside the outdoor / return mixing envelope.
--- A sensor or mapping finding, not an economizer fault: with the fan proven on, mat must lie in
---   [min(oa_t, rat) - MIX_BAND, max(oa_t, rat) + MIX_BAND]
--- at any damper position (closed: mat ~ rat, open: mat ~ oa_t). Fan on: fan_status, else fan_cmd, else the run proof.
--- No sample with mat, oa_t and rat together -> assessment 'no_temperatures'; no run proof bound (gate on) ->
+-- A sensor or mapping finding, not an economizer fault: with the fan proven on, mixed_air_temperature must lie in
+--   [min(outdoor_air_intake_temperature, return_air_temperature) - MIX_BAND, max(outdoor_air_intake_temperature, return_air_temperature) + MIX_BAND]
+-- at any damper position (closed: mixed_air_temperature ~ return_air_temperature, open: mixed_air_temperature ~ outdoor_air_intake_temperature). Fan on: supply_fan_operating_status, else supply_fan_command, else the run proof.
+-- No sample with mixed_air_temperature, outdoor_air_intake_temperature and return_air_temperature together -> assessment 'no_temperatures'; no run proof bound (gate on) ->
 -- 'no_run_proof'. Not assessed: fault_hours NULL, covered_hours 0 (never a silent pass). Run-proof gated (#1608).
 WITH rp AS (
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
 h AS (
   SELECT
-    run_proof,
+    operating_status,
     equipment_id,
     timestamp_utc,
-    mat,
-    CASE WHEN oa_t IS NULL OR rat IS NULL THEN NULL WHEN oa_t < rat THEN oa_t ELSE rat END AS env_lo,
-    CASE WHEN oa_t IS NULL OR rat IS NULL THEN NULL WHEN oa_t > rat THEN oa_t ELSE rat END AS env_hi,
+    mixed_air_temperature,
+    CASE WHEN outdoor_air_intake_temperature IS NULL OR return_air_temperature IS NULL THEN NULL WHEN outdoor_air_intake_temperature < return_air_temperature THEN outdoor_air_intake_temperature ELSE return_air_temperature END AS env_lo,
+    CASE WHEN outdoor_air_intake_temperature IS NULL OR return_air_temperature IS NULL THEN NULL WHEN outdoor_air_intake_temperature > return_air_temperature THEN outdoor_air_intake_temperature ELSE return_air_temperature END AS env_hi,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -30,7 +30,7 @@ h AS (
 inputs AS (
   SELECT h.equipment_id,
     CASE
-      WHEN SUM(CASE WHEN h.mat IS NOT NULL AND h.env_lo IS NOT NULL THEN 1 ELSE 0 END) = 0 THEN 'no_temperatures'
+      WHEN SUM(CASE WHEN h.mixed_air_temperature IS NOT NULL AND h.env_lo IS NOT NULL THEN 1 ELSE 0 END) = 0 THEN 'no_temperatures'
       WHEN MAX(rp.no_run_proof) = 1 THEN 'no_run_proof'
       ELSE 'assessed'
     END AS assessment
@@ -44,15 +44,15 @@ base AS (
     h.timestamp_utc,
     i.assessment,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN h.fan_on = 0 THEN 0
-      WHEN h.mat IS NULL OR h.env_lo IS NULL THEN 0
-      WHEN h.mat < h.env_lo - {{MIX_BAND}} THEN 1
-      WHEN h.mat > h.env_hi + {{MIX_BAND}} THEN 1
+      WHEN h.mixed_air_temperature IS NULL OR h.env_lo IS NULL THEN 0
+      WHEN h.mixed_air_temperature < h.env_lo - {{MIX_BAND}} THEN 1
+      WHEN h.mixed_air_temperature > h.env_hi + {{MIX_BAND}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM h
   JOIN inputs i ON i.equipment_id = h.equipment_id
 ),

@@ -4,7 +4,7 @@
 --
 -- Same rows as open_fdd.analytics.point_stats.mv_change_points, archived semantics:
 --   * a UTC day counts only with at least 6 samples; prev_avg is the previous counted day of the same point;
---   * temperature roles (oa_t, web_oa_t, sat, zone_t) keep the legacy degF predicate on SI data:
+--   * temperature roles (outdoor_air_intake_temperature, weather_service_air_temperature, discharge_air_temperature, zone_air_temperature) keep the legacy degF predicate on SI data:
 --     |delta| >= max(|prev - (-17.778)| * 0.25, 0.5556) (0 degF origin, 1 degF minimum);
 --     other roles |delta| >= max(|prev| * 0.25, 1.0);
 --   * only CHANGE rows are returned, newest day first, then the larger |delta|, then point_key.
@@ -32,7 +32,7 @@ ranked AS (
 thresholded AS (
   SELECT point_key, equipment_id, role, day_ms, avg_val, n, prev_avg,
          ABS(avg_val - prev_avg) AS abs_delta,
-         CASE WHEN role IN ('oa_t', 'web_oa_t', 'sat', 'zone_t')
+         CASE WHEN role IN ('outdoor_air_intake_temperature', 'weather_service_air_temperature', 'discharge_air_temperature', 'zone_air_temperature')
               THEN CASE WHEN ABS(prev_avg - (-17.77777777777778)) * 0.25 > 0.5555555555555556
                         THEN ABS(prev_avg - (-17.77777777777778)) * 0.25 ELSE 0.5555555555555556 END
               ELSE CASE WHEN ABS(prev_avg) * 0.25 > 1.0 THEN ABS(prev_avg) * 0.25 ELSE 1.0 END

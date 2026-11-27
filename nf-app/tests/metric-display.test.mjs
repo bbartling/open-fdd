@@ -85,7 +85,7 @@ test("real insufficient / no-result cases still say so, for metric and fault rul
   assert.deepEqual([of(row("AVG-ZONE-TEMP"), stale).status, of(row("AVG-ZONE-TEMP"), stale).reason], ["insufficient", "input data is stale (no recent samples)"]);
   const empty = of(row("ZONE-COMFORT-PCT"), resultPoint("ZONE-COMFORT-PCT", { equipment_id: "VAV-1", comfort_pct: 50 }, { latest: null }));
   assert.deepEqual([empty.status, empty.reason], ["insufficient", "no value written yet"]);
-  assert.equal(of(row("AVG-ZONE-TEMP", { runnable: false, missing: ["zone_t"] }), null).status, "skipped");
+  assert.equal(of(row("AVG-ZONE-TEMP", { runnable: false, missing: ["zone_air_temperature"] }), null).status, "skipped");
   // fault rules are unchanged
   const fx = (v, attrs) => ({ latest: { double: v }, units: "%", tags: ["point", "his", "fault", "fdd"], rec: { attrs: { fddOutput: "fault_pct", fddWindowHours: "24", ...attrs } } });
   assert.equal(of(row("FC1"), fx(12, { fddStatus: "fault" })).status, "fault");

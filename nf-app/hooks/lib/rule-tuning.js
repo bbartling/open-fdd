@@ -208,7 +208,7 @@
 
   // ---- #1672: slider contract (grouping, step snapping, ordered pairs) ------------------------------------------------
 
-  const TIME_UNITS = new Set(['min', 'h', 's', 'sec']);
+  const TIME_UNITS = new Set(['min', 'h', 's', 'sec', 'MIN', 'HR', 'S', 'SEC']);
   /** Display groups in panel order. The motor-status / occupancy booleans come after the numeric tuners. */
   const CONTROL_GROUPS = [
     { id: 'duration', label: 'Duration' },

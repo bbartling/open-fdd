@@ -16,7 +16,7 @@ function input() {
   const history = [];
   for (const c of fixture.cases) for (const r of c.rows) history.push({ equipment_id: c.equipment_id, ...r });
   return {
-    historyColumns: [{ name: "fan_status", type: "double" }, { name: "fan_cmd", type: "double" }],
+    historyColumns: [{ name: "supply_fan_operating_status", type: "double" }, { name: "supply_fan_command", type: "double" }],
     history, weather: [],
   };
 }

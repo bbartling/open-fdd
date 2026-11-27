@@ -1,7 +1,7 @@
 """Run proof (#1608): is the equipment a rule judges proven running?
 
-One contract, ``sql/fdd/run_proof.json`` (shipped inside ``fdd-catalog.json`` as ``run_proof``), read by every engine:
-the NF hook (``nf-app/static/run-proof.js`` is this module's twin), the SQL packs (history column ``run_proof``) and the
+One contract, ``sql/fdd/run_proof.json`` (shipped inside ``fdd-catalog.json`` as ``operating_status``), read by every engine:
+the NF hook (``nf-app/static/run-proof.js`` is this module's twin), the SQL packs (history column ``operating_status``) and the
 pandas rules (column ``run-proof``). Nothing here reads a point name; everything comes from the model.
 
 Resolution, in order (first hit wins):
@@ -25,16 +25,16 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
 SKIP_REASON = "no_run_proof"
-RUN_PROOF_COLUMN = "run-proof"
+RUN_PROOF_COLUMN = "operating_status"
 
 
 def spec(catalog: Mapping | None = None) -> dict:
-    """The run-proof contract (``fdd-catalog.json`` -> ``run_proof``)."""
+    """The run-proof contract (``fdd-catalog.json`` -> ``operating_status``)."""
     if catalog is None:
         from open_fdd.nf.model import load_catalog
 
         catalog = load_catalog()
-    return dict(catalog["run_proof"])
+    return dict(catalog["operating_status"])
 
 
 # ---------------------------------------------------------------------------- pure resolution
@@ -315,11 +315,11 @@ def proof_on(series, threshold: float | None = None):
 
 # ---------------------------------------------------------------------------- which rules are gated
 def run_proof_gated_ids() -> frozenset[str]:
-    """Pandas rule ids that carry the run-proof gate (catalog ``run_proof: gated``; SQL ids mapped to their pandas twin)."""
+    """Pandas rule ids that carry the run-proof gate (catalog ``operating_status: gated``; SQL ids mapped to their pandas twin)."""
     from open_fdd.nf.model import load_catalog
     from open_fdd.parity.pandas_ref import PANDAS_ID
 
-    return frozenset(PANDAS_ID.get(r["id"], r["id"]) for r in load_catalog()["rules"] if r.get("run_proof") == "gated")
+    return frozenset(PANDAS_ID.get(r["id"], r["id"]) for r in load_catalog()["rules"] if r.get("operating_status") == "gated")
 
 
 def run_proof_gate_on(rule_id: str, params: Mapping, gates_on: bool = True) -> bool:

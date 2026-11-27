@@ -52,7 +52,7 @@ each input, parameter and output.
 | [**ECON-5**](sql-cookbook.html#econ-5) | Preheat over-conditioning | ahu | 10 min | [pandas](pandas-cookbook.html#econ-5) | match |
 | [**ECON-6**](sql-cookbook.html#econ-6) | Economizing in freezing weather | ahu | 10 min | [pandas](pandas-cookbook.html#econ-6) | match |
 | [**ECON-7**](sql-cookbook.html#econ-7) | Economizer OK but not economizing | ahu | 10 min | [pandas](pandas-cookbook.html#econ-7) | known divergence |
-| [**FAN-RUNTIME-HOURS**](sql-cookbook.html#fan-runtime-hours) | Fan running hours where fan_cmd &gt; 5% (normalized 0-1) | any | immediate | SQL only | SQL only |
+| [**FAN-RUNTIME-HOURS**](sql-cookbook.html#fan-runtime-hours) | Fan running hours where supply_fan_command &gt; 5% (normalized 0-1) | any | immediate | SQL only | SQL only |
 | [**FAULT-ELAPSED-HOURS**](sql-cookbook.html#fault-elapsed-hours) | Comfort fault sample count → hours | any | immediate | SQL only | SQL only |
 | [**FC1**](sql-cookbook.html#fc1) | Duct static below SP at full fan | ahu | 5 min | [pandas](pandas-cookbook.html#fc1) | match |
 | [**FC10**](sql-cookbook.html#fc10) | MAT-OAT delta while cooling and economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc10) | match |
@@ -85,7 +85,7 @@ each input, parameter and output.
 | [**OAT-METEO**](sql-cookbook.html#oat-meteo) | Equipment OAT vs weather-staged wx OAT | ahu | 15 min | [pandas](pandas-cookbook.html#oat-meteo) | known divergence |
 | [**PID-HUNT-1**](sql-cookbook.html#pid-hunt-1) | Suspected control-output hunting | ahu, vav, zone_other, chiller, boiler, heatpump | immediate | [pandas](pandas-cookbook.html#pid-hunt-1) | match |
 | [**RESET-1**](sql-cookbook.html#reset-1) | SAT reset not tracking outdoor air | ahu | 15 min | [pandas](pandas-cookbook.html#reset-1) | match |
-| [**SCHED-1**](sql-cookbook.html#sched-1) | Excess / wasted unoccupied fan runtime when the zone is already in the comfort band (optimal-start / schedule misconfig signal). Without zone_t, falls back to unoccupied + fan_on (pandas sched1 base). | ahu, zone_other | 30 min | [pandas](pandas-cookbook.html#sched-1) | match |
+| [**SCHED-1**](sql-cookbook.html#sched-1) | Excess / wasted unoccupied fan runtime when the zone is already in the comfort band (optimal-start / schedule misconfig signal). Without zone_air_temperature, falls back to unoccupied + fan_on (pandas sched1 base). | ahu, zone_other | 30 min | [pandas](pandas-cookbook.html#sched-1) | match |
 | [**SCHED-247**](sql-cookbook.html#sched-247) | Always-on fan or pump runtime | ahu, vav, zone_other, chiller, boiler, heatpump | 60 min | [pandas](pandas-cookbook.html#sched-247) | match |
 | [**SHORT-CYCLE**](sql-cookbook.html#short-cycle) | Too many starts per hour, or short on-times | boiler, chiller, heatpump, ahu | immediate | [pandas](pandas-cookbook.html#short-cycle) | match |
 | [**SV-FLATLINE**](sql-cookbook.html#sv-flatline) | Sensor flatline (stuck) | ahu, vav, chiller, boiler, weather, zone_other, heatpump | 5 min | [pandas](pandas-cookbook.html#sv-flatline) | match |

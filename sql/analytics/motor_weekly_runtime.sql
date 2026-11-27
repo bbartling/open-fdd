@@ -6,9 +6,9 @@
 --
 -- Same semantics as open_fdd.analytics.core.motor_run_hours_weekly on each chosen motor point's samples:
 --   * motor roles come from bound roles only, never from point names. Families, status before command:
---       fan      fan_status, fan_cmd
---       pump     pump_status, pump_cmd
---       chw_pump chw_pump_status, chw_pump_cmd
+--       fan      supply_fan_operating_status, supply_fan_command
+--       pump     pump_operating_status, pump_cmd
+--       chw_pump chilled_water_pump_operating_status, chilled_water_pump_command
 --       hw_pump  hw_pump_cmd
 --     A family uses its status point when one has samples in the window, else its command point.
 --   * a role bound to two points on one equipment is ambiguous: it is left out, never summed;
@@ -40,7 +40,7 @@ WITH src AS (
   JOIN fdd.point p ON p.site_id = s.site_id AND p.point_key = s.point_key
   WHERE s.site_id = {site_id}
     AND p.equipment_id IS NOT NULL
-    AND p.role IN ('fan_status', 'fan_cmd', 'pump_status', 'pump_cmd', 'chw_pump_status', 'chw_pump_cmd',
+    AND p.role IN ('supply_fan_operating_status', 'supply_fan_command', 'pump_operating_status', 'pump_cmd', 'chilled_water_pump_operating_status', 'chilled_water_pump_command',
                    'hw_pump_cmd'){equipment_filter}
 ),
 windowed AS (
@@ -56,9 +56,9 @@ bound AS (
 ),
 tagged AS (
   SELECT equipment_id, role, point_key,
-         CASE WHEN role IN ('fan_status', 'fan_cmd') THEN 'fan'
-              WHEN role IN ('pump_status', 'pump_cmd') THEN 'pump'
-              WHEN role IN ('chw_pump_status', 'chw_pump_cmd') THEN 'chw_pump'
+         CASE WHEN role IN ('supply_fan_operating_status', 'supply_fan_command') THEN 'fan'
+              WHEN role IN ('pump_operating_status', 'pump_cmd') THEN 'pump'
+              WHEN role IN ('chilled_water_pump_operating_status', 'chilled_water_pump_command') THEN 'chw_pump'
               ELSE 'hw_pump' END AS family,
          CASE WHEN role LIKE '%status' THEN 1 ELSE 2 END AS pref
   FROM bound

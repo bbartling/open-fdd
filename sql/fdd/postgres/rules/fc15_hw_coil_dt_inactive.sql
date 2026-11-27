@@ -4,10 +4,10 @@
 -- HW coil temps only. Mixed air and discharge air are not substitutes: a gas
 -- burner with no hot-water coil is not applicable (required coil roles).
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
@@ -15,17 +15,17 @@ WITH rp AS (
 -- fan-restart holdoff and active-coverage floor (as pandas: the operational gate is not the run-proof gate).
 h AS (
   SELECT
-    run_proof,
+    operating_status,
     equipment_id,
     timestamp_utc,
-    heating_coil_entering_temp AS enter_t,
-    heating_coil_leaving_temp AS leave_t,
-    COALESCE(htg_valve_pct, 0.0) AS htg,
-    COALESCE(clg_valve_pct, 0.0) AS clg,
-    COALESCE(fan_cmd, 0.0) AS fan,
+    heating_coil_inlet_air_temperature AS enter_t,
+    heating_coil_outlet_air_temperature AS leave_t,
+    COALESCE(heating_valve_position_command, 0.0) AS htg,
+    COALESCE(cooling_valve_position_command, 0.0) AS clg,
+    COALESCE(supply_fan_command, 0.0) AS fan,
         CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -35,18 +35,18 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN COALESCE(mode_stable, 1) = 0 THEN 0
       WHEN enter_t IS NULL OR leave_t IS NULL THEN 0
-      WHEN fan < {{FAN_ON_MIN}} THEN 0
+      WHEN fan < 0.5 THEN 0
       WHEN htg > {{HTG_ON_MIN}} THEN 0
       WHEN clg > {{CLG_ON_MIN}} THEN 0
       WHEN ABS(enter_t - leave_t) >= SQRT(2.0 * {{EPS_MAT}} * {{EPS_MAT}}) + {{DELTA_SUPPLY_FAN}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM (
   SELECT h.*,
     CASE

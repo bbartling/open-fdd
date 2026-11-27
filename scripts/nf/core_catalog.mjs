@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 const require = createRequire(path.join(root, "nf-app", "package.json"));
 const { PGlite } = await import(pathToFileURL(require.resolve("@electric-sql/pglite")).href);
 
-const TABLES = ["point", "rule_config", "rule_result"];
+const TABLES = ["point", "rule_config", "rule_result", "schema_meta"];
 const db = new PGlite();
 const sql = readFileSync(process.argv[2], "utf8");
 await db.exec(sql);

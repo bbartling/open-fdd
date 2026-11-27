@@ -2,14 +2,14 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- fcu_damper_pos.sql — first-class FCU screening rule
 WITH normalized AS (
-  SELECT equipment_id, timestamp_utc, sat, zone_t, zone_co2,
-    htg_valve_pct AS htg,
-    clg_valve_pct AS clg,
-    damper_cmd AS dcmd,
-    damper_pct AS dpos,
+  SELECT equipment_id, timestamp_utc, discharge_air_temperature, zone_air_temperature, zone_air_co2,
+    heating_valve_position_command AS htg,
+    cooling_valve_position_command AS clg,
+    damper_position_command AS dcmd,
+    damper_position AS dpos,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.10 THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE 0
     END AS fan_on
   FROM history

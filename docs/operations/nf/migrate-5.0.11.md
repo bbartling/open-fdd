@@ -10,8 +10,8 @@ It keeps separate scales for hours and percentages. Points history still omits a
 current output's unit boundary. The CI HTTP mock rejects oversized GET requests so the large-lane tests exercise
 the same class of failure observed at an NF front door.
 
-Each sweep publishes sensor results only for roles it can assess. No sweep emits a sensor result for `zone_flow`.
-`duct_static` is a sensor target for SV-RANGE and SV-SPIKE. An eligible sensor without coverage keeps null fault
+Each sweep publishes sensor results only for roles it can assess. No sweep emits a sensor result for `discharge_air_volume_flow_rate`.
+`discharge_air_static_pressure` is a sensor target for SV-RANGE and SV-SPIKE. An eligible sensor without coverage keeps null fault
 hours in Timescale and in the NF summary JSON. An assessed sensor with no faults keeps numeric zero. Old 5.0.10
 points for excluded roles may still exist. The upgrade preserves their NF history and stops publishing new values.
 

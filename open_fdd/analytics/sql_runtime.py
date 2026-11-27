@@ -30,24 +30,24 @@ TS_MS = {
 
 #: SQL role -> pandas analytics role (the hyphenated names used by ``open_fdd.analytics.core``).
 MOTOR_ROLES = {
-    "fan_status": "fan-status",
-    "fan_cmd": "fan-cmd",
-    "pump_status": "pump-status",
+    "supply_fan_operating_status": "supply_fan_operating_status",
+    "supply_fan_command": "supply_fan_command",
+    "pump_operating_status": "pump_operating_status",
     "pump_cmd": "pump-cmd",
-    "chw_pump_status": "chw-pump-status",
-    "chw_pump_cmd": "chw-pump-cmd",
+    "chilled_water_pump_operating_status": "chilled_water_pump_operating_status",
+    "chilled_water_pump_command": "chilled_water_pump_command",
     "hw_pump_cmd": "hw-pump-cmd",
 }
 
 #: Equipment types whose first pump signal is reported as the chiller's run, and the order that picks it.
 CHILLER_TYPES = {"CHW_PLANT", "CHILLER"}
-CHILLER_RUN_ORDER = ("chw-pump-status", "pump-status", "chw-pump-cmd", "pump-cmd")
+CHILLER_RUN_ORDER = ("chilled_water_pump_operating_status", "pump_operating_status", "chilled_water_pump_command", "pump-cmd")
 
 COLUMNS = ("equipment_id", "signal", "motor_family", "week_start_ms", "run_hours", "n_samples", "partial_week",
            "avg_oat_c", "in_hours")
 
 #: Outdoor-air roles, in the order pandas resolves them (web weather before BAS).
-OAT_ROLES = ("web-outside-air-temp", "bas-outside-air-temp", "outside-air-temp")
+OAT_ROLES = ("weather_service_air_temperature", "bas-outside-air-temp", "outdoor_air_intake_temperature")
 
 
 def _inline(columns: list[tuple[str, str]], rows: list[tuple]) -> str:

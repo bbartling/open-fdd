@@ -28,27 +28,27 @@ async function both(input, rules = SWEEPS) {
   return out.duckdb;
 }
 
-/** Equipment rows every 5 min over [0, minutes]; proof(minute) gives run_proof (undefined = column absent). */
+/** Equipment rows every 5 min over [0, minutes]; proof(minute) gives operating_status (undefined = column absent). */
 function history(minutes, proof) {
   const rows = [];
   for (let m = 0; m <= minutes; m += 5) {
     const row = { equipment_id: "eq-1", ts: START + m * MIN };
     const p = proof ? proof(m) : undefined;
-    if (p !== undefined) row.run_proof = p;
+    if (p !== undefined) row.operating_status = p;
     rows.push(row);
   }
   return rows;
 }
-const cols = (withProof) => (withProof ? [{ name: "run_proof", type: "double" }] : []);
+const cols = (withProof) => (withProof ? [{ name: "operating_status", type: "double" }] : []);
 function samples(series, minutes, value, skip = () => false) {
   const out = [];
   for (let m = 0; m <= minutes; m += 5) {
     if (skip(m)) continue;
-    out.push({ equipment_id: "eq-1", series_id: series, sensor_role: "sat", unit: "°C", ts: START + m * MIN, value: value(m) });
+    out.push({ equipment_id: "eq-1", series_id: series, sensor_role: "discharge_air_temperature", unit: "°C", ts: START + m * MIN, value: value(m) });
   }
   return out;
 }
-const declared = (series, fromMin, toMin) => ({ equipment_id: "eq-1", series_id: series, sensor_role: "sat", unit: "°C",
+const declared = (series, fromMin, toMin) => ({ equipment_id: "eq-1", series_id: series, sensor_role: "discharge_air_temperature", unit: "°C",
   window_start: START + fromMin * MIN, window_end: START + toMin * MIN });
 
 test("a 3-hour gap is SV-STALE only; the gap adds no FLATLINE / RANGE / SPIKE fault and keeps other value faults", async () => {
@@ -58,37 +58,37 @@ test("a 3-hour gap is SV-STALE only; the gap adds no FLATLINE / RANGE / SPIKE fa
   const value = (jump) => (m) => (m <= 60 ? 90 + wiggle(m) : m >= 300 && jump ? 40 + wiggle(m) : 13 + wiggle(m));
   const run = (jump) => both({
     historyColumns: cols(true), history: history(360, () => 1), weather: [],
-    sensorHistory: samples("sat-a", 360, value(jump), (m) => m > 120 && m < 300),
+    sensorHistory: samples("discharge_air_temperature-a", 360, value(jump), (m) => m > 120 && m < 300),
   });
   const out = await run(true);
   const control = await run(false);
-  assert.ok(near(out["SV-STALE"]["sat-a"].fault_hours, 3.0 - 0.5), `stale ${out["SV-STALE"]["sat-a"].fault_hours}`);
-  assert.ok(near(out["SV-STALE"]["sat-a"].covered_hours, 6.0));
-  assert.ok(out["SV-RANGE"]["sat-a"].fault_hours > 0.9, "the independent range fault at other times is kept");
-  assert.ok(out["SV-RANGE"]["sat-a"].fault_hours <= 65 / 60 + 1e-9, "no range fault inside the gap");
-  assert.equal(out["SV-FLATLINE"]["sat-a"].fault_hours, 0, "moving values are never a flatline");
+  assert.ok(near(out["SV-STALE"]["discharge_air_temperature-a"].fault_hours, 3.0 - 0.5), `stale ${out["SV-STALE"]["discharge_air_temperature-a"].fault_hours}`);
+  assert.ok(near(out["SV-STALE"]["discharge_air_temperature-a"].covered_hours, 6.0));
+  assert.ok(out["SV-RANGE"]["discharge_air_temperature-a"].fault_hours > 0.9, "the independent range fault at other times is kept");
+  assert.ok(out["SV-RANGE"]["discharge_air_temperature-a"].fault_hours <= 65 / 60 + 1e-9, "no range fault inside the gap");
+  assert.equal(out["SV-FLATLINE"]["discharge_air_temperature-a"].fault_hours, 0, "moving values are never a flatline");
   // the genuine 90 -> 13 step at minute 65 is a spike; the 13 -> 40 jump across the gap must add nothing
-  assert.ok(out["SV-SPIKE"]["sat-a"].fault_hours > 0, "the genuine step is kept");
-  assert.ok(near(out["SV-SPIKE"]["sat-a"].fault_hours, control["SV-SPIKE"]["sat-a"].fault_hours), "the jump across the gap is not a spike");
+  assert.ok(out["SV-SPIKE"]["discharge_air_temperature-a"].fault_hours > 0, "the genuine step is kept");
+  assert.ok(near(out["SV-SPIKE"]["discharge_air_temperature-a"].fault_hours, control["SV-SPIKE"]["discharge_air_temperature-a"].fault_hours), "the jump across the gap is not a spike");
 });
 
 test("an expected series with no sample faults for the whole window; a series that failed to fetch is not assessed", async () => {
   const input = {
     historyColumns: cols(true), history: history(240, () => 1), weather: [],
-    sensorHistory: samples("sat-live", 240, (m) => 13 + (m % 15) / 10),
-    // sat-dead was fetched successfully and returned nothing; sat-failed is not declared (its history request failed)
-    sweepSeries: [declared("sat-live", 0, 240), declared("sat-dead", 0, 240)],
+    sensorHistory: samples("discharge_air_temperature-live", 240, (m) => 13 + (m % 15) / 10),
+    // discharge_air_temperature-dead was fetched successfully and returned nothing; discharge_air_temperature-failed is not declared (its history request failed)
+    sweepSeries: [declared("discharge_air_temperature-live", 0, 240), declared("discharge_air_temperature-dead", 0, 240)],
   };
   const out = await both(input, ["SV-STALE", "SV-FLATLINE"]);
-  assert.ok(near(out["SV-STALE"]["sat-dead"].fault_hours, 4.0 - 0.5) && near(out["SV-STALE"]["sat-dead"].covered_hours, 4.0));
-  assert.equal(out["SV-STALE"]["sat-live"].fault_hours, 0);
-  assert.equal(out["SV-STALE"]["sat-failed"], undefined, "a failed fetch is not an observed empty series");
-  assert.equal(out["SV-FLATLINE"]["sat-dead"], undefined, "flatline needs present samples");
+  assert.ok(near(out["SV-STALE"]["discharge_air_temperature-dead"].fault_hours, 4.0 - 0.5) && near(out["SV-STALE"]["discharge_air_temperature-dead"].covered_hours, 4.0));
+  assert.equal(out["SV-STALE"]["discharge_air_temperature-live"].fault_hours, 0);
+  assert.equal(out["SV-STALE"]["discharge_air_temperature-failed"], undefined, "a failed fetch is not an observed empty series");
+  assert.equal(out["SV-FLATLINE"]["discharge_air_temperature-dead"], undefined, "flatline needs present samples");
 });
 
 test("an equipment with no history rows still assesses its declared series over the requested window", async () => {
-  const out = await both({ historyColumns: [], history: [], weather: [], sensorHistory: [], sweepSeries: [declared("sat-x", 0, 120)] }, ["SV-STALE"]);
-  assert.ok(near(out["SV-STALE"]["sat-x"].fault_hours, 1.5) && near(out["SV-STALE"]["sat-x"].covered_hours, 2.0));
+  const out = await both({ historyColumns: [], history: [], weather: [], sensorHistory: [], sweepSeries: [declared("discharge_air_temperature-x", 0, 120)] }, ["SV-STALE"]);
+  assert.ok(near(out["SV-STALE"]["discharge_air_temperature-x"].fault_hours, 1.5) && near(out["SV-STALE"]["discharge_air_temperature-x"].covered_hours, 2.0));
 });
 
 test("SV-STALE is independent of run proof: ON, OFF, unknown and unbound give the same gap fault", async () => {
@@ -96,8 +96,8 @@ test("SV-STALE is independent of run proof: ON, OFF, unknown and unbound give th
   const results = [];
   for (const [name, proof] of [["on", () => 1], ["off", () => 0], ["unknown", () => null], ["unbound", undefined]]) {
     const input = { historyColumns: cols(proof !== undefined), history: history(240, proof), weather: [],
-      sensorHistory: samples("sat-g", 240, (m) => 13 + (m % 15) / 10, gap) };
-    const row = (await both(input, ["SV-STALE"]))["SV-STALE"]["sat-g"];
+      sensorHistory: samples("discharge_air_temperature-g", 240, (m) => 13 + (m % 15) / 10, gap) };
+    const row = (await both(input, ["SV-STALE"]))["SV-STALE"]["discharge_air_temperature-g"];
     assert.ok(near(row.fault_hours, 1.5), `${name}: ${row.fault_hours}`);
     results.push(row.fault_hours);
   }
@@ -107,22 +107,22 @@ test("SV-STALE is independent of run proof: ON, OFF, unknown and unbound give th
 test("SV-FLATLINE gating: ON assesses, OFF is ineligible, unbound proof is SKIPPED (no_run_proof)", async () => {
   const stuck = () => 12.0;   // last value held with fresh timestamps
   const run = async (proof) => (await both({ historyColumns: cols(proof !== undefined), history: history(240, proof), weather: [],
-    sensorHistory: samples("sat-s", 240, stuck) }, ["SV-FLATLINE", "SV-STALE"]));
+    sensorHistory: samples("discharge_air_temperature-s", 240, stuck) }, ["SV-FLATLINE", "SV-STALE"]));
   const on = await run(() => 1);
-  assert.ok(on["SV-FLATLINE"]["sat-s"].fault_hours > 2, "ON: a held last value is a flatline");
-  assert.equal(on["SV-STALE"]["sat-s"].fault_hours, 0, "ON: fresh timestamps are not stale");
+  assert.ok(on["SV-FLATLINE"]["discharge_air_temperature-s"].fault_hours > 2, "ON: a held last value is a flatline");
+  assert.equal(on["SV-STALE"]["discharge_air_temperature-s"].fault_hours, 0, "ON: fresh timestamps are not stale");
   const off = await run(() => 0);
-  assert.equal(off["SV-FLATLINE"]["sat-s"].fault_hours, 0, "OFF: ineligible, no flatline fault");
+  assert.equal(off["SV-FLATLINE"]["discharge_air_temperature-s"].fault_hours, 0, "OFF: ineligible, no flatline fault");
   const unbound = await run(undefined);
-  assert.equal(unbound["SV-FLATLINE"]["sat-s"].fault_hours, null, "unbound proof: SKIPPED, not an assessed zero");
-  assert.equal(unbound["SV-FLATLINE"]["sat-s"].covered_hours, 0);
-  assert.equal(unbound["SV-STALE"]["sat-s"].fault_hours, 0, "stale still assesses without proof");
+  assert.equal(unbound["SV-FLATLINE"]["discharge_air_temperature-s"].fault_hours, null, "unbound proof: SKIPPED, not an assessed zero");
+  assert.equal(unbound["SV-FLATLINE"]["discharge_air_temperature-s"].covered_hours, 0);
+  assert.equal(unbound["SV-STALE"]["discharge_air_temperature-s"].fault_hours, 0, "stale still assesses without proof");
 });
 
 test("two sensors on one role are two series: only the silent one is stale", async () => {
   const input = { historyColumns: cols(true), history: history(240, () => 1), weather: [],
-    sensorHistory: [...samples("sat-1", 240, (m) => 13 + (m % 15) / 10), ...samples("sat-2", 240, () => 14, (m) => m > 30)] };
+    sensorHistory: [...samples("discharge_air_temperature-1", 240, (m) => 13 + (m % 15) / 10), ...samples("discharge_air_temperature-2", 240, () => 14, (m) => m > 30)] };
   const out = await both(input, ["SV-STALE"]);
-  assert.equal(out["SV-STALE"]["sat-1"].fault_hours, 0);
-  assert.ok(near(out["SV-STALE"]["sat-2"].fault_hours, (240 - 30) / 60 - 0.5));
+  assert.equal(out["SV-STALE"]["discharge_air_temperature-1"].fault_hours, 0);
+  assert.ok(near(out["SV-STALE"]["discharge_air_temperature-2"].fault_hours, (240 - 30) / 60 - 0.5));
 });

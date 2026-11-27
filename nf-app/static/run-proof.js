@@ -1,5 +1,5 @@
 // Run proof (#1608): is the equipment a rule judges proven running? Twin of open_fdd/run_proof.py, same contract
-// (fdd-catalog.json -> run_proof, built from sql/fdd/run_proof.json). Nothing here reads a point name: everything comes
+// (fdd-catalog.json -> operating_status, built from sql/fdd/run_proof.json). Nothing here reads a point name: everything comes
 // from the model (roles bound by NF class / markers, refs on the equipment records).
 //
 // Resolution, first hit wins:
@@ -48,7 +48,7 @@ function runProofCommandProblem(point) {
  * candidate, in contract order; a command whose scale is unknown is skipped (#1631) and listed in `refused`. */
 /** @returns {{ source: string, role: string, point: any } | null} */
 function ownRunProof(equipRec, model, catalog, refused = []) {
-  const own = catalog.run_proof.own;
+  const own = catalog.operating_status.own;
   const roles = [...own.status, ...own.command];
   const bound = bindRoles(roles, equipPool(equipRec, model), catalog);
   for (const source of ["status", "command"]) {
@@ -96,7 +96,7 @@ function runProofFeeders(equipRec, model, catalog) {
     return hits.length === 1 && hits[0] !== equipRec ? hits : [];
   };
   const out = [];
-  for (const ref of catalog.run_proof.feeders.refs) for (const rec of find(a[ref])) out.push({ rec, via: ref });
+  for (const ref of catalog.operating_status.feeders.refs) for (const rec of find(a[ref])) out.push({ rec, via: ref });
   for (const target of runProofList(a.isFedBy)) for (const rec of find(target)) out.push({ rec, via: "isFedBy" });
   const mine = runProofNames(equipRec);
   for (const rec of pool) if (runProofList((rec.attrs || {}).feeds).some((x) => mine.has(x))) out.push({ rec, via: "feeds" });
@@ -125,5 +125,5 @@ function resolveRunProof(equipRec, model, catalog, opts = {}) {
       if (hit) return { found: true, tier: "feeder", source: hit.source, role: hit.role, point: hit.point, equip: idOf(ahu), via: "assumedSingleAhu", assumed: true, refused };
     }
   }
-  return { found: false, reason: catalog.run_proof.skip_reason, refused };
+  return { found: false, reason: catalog.operating_status.skip_reason, refused };
 }

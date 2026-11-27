@@ -119,17 +119,17 @@ def test_js_producer_emits_the_same_bytes():
 def test_briefed_cases():
     out = {c["name"]: _build(c) for c in CASES["cases"]}
     flow = out["rule-sv-range-chw-flow"]
-    series = next(s for s in flow["series"] if s["role"] == "chw_flow")
+    series = next(s for s in flow["series"] if s["role"] == "chilled_water_volume_flow_rate")
     assert (series["quantity"], series["unit_si"]) == ("flow_water", "L/s")
     strip = next(s for s in flow["fault_strips"] if s["sensor_uuid"] == series["point_uuid"])
     assert strip["source"] == "timeline" and strip["approximate"] is False
     assert any(s["source"] == "intervals" and s["point_uuid"] is None for s in flow["fault_strips"])
     chw = out["rule-chw-1"]
     assert chw["fault_strips"][0]["source"] == "fault_pct" and chw["fault_strips"][0]["approximate"] is True
-    assert chw["missing"] == [{"role": "chiller_power", "reason": "unit_unusable"}]
+    assert chw["missing"] == [{"role": "chiller_electric_power", "reason": "unit_unusable"}]
     assert out["rule-fc1"]["fault_strips"][0]["source"] == "timeline"
     unbound = out["preset-ahu-cooling-valves-unbound-by-alias"]
-    assert unbound["missing"] == [{"role": "clg_valve_pct", "reason": "unbound"}] and unbound["preset_id"] == "ahu-cooling-valves"
+    assert unbound["missing"] == [{"role": "cooling_valve_position_command", "reason": "unbound"}] and unbound["preset_id"] == "ahu-cooling-valves"
     assert all(s["unit_si"] == "°C" for s in out["preset-ahu-dats-imperial-site"]["series"])
 
 

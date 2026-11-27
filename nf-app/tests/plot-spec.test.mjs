@@ -65,15 +65,15 @@ for (const c of cases.cases) {
 test("the golden cases cover the briefed rules and presets", () => {
   const out = Object.fromEntries(cases.cases.map((c) => [c.name, build(c)]));
   const flow = out["rule-sv-range-chw-flow"];
-  const flowSeries = flow.series.find((s) => s.role === "chw_flow");
+  const flowSeries = flow.series.find((s) => s.role === "chilled_water_volume_flow_rate");
   assert.ok(flowSeries && flowSeries.quantity === "flow_water" && flowSeries.unit_si === "L/s");
   assert.equal(flow.fault_strips.find((s) => s.sensor_uuid === flowSeries.point_uuid).source, "timeline");
   assert.ok(flow.fault_strips.some((s) => s.source === "intervals" && s.point_uuid === null));
   assert.equal(out["rule-chw-1"].fault_strips[0].source, "fault_pct");
   assert.equal(out["rule-chw-1"].fault_strips[0].approximate, true);
-  assert.deepEqual(out["rule-chw-1"].missing, [{ role: "chiller_power", reason: "unit_unusable" }]);
+  assert.deepEqual(out["rule-chw-1"].missing, [{ role: "chiller_electric_power", reason: "unit_unusable" }]);
   assert.equal(out["rule-fc1"].fault_strips[0].source, "timeline");
-  assert.deepEqual(out["preset-ahu-cooling-valves-unbound-by-alias"].missing, [{ role: "clg_valve_pct", reason: "unbound" }]);
+  assert.deepEqual(out["preset-ahu-cooling-valves-unbound-by-alias"].missing, [{ role: "cooling_valve_position_command", reason: "unbound" }]);
   assert.equal(out["preset-ahu-cooling-valves-unbound-by-alias"].preset_id, "ahu-cooling-valves");
   const dats = out["preset-ahu-dats-imperial-site"];
   assert.ok(dats.series.every((s) => s.unit_si === "°C" && s.quantity === "temperature"));
@@ -102,7 +102,7 @@ test("binding agrees with fdd.js bindRoles on the fixture", () => {
   }));
   const a = spec.buildRuleSpec(model, "FC1", equipOf("site-a/AHU-1"), cases.window, { catalog });
   const pool = model.points.filter((p) => p.siteRef === "site-a" && p.equipRef === "AHU-1" && p.tags.includes("point"));
-  const bound = ctx.__bind(["duct_static", "duct_static_sp", "fan_cmd", "fan_status"], pool, catalog);
+  const bound = ctx.__bind(["discharge_air_static_pressure", "discharge_air_static_pressure_setpoint", "supply_fan_command", "supply_fan_operating_status"], pool, catalog);
   for (const s of a.series) assert.equal(bound[s.role][0].uuid, s.point_uuid, s.role);
 });
 

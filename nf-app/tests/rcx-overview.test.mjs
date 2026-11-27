@@ -52,9 +52,9 @@ const POINTS = [
   pt("SAT", "sensor,discharge,air,temp", { class: "discharge-air-temp-sensor" }),
   pt("FAN-S", "sensor,discharge,fan,run", { class: "discharge-run-sensor", kind: "Bool", unit: "" }),
   pt("FAN-C", "cmd,discharge,fan,run", { class: "discharge-run-cmd", kind: "Bool", unit: "" }),
-  pt("DMP", "sensor,outside,damper", { class: "outside-damper-sensor", unit: "%" }),
+  pt("DMP", "cmd,outside,damper", { class: "outside-damper-cmd", unit: "%" }),
   pt("ECON1", "fdd,fault", { ruleRef: "ECON-1", unit: "" }),
-  rec("WX", "POINT", { siteRef: "s", weatherStationRef: "w", markers: "point,weather,outside,air,temp,his", kind: "Number", unit: "°F" }),
+  rec("WX", "POINT", { siteRef: "s", weatherStationRef: "w", markers: "point,weather,outside,air,temp,sensor,his", kind: "Number", unit: "°F" }),
 ];
 function setup(points = POINTS) {
   const ctx = load();
@@ -89,7 +89,7 @@ test("every view uses real catalog roles and kinds, unique ids, valid scope/grou
     assert.ok(v.roles.required.length || (v.roles.anyOf || []).length, `${v.id} needs a required role (or an anyOf set)`);
   }
   for (const id of ["weekly-fan", "weekly-fan-cmd", "weekly-pump", "weekly-compressor", "mech-cooling-chiller-status",
-    "economizer-delta", "economizer-mat-residual", "economizer-temps", "bas-vs-web-oat", "bas-vs-web-oat-hist"]) {
+    "economizer-delta", "economizer-mixed_air_temperature-residual", "economizer-temps", "bas-vs-web-oat", "bas-vs-web-oat-hist"]) {
     assert.ok(view(ctx, id), id);
   }
   assert.deepEqual(Object.keys(ctx).filter((k) => /^rcxOverview/.test(k)), ["rcxOverviewMath"]);
@@ -149,11 +149,11 @@ test("economizer (SQL): fan gate, identifiable delta (5.5556 delta degC = 10 del
   const { rcxOverviewMath: m } = setup().ctx;
   near(m.ECON_DT_MIN_C, 50 / 9, 1e-12);
   near(SA.ECON_DIAG_DT_MIN_C, m.ECON_DT_MIN_C, 1e-12);          // the caption constant is the SQL's
-  const edge = await SA.econFromGrid("duckdb", { t: [1, 2, 3], cols: { rat: [21, 21, 21], mat: [18, 18, 18], fan: [1, 1, 1], oa_t: [21 - 5.5, 21 - 5.6, 21 + 5.6] } });
+  const edge = await SA.econFromGrid("duckdb", { t: [1, 2, 3], cols: { return_air_temperature: [21, 21, 21], mixed_air_temperature: [18, 18, 18], fan: [1, 1, 1], outdoor_air_intake_temperature: [21 - 5.5, 21 - 5.6, 21 + 5.6] } });
   assert.deepEqual(edge.rows.map((r) => r.ident), [false, true, true]);
   const g = { t: [1, 2, 3, 4, 5], cols: {
-    oa_t: [10, 10, 10, 10, 10], rat: [30, 30, 30, 30, 30], mat: [20, 25, 20, 30, 20],
-    fan: [1, 1, 0, 1, 1], sat: [13, 13, 13, 13, 13], damper: [50, 50, 50, 50, null] } };
+    outdoor_air_intake_temperature: [10, 10, 10, 10, 10], return_air_temperature: [30, 30, 30, 30, 30], mixed_air_temperature: [20, 25, 20, 30, 20],
+    fan: [1, 1, 0, 1, 1], discharge_air_temperature: [13, 13, 13, 13, 13], damper: [50, 50, 50, 50, null] } };
   const { rows, summary } = await SA.econFromGrid("duckdb", g);
   assert.deepEqual(rows.map((r) => r.t), [1, 2, 4, 5]);          // fan off (t=3) dropped
   assert.deepEqual([rows[0].dOR, rows[0].dMR, rows[0].oaFrac, rows[0].matPred, rows[0].matResid], [-20, -10, 50, 20, 0]);
@@ -162,7 +162,7 @@ test("economizer (SQL): fan gate, identifiable delta (5.5556 delta degC = 10 del
   assert.deepEqual([rows[3].matResid, rows[3].damperPct], [null, null]);   // no damper reading
   assert.deepEqual([summary.n, summary.nIdent, summary.medianResid, summary.maeResid], [4, 4, 5, 5]);
   // not identifiable below the minimum delta: no OA fraction
-  const lo = await SA.econFromGrid("duckdb", { ...g, cols: { ...g.cols, oa_t: [27, 27, 27, 27, 27] } });
+  const lo = await SA.econFromGrid("duckdb", { ...g, cols: { ...g.cols, outdoor_air_intake_temperature: [27, 27, 27, 27, 27] } });
   assert.ok(lo.rows.length && lo.rows.every((r) => !r.ident && r.oaFrac === null));
 });
 
@@ -201,7 +201,7 @@ test("weekly-fan view: runtime bars per equip, fault lane last when the SCHED-24
   const { ctx, model, byName } = setup(withResult);
   ctx.series.set(byName("FAN-S").uuid, hourly(48, (i) => (i < 24 ? 1 : 0)));
   ctx.series.set(byName("OAT").uuid, hourly(48, () => 40));
-  ctx.series.set(byName("WX").uuid, hourly(48, () => 40));      // weather outdoor air is preferred over the equip oa_t
+  ctx.series.set(byName("WX").uuid, hourly(48, () => 40));      // weather outdoor air is preferred over the equip outdoor_air_intake_temperature
   ctx.series.set(byName("SCHED").uuid, hourly(48, (i) => (i > 30 ? 1 : 0)));
   const { note, out } = await renderView(ctx, model, "weekly-fan", 48);
   const o = out.option;
@@ -224,11 +224,11 @@ test("weekly-fan view: runtime bars per equip, fault lane last when the SCHED-24
   assert.equal(o.series[o.series.length - 1].xAxisIndex, o.xAxis.length - 1);
   assert.ok(o.xAxis.every((x) => x.min === o.xAxis[0].min));
   assert.match(note, /ISO weeks/);
-  // fan_cmd view yields to fan_status: this equip has a status point, so nothing to draw
+  // supply_fan_command view yields to supply_fan_operating_status: this equip has a status point, so nothing to draw
   ctx.series.set(byName("FAN-C").uuid, hourly(48, () => 1));
   const cmd = await view(ctx, "weekly-fan-cmd").render({}, ctx.rcxContext(view(ctx, "weekly-fan-cmd"),
     ctx.rcxBind(view(ctx, "weekly-fan-cmd"), model.equips, model, catalog), 48, model, catalog));
-  assert.match(cmd, /counted by the fan_status view/);
+  assert.match(cmd, /counted by the supply_fan_operating_status view/);
 });
 
 test("weekly runtime keeps week buckets visible for a one-hour historical range and bounds fault lanes to it", async () => {
@@ -265,7 +265,7 @@ test("no result point -> no fault lane", async () => {
   ctx.series.get(byName("RAT").uuid).forEach((s) => (s[1] = 70));
   ctx.series.get(byName("MAT").uuid).forEach((s) => (s[1] = 60));
   ctx.series.get(byName("DMP").uuid).forEach((s) => (s[1] = 50));
-  const { out } = await renderView(ctx, model, "economizer-mat-residual", 24);
+  const { out } = await renderView(ctx, model, "economizer-mixed_air_temperature-residual", 24);
   assert.ok(!Array.isArray(out.option.grid), "grid stays a single object without a lane");
   assert.equal(out.option.series.length, 1);
 });
@@ -275,7 +275,7 @@ test("economizer views: lane is the last grid when ECON-1 result exists; delta s
   const set = (n, f) => ctx.series.set(byName(n).uuid, hourly(24, f));
   set("OAT", () => 50); set("RAT", () => 70); set("MAT", (i) => 60 + (i % 3)); set("SAT", () => 55);
   set("FAN-S", () => 1); set("DMP", () => 50); set("ECON1", (i) => (i > 12 ? 1 : 0));
-  for (const id of ["economizer-mat-residual", "economizer-temps"]) {
+  for (const id of ["economizer-mixed_air_temperature-residual", "economizer-temps"]) {
     const { out } = await renderView(ctx, model, id, 24);
     const o = out.option;
     assert.equal(o.series[o.series.length - 1].name, "ECON-1", id);
@@ -299,7 +299,7 @@ test("bas-vs-web views: overlay with OAT-METEO lane, band uses theme colors, his
   const { note, out } = await renderView(ctx, model, "bas-vs-web-oat", 24);
   const o = out.option;
   assert.equal(o.series[o.series.length - 1].name, "OAT-METEO");
-  assert.deepEqual(arr(o.series.slice(0, 2), (s) => s.name), ["Web OAT", "BAS oa_t"]);
+  assert.deepEqual(arr(o.series.slice(0, 2), (s) => s.name), ["Web OAT", "BAS outdoor_air_intake_temperature"]);
   assert.equal(o.series[3].areaStyle.color, undefined);         // color comes from the theme palette
   near(o.series[3].data[0][1], 7.2, 1e-9);                      // 2 x 3.6 delta degF band (2 degC in SI math)
   assert.match(note, /bias 0\.50 Δ°F/);
@@ -366,7 +366,7 @@ test("display system switches last: SI shows degC / delta degC, imperial degF / 
 
 test("economizer residual / mech-cooling: degF and degC points give identical SI decisions", async () => {
   const f = unitSetup("°F"), c = unitSetup("°C");
-  const rf = await renderView(f.ctx, f.model, "economizer-mat-residual", 48), rc = await renderView(c.ctx, c.model, "economizer-mat-residual", 48);
+  const rf = await renderView(f.ctx, f.model, "economizer-mixed_air_temperature-residual", 48), rc = await renderView(c.ctx, c.model, "economizer-mixed_air_temperature-residual", 48);
   assert.equal(rf.note, rc.note);
   assert.deepEqual(arr(rf.out.option.series[0].data, (d) => d[1]), arr(rc.out.option.series[0].data, (d) => d[1]));
 });
@@ -449,7 +449,7 @@ test("ahu-runtime-daily view: hours per day per AHU from fan status, labelled; c
   const r = await renderView(noStatus.ctx, noStatus.model, "ahu-runtime-daily", 48);
   assert.deepEqual(arr(r.out.option.series, (s) => [s.name, arr(s.data)]), [["AHU-1 (command)", [6, 6]]]);
   assert.match(r.note, /from command \(no status point\)/);
-  // no fan point at all: the AHU does not bind (listed as missing "fan_status or fan_cmd")
+  // no fan point at all: the AHU does not bind (listed as missing "supply_fan_operating_status or supply_fan_command")
   const none = setup(POINTS.filter((p) => !/^FAN/.test(p.name)));
   assert.equal(none.ctx.rcxBind(view(none.ctx, "ahu-runtime-daily"), none.model.equips, none.model, catalog).length, 0);
 });
@@ -472,10 +472,10 @@ test("plant motors keep their weekly charts (the daily ones are registered only)
   for (const id of ["runtime-daily-pump", "runtime-daily-chw-pump", "runtime-daily-cw-pump", "runtime-daily-compressor", "runtime-daily-chiller", "runtime-daily-tower-fan"]) {
     assert.equal(byId[id].group, "Plant", id); assert.equal(byId[id].tabHidden, true, `${id}: the weekly chart replaces it`);
   }
-  assert.deepEqual(Array.from(byId["runtime-daily-chiller"].roles.anyOf), ["chiller_status", "chiller_cmd"], "status before command");
+  assert.deepEqual(Array.from(byId["runtime-daily-chiller"].roles.anyOf), ["chiller_operating_status", "chiller_command"], "status before command");
   for (const id of ["mech-cooling-compressor-status", "mech-cooling-chiller-status", "mech-cooling-chiller-cmd"]) assert.equal(byId[id].tabHidden, true);
   assert.equal(byId["mech-cooling-hours"].scope, "site", "one chart includes every relevant device (no picker)");
-  assert.deepEqual(Array.from(byId["mech-cooling-hours"].roles.anyOf), ["chiller_status", "compressor_status", "dx_cooling", "chiller_cmd", "compressor_cmd", "dx_cool_cmd"], "statuses before commands; no CHW valve");
+  assert.deepEqual(Array.from(byId["mech-cooling-hours"].roles.anyOf), ["chiller_operating_status", "compressor_operating_status", "dx_cooling", "chiller_command", "compressor_cmd", "dx_cool_cmd"], "statuses before commands; no CHW valve");
   // AHU / RTU DX proof binds (by markers, no catalog role needed)
   const RTU = rec("RTU-1", "EQUIPMENT", { id: "RTU-1", siteRef: "s", markers: "equip,ahu,rtu" });
   const dx = setup([rec("DX", "POINT", { siteRef: "s", equipRef: "RTU-1", markers: "point,his,dx,cool,cmd", kind: "Bool", unit: "" }),
@@ -499,7 +499,7 @@ test("plant motors keep their weekly charts (the daily ones are registered only)
   assert.deepEqual(arr(r.out.option.series, (x) => [x.name, arr(x.data)]), [["CH-1 (status)", [12, 0]]]);
   const c = await renderView(mk.ctx, mk.model, "mech-cooling-hours", 48);
   assert.deepEqual(arr(c.out.option.series, (x) => x.name), ["CH-1"], "one series per device, named by the device");
-  assert.match(c.note, /CH-1: chiller status/, "the proof is the status, not the command");
+  assert.match(c.note, /CH-1: chiller operating status/, "the proof is the status, not the command");
   assert.ok(c.out.option.series[0].data.some((h) => h > 0));
   // every cooling device of the site on ONE chart (no device picker): a chiller (status) and a DX rooftop unit (command)
   const RTU2 = rec("RTU-2", "EQUIPMENT", { id: "RTU-2", siteRef: "s", markers: "equip,ahu,rtu" });

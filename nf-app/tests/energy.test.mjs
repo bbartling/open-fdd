@@ -34,8 +34,8 @@ test("kW -> kWh (average kW x window hours) and register deltas, with resets", (
   assert.deepEqual(Array.from(M.intervalKwh(kw, "kw", 3600), (p) => p[1]), [10, 20]);
   assert.deepEqual(Array.from(M.intervalKwh([[0, 10]], "kw", 900), (p) => p[1]), [2.5]);
   const reg = [[0, 100], [1, 110], [2, 125], [3, 5], [4, 12]];   // reset between 2 and 3
-  assert.deepEqual(Array.from(M.intervalKwh(reg, "kwh", 3600), (p) => p[1]), [10, 15, 7]);
-  assert.deepEqual(Array.from(M.intervalKw(reg, "kwh", 1800), (p) => p[1]), [20, 30, 14]);
+  assert.deepEqual(Array.from(M.intervalKwh(reg, "electric_energy", 3600), (p) => p[1]), [10, 15, 7]);
+  assert.deepEqual(Array.from(M.intervalKw(reg, "electric_energy", 1800), (p) => p[1]), [20, 30, 14]);
   assert.equal(M.energyScale, undefined, "unit scaling now happens once, in ctx.series (SI)");
 });
 
@@ -61,38 +61,38 @@ test("degree-day display: C-days stay C-days in SI, F-days (x1.8) in imperial", 
 const days = Array.from({ length: 12 }, (_, i) => `2026-07-${String(i + 1).padStart(2, "0")}`);
 const tOf = (i) => 60 + 4 * i;
 function synth(shift = 0, partialLast = false) {
-  const kwh = [], kw = [], oat = [];
+  const electric_energy = [], kw = [], oat = [];
   days.forEach((d, i) => {
     const cdd = Math.max(0, tOf(i) - 65);
     const daily = 100 + 5 * cdd - (i >= 8 ? shift : 0);
     const n = partialLast && i === days.length - 1 ? 6 : 24;
     for (let h = 0; h < n; h++) {
-      kwh.push([at(d, h), daily / 24]);
+      electric_energy.push([at(d, h), daily / 24]);
       kw.push([at(d, h), daily / 24 + (h === 15 ? 3 : 0)]);
       oat.push([at(d, h), F2C(tOf(i))]);
     }
   });
-  return { kwh, kw, oat };
+  return { electric_energy, kw, oat };
 }
 
 test("dailyTable / monthlyTable aggregate, flag partial days and carry degree days", () => {
   const s = synth(0, true);
-  const daily = M.dailyTable(s.kwh, s.kw, s.oat, 3600);
+  const daily = M.dailyTable(s.electric_energy, s.kw, s.oat, 3600);
   assert.equal(daily.length, 12);
-  near(daily[0].kwh, 100); near(daily[0].peakKw, 100 / 24 + 3); near(daily[0].hdd, 5 / 1.8); assert.equal(daily[0].cdd, 0);
+  near(daily[0].electric_energy, 100); near(daily[0].peakKw, 100 / 24 + 3); near(daily[0].hdd, 5 / 1.8); assert.equal(daily[0].cdd, 0);
   near(daily[11].cdd, (tOf(11) - 65) / 1.8);
   assert.equal(daily[0].complete, true);
   assert.equal(daily[11].complete, false);
   const monthly = M.monthlyTable(daily);
   assert.equal(monthly.length, 1);
   assert.equal(monthly[0].month, "2026-07");
-  near(monthly[0].kwh, daily.reduce((a, d) => a + d.kwh, 0));
+  near(monthly[0].electric_energy, daily.reduce((a, d) => a + d.electric_energy, 0));
   near(monthly[0].days, 11.25);
   near(monthly[0].peakKw, Math.max(...daily.map((d) => d.peakKw)));
 });
 
 test("baselineFit recovers the line, picks CDD over HDD, and falls back flat with no variation", () => {
-  const daily = M.dailyTable(synth().kwh, [], synth().oat, 3600);
+  const daily = M.dailyTable(synth().electric_energy, [], synth().oat, 3600);
   const fit = M.baselineFit(daily);
   assert.equal(fit.xKey, "cdd");
   near(fit.slope, 9, 1e-6); near(fit.intercept, 100, 1e-6); near(fit.r2, 1, 1e-9);
@@ -106,7 +106,7 @@ test("baselineFit recovers the line, picks CDD over HDD, and falls back flat wit
 
 test("mvSavings: reporting days 20 kWh below the baseline model save 20 kWh/day", () => {
   const s = synth(20);
-  const daily = M.dailyTable(s.kwh, s.kw, s.oat, 3600);
+  const daily = M.dailyTable(s.electric_energy, s.kw, s.oat, 3600);
   const r = M.mvSavings(daily, { from: days[0], to: days[7] }, { from: days[8], to: days[11] }, "cdd");
   assert.equal(r.baseDays, 8); assert.equal(r.repDays, 4);
   near(r.fit.slope, 9, 1e-6);
@@ -126,10 +126,10 @@ test("EUI, rolling 12 months, season peaks and the hour x weekday grid", () => {
   assert.equal(M.euiUnit("imperial"), "kBtu/ft²/yr"); assert.equal(M.euiUnit("si"), "kWh/m²/yr");
   assert.equal(M.eui(1000, 30, 0), null);
   assert.equal(M.eui(1000, 30, null), null);
-  const monthly = Array.from({ length: 14 }, (_, i) => ({ month: `m${i}`, kwh: 10, days: 30 }));
+  const monthly = Array.from({ length: 14 }, (_, i) => ({ month: `m${i}`, electric_energy: 10, days: 30 }));
   const roll = M.rolling12(monthly);
-  assert.equal(roll[0].kwh, 10); assert.equal(roll[11].kwh, 120); assert.equal(roll[13].kwh, 120); assert.equal(roll[13].days, 360);
-  const daily = M.dailyTable(synth().kwh, synth().kw, synth().oat, 3600);
+  assert.equal(roll[0].electric_energy, 10); assert.equal(roll[11].electric_energy, 120); assert.equal(roll[13].electric_energy, 120); assert.equal(roll[13].days, 360);
+  const daily = M.dailyTable(synth().electric_energy, synth().kw, synth().oat, 3600);
   const seasons = Array.from(M.seasonPeaks(daily), (s) => ({ ...s }));
   assert.equal(seasons[0].season, "Cooling days"); assert.equal(seasons[0].days, 10);   // T > 65 from day 3 on
   assert.equal(seasons[1].days, 2);
@@ -153,7 +153,7 @@ test("siteMetric: EUI only when every site has an area", () => {
 });
 
 test("chart options are theme-free and well formed", () => {
-  const s = synth(), daily = M.dailyTable(s.kwh, s.kw, s.oat, 3600), monthly = M.monthlyTable(daily);
+  const s = synth(), daily = M.dailyTable(s.electric_energy, s.kw, s.oat, 3600), monthly = M.monthlyTable(daily);
   const fit = M.baselineFit(daily), res = M.residuals(daily, fit);
   const C = M.charts;
   const all = [
@@ -162,9 +162,9 @@ test("chart options are theme-free and well formed", () => {
     C.mvOption(M.mvSavings(daily, { from: days[0], to: days[7] }, { from: days[8], to: days[11] })),
     C.weatherOption(daily, fit, res, M.ddDisplay(1.8)),
   ];
-  const sites = [{ name: "A", area: 100, monthly, rolling: M.rolling12(monthly), kwh: 100, days: 10 }, { name: "B", area: 200, monthly, rolling: M.rolling12(monthly), kwh: 300, days: 10 }];
+  const sites = [{ name: "A", area: 100, monthly, rolling: M.rolling12(monthly), electric_energy: 100, days: 10 }, { name: "B", area: 200, monthly, rolling: M.rolling12(monthly), electric_energy: 300, days: 10 }];
   const metric = M.siteMetric(sites);
-  const rows = sites.map((x) => ({ ...x, value: metric.value(x.kwh, x.days, x.area) }));
+  const rows = sites.map((x) => ({ ...x, value: metric.value(x.electric_energy, x.days, x.area) }));
   all.push(C.peerBarsOption(rows, metric), C.peerBulletOption(rows[0], rows, metric), C.rankedOption(rows, metric),
     C.rollingOption(sites, metric), C.intensityOption(sites, metric), C.stackedOption(sites));
   for (const o of all) {
@@ -185,7 +185,7 @@ test("views register under Energy with real catalog roles and meter kind", () =>
   const ids = views.map((v) => v.id);
   assert.equal(new Set(ids).size, ids.length);
   for (const id of ["energy-demand-heatmap", "energy-interval-demand", "energy-monthly", "energy-weather-scatter", "energy-demand-peak",
-    "energy-peak-cooling", "energy-mv", "energy-mv-kwh", "energy-peer-bullet", "energy-peer-bars", "energy-ranked-eui",
+    "energy-peak-cooling", "energy-mv", "energy-mv-electric_energy", "energy-peer-bullet", "energy-peer-bars", "energy-ranked-eui",
     "energy-rolling12", "energy-intensity-heatmap", "energy-stacked-meters"]) assert.ok(ids.includes(id), id);
   for (const v of views) {
     for (const role of [...v.roles.required, ...v.roles.optional]) assert.ok(catalog.roles[role], `${v.id}: role ${role}`);
@@ -205,13 +205,13 @@ test("a meter equip with a kW point binds the kW views; a register-only meter bi
     sites: [], equips: [eq("M1"), eq("M2")], devices: [],
     points: [
       rec("kw", { siteRef: "s", equipRef: "M1", markers: "point,elec,power,sensor,his", unit: "kW" }),
-      rec("kwh", { siteRef: "s", equipRef: "M2", markers: "point,elec,energy,sensor,his", unit: "kWh" }),
+      rec("electric_energy", { siteRef: "s", equipRef: "M2", markers: "point,elec,energy,sensor,his", unit: "kWh" }),
     ].map(ctx.toPoint),
   };
   const plan = ctx.rcxPlan(model.equips, model, catalog);
   const ready = (id) => Array.from(plan.ready.find((r) => r.view.id === id)?.equips || [], (e) => e.name);
   assert.deepEqual(ready("energy-monthly"), ["M1"]);
-  assert.deepEqual(ready("energy-monthly-kwh"), ["M2"]);
+  assert.deepEqual(ready("energy-monthly-electric_energy"), ["M2"]);
 });
 
 // ---- end to end: a degF site and a degC site (same physical data) reach the same SI decisions ----

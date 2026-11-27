@@ -18,21 +18,21 @@ CREATE OR REPLACE MACRO fdd.norm_unit(value) AS
 
 CREATE OR REPLACE MACRO fdd.quantity_for_sql_role(role) AS
   CASE
-    WHEN trim(role) IN ('ahu_sat', 'chw_return_t', 'chw_supply_sp', 'chw_supply_t',
-      'cooling_coil_entering_temp', 'cooling_coil_leaving_temp', 'cooling_sp', 'cw_return_t',
-      'cw_supply_t', 'heating_coil_entering_temp', 'heating_coil_leaving_temp', 'heating_sp',
-      'hw_return_t', 'hw_supply_t', 'mat', 'oa_t', 'preheat_leave_t', 'rat', 'sat', 'sat_sp',
-      'vav_discharge_t', 'vav_inlet_t', 'web_oa_dp', 'web_oa_t', 'web_wb_t', 'zone_air_temp_sp', 'zone_t')
+    WHEN trim(role) IN ('air_handling_unit_discharge_air_temperature', 'return_chilled_water_temperature', 'supply_chilled_water_temperature_setpoint', 'supply_chilled_water_temperature',
+      'cooling_coil_inlet_air_temperature', 'cooling_coil_outlet_air_temperature', 'zone_cooling_air_temperature_setpoint', 'return_condenser_water_temperature',
+      'supply_condenser_water_temperature', 'heating_coil_inlet_air_temperature', 'heating_coil_outlet_air_temperature', 'zone_heating_air_temperature_setpoint',
+      'return_hot_water_temperature', 'supply_hot_water_temperature', 'mixed_air_temperature', 'outdoor_air_intake_temperature', 'preheat_heating_coil_outlet_air_temperature', 'return_air_temperature', 'discharge_air_temperature', 'discharge_air_temperature_setpoint',
+      'terminal_unit_discharge_air_temperature', 'terminal_unit_inlet_air_temperature', 'weather_service_air_dew_point_temperature', 'weather_service_air_temperature', 'weather_service_air_wet_bulb_temperature', 'zone_air_temperature_setpoint', 'zone_air_temperature')
       THEN 'absolute_temperature'
-    WHEN trim(role) IN ('ma_h', 'oa_h', 'ra_h', 'sa_h', 'web_oa_h', 'zone_rh')
+    WHEN trim(role) IN ('mixed_air_relative_humidity', 'outdoor_air_intake_relative_humidity', 'return_air_relative_humidity', 'discharge_air_relative_humidity', 'weather_service_air_relative_humidity', 'zone_air_relative_humidity')
       THEN 'relative_humidity'
-    WHEN trim(role) IN ('chw_dp', 'chw_dp_sp', 'duct_static', 'duct_static_sp') THEN 'air_pressure'
-    WHEN trim(role) IN ('chw_flow', 'min_flow_sp', 'vav_total_flow', 'zone_airflow_sp', 'zone_flow') THEN 'volume_flow'
-    WHEN trim(role) IN ('chiller_power', 'electric_kw') THEN 'power'
-    WHEN trim(role) IN ('electric_kwh', 'kwh') THEN 'energy'
-    WHEN trim(role) IN ('chiller_amps', 'chiller_current') THEN 'electric_current'
-    WHEN trim(role) = 'zone_co2' THEN 'concentration'
-    WHEN trim(role) IN ('chw_reset_request_sum', 'hw_reset_request_sum', 'static_reset_request') THEN 'count'
+    WHEN trim(role) IN ('chilled_water_pressure_delta', 'chilled_water_pressure_delta_setpoint', 'discharge_air_static_pressure', 'discharge_air_static_pressure_setpoint') THEN 'air_pressure'
+    WHEN trim(role) IN ('chilled_water_volume_flow_rate', 'discharge_air_volume_flow_rate_minimum', 'terminal_unit_discharge_air_total_volume_flow_rate', 'discharge_air_volume_flow_rate_setpoint', 'discharge_air_volume_flow_rate') THEN 'volume_flow'
+    WHEN trim(role) IN ('chiller_electric_power', 'electric_power') THEN 'power'
+    WHEN trim(role) IN ('electric_energy') THEN 'energy'
+    WHEN trim(role) IN ('chiller_electric_current') THEN 'electric_current'
+    WHEN trim(role) = 'zone_air_co2' THEN 'concentration'
+    WHEN trim(role) IN ('chilled_water_reset_request_count', 'hot_water_reset_request_count', 'discharge_air_static_pressure_reset_request_count') THEN 'count'
     ELSE NULL
   END;
 

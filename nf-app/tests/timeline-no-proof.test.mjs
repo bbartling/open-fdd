@@ -1,4 +1,4 @@
-// #1631: when a run-proof gated rule has no proof (every run_proof sample NULL), its summary row is SKIPPED (fault_hours
+// #1631: when a run-proof gated rule has no proof (every operating_status sample NULL), its summary row is SKIPPED (fault_hours
 // NULL, covered_hours 0). Its timeline must give the same answer: no rows, not a day of held, never-confirmed rows that
 // reads as assessed. scripts/nf/build_sql_pack.py build_timeline_pg filters equipment the rule's rp CTE marks
 // no_run_proof.
@@ -17,9 +17,9 @@ const START = Date.UTC(2026, 0, 1);
 function input(runProof) {
   const history = [];
   for (let m = 0; m <= 360; m += 5) {
-    history.push({ equipment_id: "ahu-1", ts: START + m * 60_000, run_proof: runProof, fan_status: 1, sat: 20, sat_sp: 12 });
+    history.push({ equipment_id: "ahu-1", ts: START + m * 60_000, operating_status: runProof, supply_fan_operating_status: 1, discharge_air_temperature: 20, discharge_air_temperature_setpoint: 12 });
   }
-  return { historyColumns: ["run_proof", "fan_status", "sat", "sat_sp"].map((name) => ({ name, type: "double" })),
+  return { historyColumns: ["operating_status", "supply_fan_operating_status", "discharge_air_temperature", "discharge_air_temperature_setpoint"].map((name) => ({ name, type: "double" })),
     history, weather: [], sensorHistory: [] };
 }
 

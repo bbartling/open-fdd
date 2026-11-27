@@ -11,7 +11,7 @@ from __future__ import annotations
 import pandas as pd
 
 LONG_COLUMNS = ("point_key", "equipment_id", "role", "ts_ms", "value")
-DIURNAL_ROLES = ("oa_t", "web_oa_t", "sat", "mat", "rat", "zone_t", "fan_cmd", "clg_valve_pct", "htg_valve_pct")
+DIURNAL_ROLES = ("outdoor_air_intake_temperature", "weather_service_air_temperature", "discharge_air_temperature", "mixed_air_temperature", "return_air_temperature", "zone_air_temperature", "supply_fan_command", "cooling_valve_position_command", "heating_valve_position_command")
 
 
 def _clean(long: pd.DataFrame, start_ms: int | None, end_ms: int | None) -> pd.DataFrame:
@@ -72,7 +72,7 @@ def role_timeseries(long: pd.DataFrame, roles, *, limit: int = 5000, start_ms: i
     return d.rename(columns={"ts_ms": "t"}).loc[:, ["point_key", "equipment_id", "role", "t", "value"]].reset_index(drop=True)
 
 
-ANOMALY_ROLES = ("sat", "mat", "rat", "oa_t", "web_oa_t", "zone_t", "duct_static")
+ANOMALY_ROLES = ("discharge_air_temperature", "mixed_air_temperature", "return_air_temperature", "outdoor_air_intake_temperature", "weather_service_air_temperature", "zone_air_temperature", "discharge_air_static_pressure")
 
 
 def anomaly_coverage(points: pd.DataFrame, long: pd.DataFrame, *, window: int = 24, roles=ANOMALY_ROLES,
@@ -90,10 +90,10 @@ def anomaly_coverage(points: pd.DataFrame, long: pd.DataFrame, *, window: int = 
     return out.sort_values("point_key", kind="stable").reset_index(drop=True)
 
 
-PID_COMMAND_ROLES = ("clg_valve_pct", "htg_valve_pct", "oa_damper_pct", "fan_cmd")
-PID_ROLES = (*PID_COMMAND_ROLES, "duct_static", "sat", "zone_t")
+PID_COMMAND_ROLES = ("cooling_valve_position_command", "heating_valve_position_command", "outdoor_air_intake_damper_position_command", "supply_fan_command")
+PID_ROLES = (*PID_COMMAND_ROLES, "discharge_air_static_pressure", "discharge_air_temperature", "zone_air_temperature")
 # variance limits = (legacy stddev limit)^2, written exactly as in pid_hunting_proxy.sql
-PID_VAR_LIMIT = {"sat": 19.75308641975309, "zone_t": 19.75308641975309, "duct_static": 3962966.1184}
+PID_VAR_LIMIT = {"discharge_air_temperature": 19.75308641975309, "zone_air_temperature": 19.75308641975309, "discharge_air_static_pressure": 3962966.1184}
 PID_VAR_LIMIT_COMMAND = 0.0064
 
 
@@ -112,12 +112,12 @@ def pid_hunting_proxy(long: pd.DataFrame, *, start_ms: int | None = None, end_ms
 
 
 # ---- slice 3: daily meter aggregates, day-over-day change points ---------------------------------------------------
-METER_ROLES = ("electric_kwh", "kwh", "electric_kw", "power_kw", "chiller_power", "gas_therm", "gas_ccf", "fuel_gal",
+METER_ROLES = ("electric_energy", "electric_energy", "electric_power", "power_kw", "chiller_electric_power", "gas_therm", "gas_ccf", "fuel_gal",
                "steam_mlb", "water_gal")
-FUEL_ROLES = ("gas_therm", "gas_ccf", "fuel_gal", "steam_mlb", "electric_kwh", "power_kw")
-MV_ROLES = ("electric_kwh", "kwh", "electric_kw", "gas_therm", "power_kw", "steam_mlb", "oa_t", "web_oa_t", "sat",
-            "zone_t")
-MV_TEMP_ROLES = ("oa_t", "web_oa_t", "sat", "zone_t")
+FUEL_ROLES = ("gas_therm", "gas_ccf", "fuel_gal", "steam_mlb", "electric_energy", "power_kw")
+MV_ROLES = ("electric_energy", "electric_energy", "electric_power", "gas_therm", "power_kw", "steam_mlb", "outdoor_air_intake_temperature", "weather_service_air_temperature", "discharge_air_temperature",
+            "zone_air_temperature")
+MV_TEMP_ROLES = ("outdoor_air_intake_temperature", "weather_service_air_temperature", "discharge_air_temperature", "zone_air_temperature")
 _DAY = 86_400_000
 
 
@@ -158,11 +158,11 @@ def mv_change_points(long: pd.DataFrame, *, roles=MV_ROLES, limit: int = 2000, s
 
 def zone_comfort(long: pd.DataFrame, occupied, *, lo_c: float, hi_c: float, start_ms: int | None = None,
                  end_ms: int | None = None) -> pd.DataFrame:
-    """Per zone_t point: n_occ (samples in any occupied (start_ms, end_ms) half-open interval), n_in_band and
+    """Per zone_air_temperature point: n_occ (samples in any occupied (start_ms, end_ms) half-open interval), n_in_band and
     pct_in_band for the band [lo_c, hi_c] degC. Worst first, then point_key; points with no occupied samples omitted."""
     lo, hi = float(min(lo_c, hi_c)), float(max(lo_c, hi_c))
     d = _clean(long, start_ms, end_ms)
-    d = d[d["role"] == "zone_t"]
+    d = d[d["role"] == "zone_air_temperature"]
     occ = pd.Series(False, index=d.index)
     for a, b in occupied:
         occ |= (d["ts_ms"] >= int(a)) & (d["ts_ms"] < int(b))

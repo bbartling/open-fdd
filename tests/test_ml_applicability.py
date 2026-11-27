@@ -23,28 +23,28 @@ def _furnace(n=6 * 288, seed=0, weak_heat_from=None):
         rise[weak_heat_from:] = np.where(heat[weak_heat_from:] > 0, 4.0, 0.5)
     return pd.DataFrame(
         {
-            "sat": zone + rise,
-            "zone_t": zone,
-            "htg_valve_pct": heat,
-            "oa_t": 2 + rng.normal(0, 1.0, n),
-            "fan_status": 1.0,
+            "discharge_air_temperature": zone + rise,
+            "zone_air_temperature": zone,
+            "heating_valve_position_command": heat,
+            "outdoor_air_intake_temperature": 2 + rng.normal(0, 1.0, n),
+            "supply_fan_operating_status": 1.0,
         },
         index=idx,
     )
 
 
 def test_ahu_keeps_only_mixed_air_families():
-    cols = ["mixed-air-temp", "return-air-temp", "outside-air-temp", "outside-air-damper",
-            "discharge-air-temp", "cooling-valve", "zone-air-temp", "heating-valve"]
+    cols = ["mixed_air_temperature", "return_air_temperature", "outdoor_air_intake_temperature", "outdoor_air_intake_damper_position_command",
+            "discharge_air_temperature", "cooling_valve_position_command", "zone_air_temperature", "heating_valve_position_command"]
     assert sorted(grey_box_families(cols)) == ["coil_delta_t", "oa_fraction"]
 
 
 def test_single_zone_families_pick_zone_then_return():
-    assert grey_box_families(["discharge-air-temp", "zone-air-temp", "return-air-temp", "heating-valve"]) == {
-        "heat_rise": ["discharge-air-temp", "zone-air-temp", "heating-valve"]
+    assert grey_box_families(["discharge_air_temperature", "zone_air_temperature", "return_air_temperature", "heating_valve_position_command"]) == {
+        "heat_rise": ["discharge_air_temperature", "zone_air_temperature", "heating_valve_position_command"]
     }
-    got = grey_box_families(["discharge-air-temp", "return-air-temp", "compressor-status"])
-    assert got == {"cool_drop": ["discharge-air-temp", "return-air-temp", "compressor-status"]}
+    got = grey_box_families(["discharge_air_temperature", "return_air_temperature", "compressor_operating_status"])
+    assert got == {"cool_drop": ["discharge_air_temperature", "return_air_temperature", "compressor_operating_status"]}
 
 
 def test_grey_box_fits_a_furnace_and_flags_a_weak_heat_rise():
@@ -55,14 +55,14 @@ def test_grey_box_fits_a_furnace_and_flags_a_weak_heat_rise():
     faulty = _furnace(weak_heat_from=4 * 288)
     test = faulty.iloc[4 * 288 :]
     flags = det.flags(test)
-    heating = test["htg_valve_pct"] > 0
+    heating = test["heating_valve_position_command"] > 0
     assert clean_rate < 0.03
     assert float(flags[heating].mean()) > 0.9
     assert float(flags[~heating].mean()) < 0.05
 
 
 def test_grey_box_error_names_the_families():
-    frame = _furnace().drop(columns=["htg_valve_pct"])
+    frame = _furnace().drop(columns=["heating_valve_position_command"])
     with pytest.raises(ValueError, match="heating valve"):
         GreyBox().fit(frame)
 
@@ -70,11 +70,11 @@ def test_grey_box_error_names_the_families():
 def test_applicability_reports_what_can_run_and_why_not():
     rows = {r["method"]: r for r in applicability(_furnace())}
     assert rows["grey_box"]["can_run"] and rows["grey_box"]["families"] == ["heat_rise"]
-    assert rows["pca"]["can_run"] and "zone-air-temp" in rows["pca"]["roles"]
-    bare = _furnace().drop(columns=["htg_valve_pct"])
+    assert rows["pca"]["can_run"] and "zone_air_temperature" in rows["pca"]["roles"]
+    bare = _furnace().drop(columns=["heating_valve_position_command"])
     gb = {r["method"]: r for r in applicability(bare)}["grey_box"]
-    assert not gb["can_run"] and "heat_rise: lacks heating-valve" in gb["reason"]
-    idle = _furnace().assign(fan_status=0.0)
+    assert not gb["can_run"] and "heat_rise: lacks heating_valve_position_command" in gb["reason"]
+    idle = _furnace().assign(supply_fan_operating_status=0.0)
     unproven = {r["method"]: r for r in applicability(idle)}
     assert not any(r["can_run"] for r in unproven.values())
     assert "no active rows" in unproven["zscore"]["reason"]
@@ -109,13 +109,13 @@ def _ahu_two_modes(n_per_mode=40, seed=1):
     damper = np.r_[np.full(n_per_mode, 0.1), np.full(n_per_mode, 0.8)]
     return pd.DataFrame(
         {
-            "sat": 13 + rng.normal(0, 0.3, n),
-            "mat": 18 + rng.normal(0, 0.5, n),
-            "rat": 22 + rng.normal(0, 0.3, n),
-            "oa_t": 10 + rng.normal(0, 1.0, n),
-            "oa_damper_pct": damper,
-            "clg_valve_pct": 0.0,
-            "fan_status": 1.0,
+            "discharge_air_temperature": 13 + rng.normal(0, 0.3, n),
+            "mixed_air_temperature": 18 + rng.normal(0, 0.5, n),
+            "return_air_temperature": 22 + rng.normal(0, 0.3, n),
+            "outdoor_air_intake_temperature": 10 + rng.normal(0, 1.0, n),
+            "outdoor_air_intake_damper_position_command": damper,
+            "cooling_valve_position_command": 0.0,
+            "supply_fan_operating_status": 1.0,
         },
         index=idx,
     )
@@ -140,27 +140,27 @@ def test_an_empty_mapped_role_is_ignored_and_applicability_matches_fit():
     from open_fdd.ml.detectors import PCASPE
 
     frame = _furnace()
-    frame["rat"] = frame["zone_t"] + np.random.default_rng(5).normal(0, 0.1, len(frame))
-    frame["zone_t"] = np.nan
-    assert grey_box_families(frame.rename(columns={"sat": "discharge-air-temp", "zone_t": "zone-air-temp",
-                                                   "rat": "return-air-temp", "htg_valve_pct": "heating-valve"}))[
+    frame["return_air_temperature"] = frame["zone_air_temperature"] + np.random.default_rng(5).normal(0, 0.1, len(frame))
+    frame["zone_air_temperature"] = np.nan
+    assert grey_box_families(frame.rename(columns={"discharge_air_temperature": "discharge_air_temperature", "zone_air_temperature": "zone_air_temperature",
+                                                   "return_air_temperature": "return_air_temperature", "heating_valve_position_command": "heating_valve_position_command"}))[
         "heat_rise"
-    ] == ["discharge-air-temp", "return-air-temp", "heating-valve"]
+    ] == ["discharge_air_temperature", "return_air_temperature", "heating_valve_position_command"]
     det = GreyBox().fit(frame)
     assert set(det.thresholds_) == {"heat_rise"}
-    assert det.families_["heat_rise"][1] == "return-air-temp"
+    assert det.families_["heat_rise"][1] == "return_air_temperature"
     pca = PCASPE().fit(frame)
-    assert "zone-air-temp" not in pca.roles
+    assert "zone_air_temperature" not in pca.roles
     rows = {r["method"]: r for r in applicability(frame)}
-    assert rows["grey_box"]["can_run"] and "return-air-temp" in rows["grey_box"]["roles"]
-    assert rows["pca"]["can_run"] and "zone-air-temp" not in rows["pca"]["roles"]
+    assert rows["grey_box"]["can_run"] and "return_air_temperature" in rows["grey_box"]["roles"]
+    assert rows["pca"]["can_run"] and "zone_air_temperature" not in rows["pca"]["roles"]
     for method in ("pca", "grey_box"):
         assert rows[method]["can_run"] == (rows[method]["reason"] == "")
 
 
 def test_an_all_nan_feature_frame_cannot_run():
     frame = _furnace()
-    for col in ("sat", "zone_t", "htg_valve_pct", "oa_t"):
+    for col in ("discharge_air_temperature", "zone_air_temperature", "heating_valve_position_command", "outdoor_air_intake_temperature"):
         frame[col] = np.nan
     rows = {r["method"]: r for r in applicability(frame)}
     assert not any(rows[m]["can_run"] for m in ("pca", "grey_box", "ocsvm", "zscore", "mad"))

@@ -79,36 +79,36 @@ test("inline Tuners: sweep filtering, scoped merge, per-rule reset & rollback pr
   assert.deepEqual(tuning.sweepFieldsForRule("VAV-1"), []);
 
   const bound = {
-    zone_t: [{ uuid: "p1" }],
-    sat: [{ uuid: "p2" }],
-    oa_t: [],
+    zone_air_temperature: [{ uuid: "p1" }],
+    discharge_air_temperature: [{ uuid: "p2" }],
+    outdoor_air_intake_temperature: [],
   };
-  assert.deepEqual(tuning.assessableSweepRoles(bound, catalog), ["zone-air-temp", "discharge-air-temp"]);
+  assert.deepEqual(tuning.assessableSweepRoles(bound, catalog), ["zone_air_temperature", "discharge_air_temperature"]);
 
   const existing = {
     version: 1,
     roles: {
-      "zone-air-temp": { lo: 12, hi: 28, spike_delta: 4.5 },
-      "discharge-air-temp": { lo: 8, spike_delta: 6.0 },
+      "zone_air_temperature": { lo: 12, hi: 28, spike_delta: 4.5 },
+      "discharge_air_temperature": { lo: 8, spike_delta: 6.0 },
     },
   };
-  const clearedRange = tuning.resetSweepOverrideForRule(existing, ["lo", "hi"], ["zone-air-temp"]);
+  const clearedRange = tuning.resetSweepOverrideForRule(existing, ["lo", "hi"], ["zone_air_temperature"]);
   assert.deepEqual(clearedRange.roles, {
-    "zone-air-temp": { spike_delta: 4.5 },
-    "discharge-air-temp": { lo: 8, spike_delta: 6.0 },
+    "zone_air_temperature": { spike_delta: 4.5 },
+    "discharge_air_temperature": { lo: 8, spike_delta: 6.0 },
   });
 
   const targetRev = {
     version: 1,
     roles: {
-      "zone-air-temp": { lo: 15, hi: 26, spike_delta: 9.9 },
-      "outside-air-temp": { lo: -30, hi: 45 },
+      "zone_air_temperature": { lo: 15, hi: 26, spike_delta: 9.9 },
+      "outdoor_air_intake_temperature": { lo: -30, hi: 45 },
     },
   };
-  const rolledRange = tuning.rollbackSweepOverrideForRule(targetRev, existing, ["lo", "hi"], ["zone-air-temp"]);
+  const rolledRange = tuning.rollbackSweepOverrideForRule(targetRev, existing, ["lo", "hi"], ["zone_air_temperature"]);
   assert.deepEqual(rolledRange.roles, {
-    "zone-air-temp": { spike_delta: 4.5, lo: 15, hi: 26 },
-    "discharge-air-temp": { lo: 8, spike_delta: 6.0 },
+    "zone_air_temperature": { spike_delta: 4.5, lo: 15, hi: 26 },
+    "discharge_air_temperature": { lo: 8, spike_delta: 6.0 },
   });
 });
 
@@ -207,7 +207,7 @@ test("hooks/fdd.js composes per-rule + SV-LIMITS overrides and isolates same rev
   const rows = [
     { site_id: "site-a", rule_id: "VAV-1", scope_key: "equip:VAV-1", revision: 1, parameters: { version: 1, params: { confirm_min: 15 } } },
     { site_id: "site-b", rule_id: "VAV-1", scope_key: "equip:VAV-1", revision: 1, parameters: { version: 1, params: { confirm_min: 25 } } },
-    { site_id: "site-a", rule_id: "SV-LIMITS", scope_key: "equip:VAV-1", revision: 1, parameters: { version: 1, roles: { "zone-air-temp": { lo: 12, hi: 28 } } } },
+    { site_id: "site-a", rule_id: "SV-LIMITS", scope_key: "equip:VAV-1", revision: 1, parameters: { version: 1, roles: { "zone_air_temperature": { lo: 12, hi: 28 } } } },
     { site_id: "site-a", rule_id: "SV-RANGE", scope_key: "equip:VAV-1", revision: 1, parameters: { version: 1, params: { confirm_min: 37 } } },
   ];
   const overrides = await fddHook.loadRoleLimitOverrides({

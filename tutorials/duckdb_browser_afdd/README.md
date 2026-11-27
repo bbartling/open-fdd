@@ -55,7 +55,7 @@ Read temperature values using their mapped role.
 ```sql
 SELECT equipment_id, ts, value AS sat_c
 FROM fdd.input_sample
-WHERE role = 'sat'
+WHERE role = 'discharge_air_temperature'
 ORDER BY ts DESC, equipment_id
 LIMIT 12;
 ```

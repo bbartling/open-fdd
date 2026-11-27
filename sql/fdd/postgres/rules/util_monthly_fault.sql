@@ -5,23 +5,23 @@
 WITH bas_raw AS (
   SELECT
     timestamp_utc,
-    kwh,
-    electric_kw,
+    electric_energy,
+    electric_power,
     EXTRACT(EPOCH FROM (
       LEAD(timestamp_utc) OVER (ORDER BY timestamp_utc) - timestamp_utc
     )) AS dt_seconds
   FROM history
-  WHERE kwh IS NOT NULL OR electric_kw IS NOT NULL
+  WHERE electric_energy IS NOT NULL OR electric_power IS NOT NULL
 ),
 bas_monthly AS (
   SELECT
     to_char(timestamp_utc AT TIME ZONE 'UTC', 'YYYY-MM') AS billing_period,
     SUM(
       COALESCE(
-        CAST(kwh AS DOUBLE PRECISION),
+        CAST(electric_energy AS DOUBLE PRECISION),
         CASE
           WHEN dt_seconds > 0.0 AND dt_seconds <= ({{MAX_GAP_HOURS}} * 3600.0)
-          THEN CAST(electric_kw AS DOUBLE PRECISION) * dt_seconds / 3600.0
+          THEN CAST(electric_power AS DOUBLE PRECISION) * dt_seconds / 3600.0
           ELSE 0.0
         END,
         0.0
@@ -33,9 +33,9 @@ bas_monthly AS (
 util AS (
   SELECT
     billing_period,
-    CAST(kwh AS DOUBLE PRECISION) AS util_kwh
+    CAST(electric_energy AS DOUBLE PRECISION) AS util_kwh
   FROM utility_monthly
-  WHERE kwh IS NOT NULL
+  WHERE electric_energy IS NOT NULL
 ),
 joined AS (
   SELECT

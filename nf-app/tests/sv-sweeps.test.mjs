@@ -20,17 +20,17 @@ function inputWithGap() {
   for (let minute = 0; minute <= 240; minute += 7) {
     history.push({
       equipment_id: "eq-1", ts: START + minute * 60_000,
-      sat: minute <= 35 ? 12.0 : null,
-      rat: 20 + minute / 100,
-      fan_status: 0,
+      discharge_air_temperature: minute <= 35 ? 12.0 : null,
+      return_air_temperature: 20 + minute / 100,
+      supply_fan_operating_status: 0,
     });
   }
   if (history.at(-1).ts !== START + 240 * 60_000) {
-    history.push({ equipment_id: "eq-1", ts: START + 240 * 60_000, sat: null, rat: 22.4, fan_status: 0 });
+    history.push({ equipment_id: "eq-1", ts: START + 240 * 60_000, discharge_air_temperature: null, return_air_temperature: 22.4, supply_fan_operating_status: 0 });
   }
   return {
     history,
-    authorizedSeries: ["sat", "rat"].map((role) => ({ site_id: "site-1", equipment_id: "eq-1", role, unit: "°C" })),
+    authorizedSeries: ["discharge_air_temperature", "return_air_temperature"].map((role) => ({ site_id: "site-1", equipment_id: "eq-1", role, unit: "°C" })),
     equipment: [{ building_id: "site-1", equipment_id: "eq-1" }],
   };
 }
@@ -40,14 +40,14 @@ function inputWithRatSpike() {
   for (let minute = 0; minute <= 120; minute += 7) {
     history.push({
       equipment_id: "eq-1", ts: START + minute * 60_000,
-      sat: 12 + minute / 100,
-      rat: minute < 70 ? 21 : 30,
-      fan_status: 1,
+      discharge_air_temperature: 12 + minute / 100,
+      return_air_temperature: minute < 70 ? 21 : 30,
+      supply_fan_operating_status: 1,
     });
   }
   return {
     history,
-    authorizedSeries: ["sat", "rat"].map((role) => ({ site_id: "site-1", equipment_id: "eq-1", role, unit: "°C" })),
+    authorizedSeries: ["discharge_air_temperature", "return_air_temperature"].map((role) => ({ site_id: "site-1", equipment_id: "eq-1", role, unit: "°C" })),
     equipment: [{ building_id: "site-1", equipment_id: "eq-1" }],
   };
 }
@@ -58,14 +58,14 @@ function inputWithFlatSat() {
   for (let minute = 0; minute <= 133; minute += 7) {
     history.push({
       equipment_id: "eq-1", ts: START + minute * 60_000,
-      sat: 12.0,
-      rat: 20 + minute / 100,
-      fan_status: 1,
+      discharge_air_temperature: 12.0,
+      return_air_temperature: 20 + minute / 100,
+      supply_fan_operating_status: 1,
     });
   }
   return {
     history,
-    authorizedSeries: ["sat", "rat"].map((role) => ({ site_id: "site-1", equipment_id: "eq-1", role, unit: "°C" })),
+    authorizedSeries: ["discharge_air_temperature", "return_air_temperature"].map((role) => ({ site_id: "site-1", equipment_id: "eq-1", role, unit: "°C" })),
     equipment: [{ building_id: "site-1", equipment_id: "eq-1" }],
   };
 }
@@ -85,14 +85,14 @@ function withSensorHistory(input, sensors) {
 }
 
 const twoRoleSensors = [
-  { series_id: "series-sat-1", role: "sat", unit: "°C" },
-  { series_id: "series-rat-1", role: "rat", unit: "°C" },
+  { series_id: "series-discharge_air_temperature-1", role: "discharge_air_temperature", unit: "°C" },
+  { series_id: "series-return_air_temperature-1", role: "return_air_temperature", unit: "°C" },
 ];
 const sweepScore = (out, rule, series_id) => Number(out[rule].find((row) => row.series_id === series_id)?.fault_hours ?? 0);
 const sweepCovered = (out, rule, series_id) => Number(out[rule].find((row) => row.series_id === series_id)?.covered_hours ?? 0);
 
 /** The resolved run proof (#1608) of these fixtures is their own fan status (tier 1), as the hook would bind it. */
-const withRunProof = (input) => ({ ...input, history: input.history.map((row) => ("run_proof" in row ? row : { ...row, run_proof: row.fan_status ?? null })) });
+const withRunProof = (input) => ({ ...input, history: input.history.map((row) => ("operating_status" in row ? row : { ...row, operating_status: row.supply_fan_operating_status ?? null })) });
 
 async function queryBoth(input, ruleIds) {
   input = withRunProof(input);
@@ -111,68 +111,68 @@ test("#1673: trailing silence is SV-STALE only, per sensor, including while de-e
   const out = await queryBoth(withSensorHistory(inputWithGap(), twoRoleSensors), SILENCE_SWEEPS);
   // Last SAT observation is minute 35, equipment history ends at minute 240; stale_after_hours is 0.5 h.
   const expectedSilenceHours = (240 - 35) / 60 - 0.5;
-  assert.ok(around(sweepScore(out, "SV-STALE", "series-sat-1"), expectedSilenceHours), `SV-STALE/sat=${sweepScore(out, "SV-STALE", "series-sat-1")}`);
+  assert.ok(around(sweepScore(out, "SV-STALE", "series-discharge_air_temperature-1"), expectedSilenceHours), `SV-STALE/discharge_air_temperature=${sweepScore(out, "SV-STALE", "series-discharge_air_temperature-1")}`);
   for (const rule of SILENCE_SWEEPS) {
-    if (rule !== "SV-STALE") assert.ok(around(sweepScore(out, rule, "series-sat-1"), 0), `${rule}/sat must not score the gap: ${sweepScore(out, rule, "series-sat-1")}`);
-    assert.ok(around(sweepScore(out, rule, "series-rat-1"), 0), `${rule}/rat=${sweepScore(out, rule, "series-rat-1")}`);
+    if (rule !== "SV-STALE") assert.ok(around(sweepScore(out, rule, "series-discharge_air_temperature-1"), 0), `${rule}/discharge_air_temperature must not score the gap: ${sweepScore(out, rule, "series-discharge_air_temperature-1")}`);
+    assert.ok(around(sweepScore(out, rule, "series-return_air_temperature-1"), 0), `${rule}/return_air_temperature=${sweepScore(out, rule, "series-return_air_temperature-1")}`);
   }
 });
 
 test("trailing silence uses equipment end even when the last sensor timestamp has no wide row", async () => {
   const history = [];
   for (let minute = 0; minute <= 70; minute += 7) {
-    history.push({ equipment_id: "eq-1", ts: START + minute * 60_000, sat: null, fan_status: 0 });
+    history.push({ equipment_id: "eq-1", ts: START + minute * 60_000, discharge_air_temperature: null, supply_fan_operating_status: 0 });
   }
   const sensorHistory = [0, 10].map((minute) => ({
-    equipment_id: "eq-1", series_id: "series-sat", sensor_role: "sat", unit: "°C",
+    equipment_id: "eq-1", series_id: "series-discharge_air_temperature", sensor_role: "discharge_air_temperature", unit: "°C",
     ts: START + minute * 60_000, value: 12,
   }));
   const out = await queryBoth({ history, sensorHistory }, SILENCE_SWEEPS);
   // The t=10 sensor row has no exact-time wide proof row; the equipment still ends at t=70 (gap 60 min - 30 min).
-  assert.ok(around(sweepScore(out, "SV-STALE", "series-sat"), 0.5), "SV-STALE: trailing silence should reach the independent equipment end");
+  assert.ok(around(sweepScore(out, "SV-STALE", "series-discharge_air_temperature"), 0.5), "SV-STALE: trailing silence should reach the independent equipment end");
   for (const rule of SILENCE_SWEEPS.filter((r) => r !== "SV-STALE")) {
-    assert.ok(around(sweepScore(out, rule, "series-sat"), 0), `${rule}: the gap is not this rule's fault (#1673)`);
+    assert.ok(around(sweepScore(out, rule, "series-discharge_air_temperature"), 0), `${rule}: the gap is not this rule's fault (#1673)`);
   }
 });
 
 test("SV-SPIKE preserves the role that jumped", async () => {
   const out = await queryBoth(withSensorHistory(inputWithRatSpike(), twoRoleSensors), ["SV-SPIKE"]);
-  assert.ok(sweepScore(out, "SV-SPIKE", "series-rat-1") > 0, "rat spike should be reported");
-  assert.ok(around(sweepScore(out, "SV-SPIKE", "series-sat-1"), 0), "normal sat must stay clear");
+  assert.ok(sweepScore(out, "SV-SPIKE", "series-return_air_temperature-1") > 0, "return_air_temperature spike should be reported");
+  assert.ok(around(sweepScore(out, "SV-SPIKE", "series-discharge_air_temperature-1"), 0), "normal discharge_air_temperature must stay clear");
 });
 
 test("#1673: a stuck sensor that is still polled is SV-FLATLINE only; a changing peer does not mask it", async () => {
   const out = await queryBoth(withSensorHistory(inputWithFlatSat(), twoRoleSensors), ["SV-STALE", "SV-FLATLINE", "SV-RANGE", "SV-SPIKE"]);
-  assert.ok(sweepScore(out, "SV-FLATLINE", "series-sat-1") > 0, "SV-FLATLINE/sat should be faulted");
-  assert.ok(around(sweepScore(out, "SV-FLATLINE", "series-rat-1"), 0), "SV-FLATLINE/rat should remain clear");
+  assert.ok(sweepScore(out, "SV-FLATLINE", "series-discharge_air_temperature-1") > 0, "SV-FLATLINE/discharge_air_temperature should be faulted");
+  assert.ok(around(sweepScore(out, "SV-FLATLINE", "series-return_air_temperature-1"), 0), "SV-FLATLINE/return_air_temperature should remain clear");
   for (const rule of ["SV-STALE", "SV-RANGE", "SV-SPIKE"]) {
-    assert.ok(around(sweepScore(out, rule, "series-sat-1"), 0), `${rule}: a polled stuck value is not ${rule}`);
-    assert.ok(sweepCovered(out, rule, "series-sat-1") > 0, `${rule}: the stuck sensor is still assessed`);
+    assert.ok(around(sweepScore(out, rule, "series-discharge_air_temperature-1"), 0), `${rule}: a polled stuck value is not ${rule}`);
+    assert.ok(sweepCovered(out, rule, "series-discharge_air_temperature-1") > 0, `${rule}: the stuck sensor is still assessed`);
   }
 });
 
 test("SV-RANGE resets confirmation after a gap and does not count the gap as fault time (#1673)", async () => {
   const input = withSensorHistory({
-    history: [[0, 12], [7, 75], [60, 12], [62, 75], [64, 12]].map(([minute, sat]) => ({
-      equipment_id: "eq-1", ts: START + minute * 60_000, sat, fan_status: 1,
+    history: [[0, 12], [7, 75], [60, 12], [62, 75], [64, 12]].map(([minute, discharge_air_temperature]) => ({
+      equipment_id: "eq-1", ts: START + minute * 60_000, discharge_air_temperature, supply_fan_operating_status: 1,
     })),
-    authorizedSeries: [{ site_id: "site-1", equipment_id: "eq-1", role: "sat", unit: "°C" }],
+    authorizedSeries: [{ site_id: "site-1", equipment_id: "eq-1", role: "discharge_air_temperature", unit: "°C" }],
     equipment: [{ building_id: "site-1", equipment_id: "eq-1" }],
-  }, [{ series_id: "series-sat-1", role: "sat", unit: "°C" }]);
+  }, [{ series_id: "series-discharge_air_temperature-1", role: "discharge_air_temperature", unit: "°C" }]);
   const out = await queryBoth(input, ["SV-RANGE"]);
   // Count the first fault's 30-minute hold only: the 23 minutes of silence beyond it are unknown here, not a range
   // fault (SV-STALE scores gaps). The two-minute fault after the gap has not met five-minute confirmation.
-  assert.ok(around(sweepScore(out, "SV-RANGE", "series-sat-1"), 30 / 60), `sat=${sweepScore(out, "SV-RANGE", "series-sat-1")}`);
+  assert.ok(around(sweepScore(out, "SV-RANGE", "series-discharge_air_temperature-1"), 30 / 60), `discharge_air_temperature=${sweepScore(out, "SV-RANGE", "series-discharge_air_temperature-1")}`);
 });
 
 test("all five sweeps return separate rows and timelines for same-role sensors", async () => {
   const history = [0, 5, 10, 15].map((minute) => ({
-    equipment_id: "eq-1", ts: START + minute * 60_000, sat: 20, fan_status: 1,
+    equipment_id: "eq-1", ts: START + minute * 60_000, discharge_air_temperature: 20, supply_fan_operating_status: 1,
   }));
   const sensorHistory = [];
   for (const [series_id, values] of [["series-healthy", [20, 20, 20, 20]], ["series-fault", [20, 75, 75, 75]]]) {
     history.forEach((row, index) => sensorHistory.push({
-      equipment_id: row.equipment_id, series_id, sensor_role: "sat", unit: "°C", ts: row.ts, value: values[index],
+      equipment_id: row.equipment_id, series_id, sensor_role: "discharge_air_temperature", unit: "°C", ts: row.ts, value: values[index],
     }));
   }
   const input = withRunProof({ history, sensorHistory, equipment: [{ building_id: "site-1", equipment_id: "eq-1" }] });
@@ -182,7 +182,7 @@ test("all five sweeps return separate rows and timelines for same-role sensors",
     for (const rule of ALL_SWEEPS) {
       const a = await pg.query(rule);
       assert.equal(a.length, 2, `${rule} returns both series`);
-      assert.deepEqual(new Set(a.map((row) => row.sensor_role)), new Set(["sat"]), `${rule} keeps role descriptive`);
+      assert.deepEqual(new Set(a.map((row) => row.sensor_role)), new Set(["discharge_air_temperature"]), `${rule} keeps role descriptive`);
       assert.ok(a.every((row) => Number(row.covered_hours) > 0), `${rule} reports per-series coverage`);
       const timelines = await pg.timeline(rule);
       assert.ok(timelines.some((row) => row.series_id === "series-fault"), `${rule} timeline has fault sensor`);
@@ -199,13 +199,13 @@ test("all five sweeps return separate rows and timelines for same-role sensors",
 
 test("sweeps emit only their canonical assessable roles", async () => {
   const history = [0, 5, 10].map((minute) => ({
-    equipment_id: "eq-1", ts: START + minute * 60_000, sat: 20, duct_static: 250, zone_flow: 50, fan_status: 1,
+    equipment_id: "eq-1", ts: START + minute * 60_000, discharge_air_temperature: 20, discharge_air_static_pressure: 250, discharge_air_volume_flow_rate: 50, supply_fan_operating_status: 1,
   }));
   const sensorHistory = [];
   for (const [series_id, sensor_role, unit, value] of [
-    ["sat-id", "sat", "°C", 20],
-    ["static-id", "duct_static", "Pa", 250],
-    ["flow-id", "zone_flow", "L/s", 50],
+    ["discharge_air_temperature-id", "discharge_air_temperature", "°C", 20],
+    ["static-id", "discharge_air_static_pressure", "Pa", 250],
+    ["flow-id", "discharge_air_volume_flow_rate", "L/s", 50],
   ]) {
     for (const row of history) sensorHistory.push({
       equipment_id: row.equipment_id, series_id, sensor_role, unit, ts: row.ts, value,
@@ -216,16 +216,16 @@ test("sweeps emit only their canonical assessable roles", async () => {
     const expected = new Set(catalog.sensor_sweep_roles[rule]);
     const actual = new Set(out[rule].map((row) => row.sensor_role));
     assert.deepEqual(actual, new Set([...actual].filter((role) => expected.has(role))), `${rule} rows stay in its allowlist`);
-    assert.equal(actual.has("zone_flow"), ["SV-RANGE", "SV-STALE"].includes(rule), `${rule} zone airflow inclusion`);
-    assert.equal(actual.has("duct_static"), ["SV-RANGE", "SV-SPIKE", "SV-STALE"].includes(rule), `${rule} duct static inclusion`);
+    assert.equal(actual.has("discharge_air_volume_flow_rate"), ["SV-RANGE", "SV-STALE"].includes(rule), `${rule} zone airflow inclusion`);
+    assert.equal(actual.has("discharge_air_static_pressure"), ["SV-RANGE", "SV-SPIKE", "SV-STALE"].includes(rule), `${rule} duct static inclusion`);
     assert.ok(out[rule].every((row) => row.fault_hours != null || Number(row.covered_hours) === 0), `${rule} null hours mean no coverage`);
   }
 });
 
 test("a never-covered assessable sensor returns NULL fault hours, not zero", async () => {
-  const history = [{ equipment_id: "eq-1", ts: START, sat: 20, fan_status: 1 }];
+  const history = [{ equipment_id: "eq-1", ts: START, discharge_air_temperature: 20, supply_fan_operating_status: 1 }];
   const sensorHistory = [{
-    equipment_id: "eq-1", series_id: "sat-never-covered", sensor_role: "sat", unit: "°C", ts: START, value: 20,
+    equipment_id: "eq-1", series_id: "discharge_air_temperature-never-covered", sensor_role: "discharge_air_temperature", unit: "°C", ts: START, value: 20,
   }];
   const out = await queryBoth({ history, sensorHistory }, ALL_SWEEPS);
   for (const rule of ALL_SWEEPS) {
@@ -238,30 +238,30 @@ test("a never-covered assessable sensor returns NULL fault hours, not zero", asy
 test("a non-SI sample starts a fresh per-sensor confirmation segment", async () => {
   const samples = [[0, 75, "°C"], [2, 75, "°C"], [4, 75, "°C"], [6, 75, "°F"],
     [8, 75, "°C"], [10, 75, "°C"], [12, 20, "°C"]];
-  const history = samples.map(([minute, sat]) => ({
-    equipment_id: "eq-1", ts: START + minute * 60_000, sat, fan_status: 1,
+  const history = samples.map(([minute, discharge_air_temperature]) => ({
+    equipment_id: "eq-1", ts: START + minute * 60_000, discharge_air_temperature, supply_fan_operating_status: 1,
   }));
   const sensorHistory = samples.map(([minute, value, unit]) => ({
-    equipment_id: "eq-1", series_id: "series-sat", sensor_role: "sat", unit,
+    equipment_id: "eq-1", series_id: "series-discharge_air_temperature", sensor_role: "discharge_air_temperature", unit,
     ts: START + minute * 60_000, value,
   }));
   const out = await queryBoth({ history, sensorHistory }, ["SV-RANGE"]);
   // The first segment contributes only its confirmed final two-minute hold. The two-minute
   // second-segment fault stays below confirm_min even though it has the same role and series.
-  assert.ok(around(sweepScore(out, "SV-RANGE", "series-sat"), 2 / 60),
-    `unit boundary must reset the streak: ${sweepScore(out, "SV-RANGE", "series-sat")} h`);
+  assert.ok(around(sweepScore(out, "SV-RANGE", "series-discharge_air_temperature"), 2 / 60),
+    `unit boundary must reset the streak: ${sweepScore(out, "SV-RANGE", "series-discharge_air_temperature")} h`);
 });
 
 test("three same-role SI sensors isolate fault, healthy zero, insufficient history, operating gate, and row order", async () => {
-  // Two temperature sensors on role 'sat' (one faulted, one healthy), plus a third sensor with only 1 sample at window end (insufficient history).
-  // Equipment is off (fan_status = 0) for minutes 0..30 and on (fan_status = 1) for minutes 35..180.
+  // Two temperature sensors on role 'discharge_air_temperature' (one faulted, one healthy), plus a third sensor with only 1 sample at window end (insufficient history).
+  // Equipment is off (supply_fan_operating_status = 0) for minutes 0..30 and on (supply_fan_operating_status = 1) for minutes 35..180.
   const history = [];
   for (let minute = 0; minute <= 180; minute += 5) {
     history.push({
       equipment_id: "eq-1",
       ts: START + minute * 60_000,
-      sat: 22.0,
-      fan_status: minute >= 35 ? 1 : 0,
+      discharge_air_temperature: 22.0,
+      supply_fan_operating_status: minute >= 35 ? 1 : 0,
     });
   }
   const sensorHistory = [];
@@ -270,14 +270,14 @@ test("three same-role SI sensors isolate fault, healthy zero, insufficient histo
     const minute = i * 5;
     sensorHistory.push({
       equipment_id: "eq-1",
-      series_id: "sat-healthy",
-      sensor_role: "sat",
+      series_id: "discharge_air_temperature-healthy",
+      sensor_role: "discharge_air_temperature",
       unit: "°C",
       ts: row.ts,
       value: 22.0 + (i % 3) * 0.25,
     });
-    // Out of range during fan_status = 0 (minutes 0..30) must NOT score when gated,
-    // while minutes 60..150 (fan_status = 1) trigger SV-RANGE, SV-FLATLINE, SV-SPIKE, and SV-RATE.
+    // Out of range during supply_fan_operating_status = 0 (minutes 0..30) must NOT score when gated,
+    // while minutes 60..150 (supply_fan_operating_status = 1) trigger SV-RANGE, SV-FLATLINE, SV-SPIKE, and SV-RATE.
     let faultVal = 22.0 + (i % 3) * 0.25;
     if (minute <= 30) faultVal = 75.0;
     else if (minute === 50 || minute === 60) faultVal = 75.0;
@@ -285,8 +285,8 @@ test("three same-role SI sensors isolate fault, healthy zero, insufficient histo
     else if (minute >= 65 && minute <= 150) faultVal = 75.0;
     sensorHistory.push({
       equipment_id: "eq-1",
-      series_id: "sat-fault",
-      sensor_role: "sat",
+      series_id: "discharge_air_temperature-fault",
+      sensor_role: "discharge_air_temperature",
       unit: "°C",
       ts: row.ts,
       value: faultVal,
@@ -294,8 +294,8 @@ test("three same-role SI sensors isolate fault, healthy zero, insufficient histo
   }
   sensorHistory.push({
     equipment_id: "eq-1",
-    series_id: "sat-short",
-    sensor_role: "sat",
+    series_id: "discharge_air_temperature-short",
+    sensor_role: "discharge_air_temperature",
     unit: "°C",
     ts: START + 180 * 60_000,
     value: 75.0,
@@ -318,22 +318,22 @@ test("three same-role SI sensors isolate fault, healthy zero, insufficient histo
       `${rule}: reordered input rows must produce identical per-sensor output`
     );
     const rows = bySeries(outA[rule]);
-    assert.deepEqual(Object.keys(rows).sort(), ["sat-fault", "sat-healthy", "sat-short"], rule);
-    assert.equal(rows["sat-healthy"].fault_hours, 0, `${rule}: healthy peer must preserve explicit 0`);
-    assert.ok(Number(rows["sat-healthy"].covered_hours) > 0, `${rule}: healthy peer must be covered`);
+    assert.deepEqual(Object.keys(rows).sort(), ["discharge_air_temperature-fault", "discharge_air_temperature-healthy", "discharge_air_temperature-short"], rule);
+    assert.equal(rows["discharge_air_temperature-healthy"].fault_hours, 0, `${rule}: healthy peer must preserve explicit 0`);
+    assert.ok(Number(rows["discharge_air_temperature-healthy"].covered_hours) > 0, `${rule}: healthy peer must be covered`);
     if (rule === "SV-STALE") {
       // #1673: a single sample at the window end leaves 180 min of missing data before it: 3 h covered, 2.5 h stale
-      assert.ok(around(rows["sat-short"].covered_hours, 3) && around(rows["sat-short"].fault_hours, 2.5), `SV-STALE sat-short ${JSON.stringify(rows["sat-short"])}`);
-      assert.equal(rows["sat-fault"].fault_hours, 0, "SV-STALE: a polled sensor is never stale, whatever its values");
+      assert.ok(around(rows["discharge_air_temperature-short"].covered_hours, 3) && around(rows["discharge_air_temperature-short"].fault_hours, 2.5), `SV-STALE discharge_air_temperature-short ${JSON.stringify(rows["discharge_air_temperature-short"])}`);
+      assert.equal(rows["discharge_air_temperature-fault"].fault_hours, 0, "SV-STALE: a polled sensor is never stale, whatever its values");
       continue;
     }
-    assert.equal(rows["sat-short"].covered_hours, 0, `${rule}: single-sample sensor has 0 coverage`);
-    assert.equal(rows["sat-short"].fault_hours, null, `${rule}: insufficient history stays NULL (not 0)`);
+    assert.equal(rows["discharge_air_temperature-short"].covered_hours, 0, `${rule}: single-sample sensor has 0 coverage`);
+    assert.equal(rows["discharge_air_temperature-short"].fault_hours, null, `${rule}: insufficient history stays NULL (not 0)`);
   }
-  const rangeFault = bySeries(outA["SV-RANGE"])["sat-fault"].fault_hours;
-  assert.ok(around(rangeFault, 100 / 60), `SV-RANGE must respect fan_status gate (got ${rangeFault} h)`);
-  assert.ok(bySeries(outA["SV-SPIKE"])["sat-fault"].fault_hours > 0, "SV-SPIKE faults on sat-fault");
-  assert.ok(bySeries(outA["SV-FLATLINE"])["sat-fault"].fault_hours > 0, "SV-FLATLINE faults on sat-fault");
-  assert.ok(bySeries(outA["SV-RATE"])["sat-fault"].fault_hours > 0, "SV-RATE faults on sat-fault");
-  assert.equal(bySeries(outA["SV-STALE"])["sat-fault"].fault_hours, 0, "SV-STALE stays 0 when value changes at min 60 and min 155");
+  const rangeFault = bySeries(outA["SV-RANGE"])["discharge_air_temperature-fault"].fault_hours;
+  assert.ok(around(rangeFault, 100 / 60), `SV-RANGE must respect supply_fan_operating_status gate (got ${rangeFault} h)`);
+  assert.ok(bySeries(outA["SV-SPIKE"])["discharge_air_temperature-fault"].fault_hours > 0, "SV-SPIKE faults on discharge_air_temperature-fault");
+  assert.ok(bySeries(outA["SV-FLATLINE"])["discharge_air_temperature-fault"].fault_hours > 0, "SV-FLATLINE faults on discharge_air_temperature-fault");
+  assert.ok(bySeries(outA["SV-RATE"])["discharge_air_temperature-fault"].fault_hours > 0, "SV-RATE faults on discharge_air_temperature-fault");
+  assert.equal(bySeries(outA["SV-STALE"])["discharge_air_temperature-fault"].fault_hours, 0, "SV-STALE stays 0 when value changes at min 60 and min 155");
 });

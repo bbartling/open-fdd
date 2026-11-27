@@ -23,8 +23,8 @@ test("SPARQL hook StartHook args coerce maxTriples but preserve string fields", 
 const fixture = JSON.parse(readFileSync(new URL("../../tools/rdf-check/fixtures/model.json", import.meta.url), "utf8"));
 // The fixture has no fault result point; add one (as the FDD hook writes them).
 const records = [...fixture.records, {
-  uuid: "22222222-0000-4000-8000-000000000001", name: "fault-AHU-1-sat", pointType: "POINT",
-  attrs: { siteRef: "site-a", equipRef: "AHU-1", markers: "point,fault,fdd,his", ruleRef: "sat-low", kind: "Number", dis: "SAT low fault" },
+  uuid: "22222222-0000-4000-8000-000000000001", name: "fault-AHU-1-discharge_air_temperature", pointType: "POINT",
+  attrs: { siteRef: "site-a", equipRef: "AHU-1", markers: "point,fault,fdd,his", ruleRef: "discharge_air_temperature-low", kind: "Number", dis: "SAT low fault" },
 }];
 
 function turtleOf(recs, nfBase = "http://nf.example.test") {
@@ -58,10 +58,10 @@ test("default example lists points with their time-series id and history URL", (
   const ex = lib.sparqlExamples(TTL)[0];
   const r = hook.runSparql(TTL, ex.query, "json", { ox });
   assert.deepEqual(r.vars, ["equip", "point", "tsId", "history"]);
-  const sat = r.rows.find((row) => row[1] === "Supply air temp");
-  assert.ok(sat, "SAT row");
-  assert.equal(sat[2], "11111111-0000-4000-8000-000000000004");
-  assert.equal(sat[3], "http://nf.example.test/api/v1/point/data?uuids=11111111-0000-4000-8000-000000000004");
+  const discharge_air_temperature = r.rows.find((row) => row[1] === "Supply air temp");
+  assert.ok(discharge_air_temperature, "SAT row");
+  assert.equal(discharge_air_temperature[2], "11111111-0000-4000-8000-000000000004");
+  assert.equal(discharge_air_temperature[3], "http://nf.example.test/api/v1/point/data?uuids=11111111-0000-4000-8000-000000000004");
 });
 
 test("no-equip example finds the weather point only; fault example finds the result point", () => {

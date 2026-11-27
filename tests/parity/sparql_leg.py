@@ -80,7 +80,7 @@ def nf_world(ds: Dataset) -> dict:
             v = r.get(c["name"])
             if v is not None and not (isinstance(v, float) and math.isnan(v)):
                 series[point_uuid(eid, c["name"])].append([r["ts"], v])
-    for col, unit in (("web_oa_t", "°C"), ("web_oa_dp", "°C")):
+    for col, unit in (("weather_service_air_temperature", "°C"), ("weather_service_air_dew_point_temperature", "°C")):
         u = point_uuid(WEATHER_STATION, col)
         recs.append({"uuid": u, "name": col, "pointType": "POINT",
                      "attrs": {"siteRef": SITE_ID, "weatherStationRef": WEATHER_STATION, "dis": col, "unit": unit,
@@ -149,10 +149,10 @@ def client_frames(ds: Dataset, query: str = QUERY, *, source: str = "nf", **fetc
     # checked against the dataset's registered sensors by ``sweep_mismatches`` instead of being overwritten here.
     fr = sd.frames(answer, weather="separate", window_sec=ds.step_seconds, sweep_marker="sensor")
     # #1635: the hook answers the run proof it resolves per equipment, and frames() stamps it (the dataset's resolved
-    # run_proof column is bound as a point pinned ofddRole run_proof; a unit whose proof is unbound has no samples, so
+    # operating_status column is bound as a point pinned ofddRole operating_status; a unit whose proof is unbound has no samples, so
     # gated rules are SKIPPED there as in the oracle and SQL). The harness no longer stamps the frames itself.
-    if "run_proof" not in answer:
-        raise AssertionError("the sparql-data hook answered no run_proof (#1635)")
+    if "operating_status" not in answer:
+        raise AssertionError("the sparql-data hook answered no operating_status (#1635)")
     if any(df.attrs.get("run_proof_resolved") is not True for df in fr.values()):
         raise AssertionError("frames() did not stamp the hook's run proof (#1635)")
     wx = sd.weather_frame(answer)

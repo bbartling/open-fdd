@@ -73,7 +73,7 @@ function fakeHttp(extraPoints = [], fns = {}, opts = {}) {
 const PACK = {
   poll_seconds: STEP,
   contract: { history: [{ name: "equipment_id", type: "text" }, { name: "timestamp_utc", type: "timestamp" },
-    { name: "fan_cmd", type: "double" }, { name: "fan_status", type: "double" }, { name: "oa_t", type: "double" }] },
+    { name: "supply_fan_command", type: "double" }, { name: "supply_fan_operating_status", type: "double" }, { name: "outdoor_air_intake_temperature", type: "double" }] },
   rules: { "CMD-1": { sql: "-", output_columns: ["equipment_id", "fault_hours", "covered_hours", "fault_pct"] },
     "FAN-RUNTIME-HOURS": { sql: "-", output_columns: ["equipment_id", "fan_runtime_hours", "total_hours"] } },
 };
@@ -102,7 +102,7 @@ test("fdd hook: binds, reads the 5-min grid, runs runnable pack rules, writes re
   assert.deepEqual(seen.queries.sort(), ["CMD-1", "FAN-RUNTIME-HOURS"], "only rules in the pack that are runnable");
   assert.equal(seen.input.history.length, 288, "24 h on the 5-min grid");
   // only the roles the runnable rules use are read (OAT is bound but no rule here needs it)
-  assert.deepEqual(Object.keys(seen.input.history[0]).sort(), ["equipment_id", "fan_cmd", "fan_status", "ts"]);
+  assert.deepEqual(Object.keys(seen.input.history[0]).sort(), ["equipment_id", "supply_fan_command", "supply_fan_operating_status", "ts"]);
   assert.equal(seen.input.history[0].ts % (STEP * 1e3), 0);
   assert.equal(seen.input.authorizedSeries, undefined, "authorized_series is not a contract relation any more (no rule reads it)");
   assert.equal(seen.input.equipment, undefined);
@@ -163,29 +163,29 @@ test("fdd hook: history is converted to SI by each point's unit (°F -> °C), va
   const http = fakeHttp(extra, { "u-ZNT": () => 70, "u-DSP": () => 1.5 });
   const seen = { queries: [] };
   const logs = [];
-  const pack = { ...PACK, contract: { history: [...PACK.contract.history, { name: "zone_t", type: "double" }, { name: "duct_static", type: "double" }] },
+  const pack = { ...PACK, contract: { history: [...PACK.contract.history, { name: "zone_air_temperature", type: "double" }, { name: "discharge_air_static_pressure", type: "double" }] },
     rules: { "SV-RANGE": { sql: "-", output_columns: ["equipment_id", "fault_hours"] } } };
   await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: { dryRun: true }, pack, createEngine: stubEngine(seen), now: NOW });
   const row = seen.input.history[0];
-  assert.ok(Math.abs(row.oa_t - (55 - 32) * 5 / 9) < 1e-9, `oa_t ${row.oa_t} is 55 °F = 12.778 °C`);
-  assert.ok(Math.abs(row.duct_static - 1.5 * 249.0889) < 1e-6, "1.5 inH2O in Pa");
-  assert.equal(row.zone_t, undefined, "temperature point without a unit is skipped, not guessed");
-  assert.equal(logs.filter((l) => /zone_t.*no unit/.test(l)).length, 1, "logged once: " + logs.join(" / "));
+  assert.ok(Math.abs(row.outdoor_air_intake_temperature - (55 - 32) * 5 / 9) < 1e-9, `outdoor_air_intake_temperature ${row.outdoor_air_intake_temperature} is 55 °F = 12.778 °C`);
+  assert.ok(Math.abs(row.discharge_air_static_pressure - 1.5 * 249.0889) < 1e-6, "1.5 inH2O in Pa");
+  assert.equal(row.zone_air_temperature, undefined, "temperature point without a unit is skipped, not guessed");
+  assert.equal(logs.filter((l) => /zone_air_temperature.*no unit/.test(l)).length, 1, "logged once: " + logs.join(" / "));
 });
 
 test("siPlan: known units convert, unitless roles pass through, unknown temperature/pressure/flow roles are skipped", () => {
   const roles = {
-    oa_t: { uuid: "a", units: "degF" }, sat: { uuid: "b", units: "°C" }, fan_cmd: { uuid: "c", units: "" },
-    oa_h: { uuid: "d", units: "%RH" }, zone_flow: { uuid: "e", units: "cfm" }, mat: { uuid: "f", units: "weird" },
+    outdoor_air_intake_temperature: { uuid: "a", units: "degF" }, discharge_air_temperature: { uuid: "b", units: "°C" }, supply_fan_command: { uuid: "c", units: "" },
+    outdoor_air_intake_relative_humidity: { uuid: "d", units: "%RH" }, discharge_air_volume_flow_rate: { uuid: "e", units: "cfm" }, mixed_air_temperature: { uuid: "f", units: "weird" },
   };
-  const plan = hook.siPlan(roles, { roles: { oa_t: { name: "outside-air-temp" }, sat: { name: "discharge-air-temp" }, zone_flow: { name: "zone-airflow" }, mat: { name: "mixed-air-temp" } } });
-  assert.ok(Math.abs(plan.convert.oa_t(32)) < 1e-12 && Math.abs(plan.convert.oa_t(212) - 100) < 1e-9);
-  assert.equal(plan.convert.sat(21), 21);
-  assert.ok(Math.abs(plan.convert.zone_flow(100) - 47.19474) < 1e-9);
-  assert.equal(plan.convert.fan_cmd, undefined);
-  assert.equal(plan.unit.fan_cmd, "");
-  assert.deepEqual([...plan.skipped], ["mat"]);
-  assert.deepEqual([plan.unit.oa_t, plan.unit.zone_flow, plan.unit.oa_h], ["°C", "L/s", "%"]);
+  const plan = hook.siPlan(roles, { roles: { outdoor_air_intake_temperature: { name: "outdoor_air_intake_temperature" }, discharge_air_temperature: { name: "discharge_air_temperature" }, discharge_air_volume_flow_rate: { name: "discharge_air_volume_flow_rate" }, mixed_air_temperature: { name: "mixed_air_temperature" } } });
+  assert.ok(Math.abs(plan.convert.outdoor_air_intake_temperature(32)) < 1e-12 && Math.abs(plan.convert.outdoor_air_intake_temperature(212) - 100) < 1e-9);
+  assert.equal(plan.convert.discharge_air_temperature(21), 21);
+  assert.ok(Math.abs(plan.convert.discharge_air_volume_flow_rate(100) - 47.19474) < 1e-9);
+  assert.equal(plan.convert.supply_fan_command, undefined);
+  assert.equal(plan.unit.supply_fan_command, "");
+  assert.deepEqual([...plan.skipped], ["mixed_air_temperature"]);
+  assert.deepEqual([plan.unit.outdoor_air_intake_temperature, plan.unit.discharge_air_volume_flow_rate, plan.unit.outdoor_air_intake_relative_humidity], ["°C", "L/s", "%"]);
 });
 
 // ---- review P1 #1: results are site scoped --------------------------------------------------
@@ -371,26 +371,26 @@ test("fdd status: a rule returning no row is not-assessed", async () => {
 test("sweep result keeps per-series rows and summarizes by maximum hours", () => {
   const rule = { output_columns: ["equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours"] };
   const rows = [
-    { equipment_id: "fixture", series_id: "sat-a", sensor_role: "sat", fault_hours: 2, covered_hours: 22 },
-    { equipment_id: "fixture", series_id: "rat-a", sensor_role: "rat", fault_hours: 3, covered_hours: 20 },
-    { equipment_id: "other", series_id: "sat-x", sensor_role: "sat", fault_hours: 4, covered_hours: 24 },
-    { equipment_id: "fixture", series_id: "mat-a", sensor_role: "mat", fault_hours: 0, covered_hours: 23 },
+    { equipment_id: "fixture", series_id: "discharge_air_temperature-a", sensor_role: "discharge_air_temperature", fault_hours: 2, covered_hours: 22 },
+    { equipment_id: "fixture", series_id: "return_air_temperature-a", sensor_role: "return_air_temperature", fault_hours: 3, covered_hours: 20 },
+    { equipment_id: "other", series_id: "discharge_air_temperature-x", sensor_role: "discharge_air_temperature", fault_hours: 4, covered_hours: 24 },
+    { equipment_id: "fixture", series_id: "mixed_air_temperature-a", sensor_role: "mixed_air_temperature", fault_hours: 0, covered_hours: 23 },
   ];
   const summary = hook.equipmentResult(rule, rows, "fixture");
   assert.equal(summary.fault_hours, 3);
   assert.equal(summary.covered_hours, 23);
   assert.deepEqual(summary.sensor_fault_hours, {
-    "sat-a": { role: "sat", name: "sat-a", hours: 2, status: "fault" },
-    "rat-a": { role: "rat", name: "rat-a", hours: 3, status: "fault" },
-    "mat-a": { role: "mat", name: "mat-a", hours: 0, status: "ok" },
+    "discharge_air_temperature-a": { role: "discharge_air_temperature", name: "discharge_air_temperature-a", hours: 2, status: "fault" },
+    "return_air_temperature-a": { role: "return_air_temperature", name: "return_air_temperature-a", hours: 3, status: "fault" },
+    "mixed_air_temperature-a": { role: "mixed_air_temperature", name: "mixed_air_temperature-a", hours: 0, status: "ok" },
   });
   assert.equal(hook.equipmentResult(rule, rows, "missing"), undefined);
 });
 
 test("the FDD hook writes stable per-sensor results, timelines identity attrs, and the equipment max summary", async () => {
   // the AHU's own fan status is its run proof (#1608): without a resolvable proof every gated rule is SKIPPED no_run_proof
-  const fanStatus = { uuid: "ahu-fan-status", name: "fan-status", layer: "default", pointType: "POINT", attrs: {
-    siteRef: "site-fixture", equipRef: "AHU-A", dis: "fan-status", kind: "Bool", class: "discharge-run-sensor", markers: "point,his,discharge,fan,run,sensor" } };
+  const fanStatus = { uuid: "ahu-fan-status", name: "supply_fan_operating_status", layer: "default", pointType: "POINT", attrs: {
+    siteRef: "site-fixture", equipRef: "AHU-A", dis: "supply_fan_operating_status", kind: "Bool", class: "discharge-run-sensor", markers: "point,his,discharge,fan,run,sensor" } };
   const http = fakeHttp([], {}, { model: [...multiSensorEquip.sites, ...multiSensorEquip.equips], points: [...multiSensorEquip.points, fanStatus] });
   const pack = {
     ...PACK,
@@ -409,13 +409,13 @@ test("the FDD hook writes stable per-sensor results, timelines identity attrs, a
       return [
         ...multiSensorEquip.points.filter((p) => p.attrs.equipRef === "AHU-A").map((p, i) => ({
           equipment_id: "AHU-A", series_id: p.uuid,
-          sensor_role: p.attrs.class === "discharge-air-temp-sensor" ? "sat" : p.attrs.class === "mixed-air-temp-sensor" ? "mat" : p.attrs.class === "outside-air-temp-sensor" ? "oa_t" : p.attrs.class === "return-air-temp-sensor" ? "rat" : "duct_static",
+          sensor_role: p.attrs.class === "discharge-air-temp-sensor" ? "discharge_air_temperature" : p.attrs.class === "mixed-air-temp-sensor" ? "mixed_air_temperature" : p.attrs.class === "outside-air-temp-sensor" ? "outdoor_air_intake_temperature" : p.attrs.class === "return-air-temp-sensor" ? "return_air_temperature" : "discharge_air_static_pressure",
           fault_hours: i === 1 ? 2 : 0, covered_hours: 24,
         })).filter((row) => row.series_id !== missingSeries),
       ];
     },
     async timeline() { return multiSensorEquip.points.filter((p) => p.attrs.equipRef === "AHU-A").map((p, i) => ({
-      equipment_id: "AHU-A", series_id: p.uuid, sensor_role: i < 2 ? "sat" : "mat", ts_epoch: NOW / 1000,
+      equipment_id: "AHU-A", series_id: p.uuid, sensor_role: i < 2 ? "discharge_air_temperature" : "mixed_air_temperature", ts_epoch: NOW / 1000,
       confirmed: i === 1 ? 1 : 0, held_seconds: 300,
     })); },
     async close() {},
@@ -434,13 +434,13 @@ test("the FDD hook writes stable per-sensor results, timelines identity attrs, a
   assert.equal(http.writes.data.find((row) => row.uuid === uuid).values[0].real, 2);
   const sensorPoints = http.writes.points.filter((row) => row.layer === "model" && row.attrs.ruleRef === "SV-STALE" && row.attrs.fddSummary === "sensor");
   assert.equal(sensorPoints.length, 7);
-  assert.equal(sensorPoints.filter((p) => p.attrs.roleRef === "duct_static").length, 1);
-  assert.equal(sensorPoints.filter((p) => p.attrs.roleRef === "zone_flow").length, 1);
+  assert.equal(sensorPoints.filter((p) => p.attrs.roleRef === "discharge_air_static_pressure").length, 1);
+  assert.equal(sensorPoints.filter((p) => p.attrs.roleRef === "discharge_air_volume_flow_rate").length, 1);
   assert.ok(sensorPoints.every((p) => p.attrs.sensorRef && p.attrs.roleRef
     && p.attrs.fddCoverageHours === (p.attrs.fddStatus === "not-assessed" ? "0" : "24")));
   assert.ok(sensorPoints.every((p) => hook.OFDD_RESULT_ATTRS.every((key) => Object.hasOwn(p.attrs, key))));
   assert.equal(summary.roles_skipped_by_unit_total, 0);
-  assert.ok(JSON.parse(summaryPoint.attrs.fddSensorFaultHours)["sensor-sat-1"].name);
+  assert.ok(JSON.parse(summaryPoint.attrs.fddSensorFaultHours)["sensor-discharge_air_temperature-1"].name);
   assert.ok(http.writes.data.some((row) => sensorPoints.some((p) => p.uuid === row.uuid)));
   const timelines = http.writes.points.filter((p) => p.layer === "model" && /(^|,)fault_timeline(,|$)/.test(p.attrs.markers));
   const timelinesByUuid = new Map(timelines.map((p) => [p.uuid, p]));
@@ -465,8 +465,8 @@ test("every sweep publishes only its canonical assessable sensor roles", async (
     sql: "-", output_columns: ["equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours"],
   }])) };
   const role = (p) => ({
-    "discharge-air-temp-sensor": "sat", "mixed-air-temp-sensor": "mat", "outside-air-temp-sensor": "oa_t",
-    "return-air-temp-sensor": "rat", "discharge-air-pressure-sensor": "duct_static",
+    "discharge-air-temp-sensor": "discharge_air_temperature", "mixed-air-temp-sensor": "mixed_air_temperature", "outside-air-temp-sensor": "outdoor_air_intake_temperature",
+    "return-air-temp-sensor": "return_air_temperature", "discharge-air-pressure-sensor": "discharge_air_static_pressure",
   })[p.attrs.class];
   const createEngine = async () => ({
     kind: "duckdb", async load(input) { assert.equal(input.sensorSeries.length, 6); }, async close() {},
@@ -486,7 +486,7 @@ test("every sweep publishes only its canonical assessable sensor roles", async (
     assert.equal(rows.length, ductExpected ? 6 : 5, `${ruleId} should include its assessable sensor points`);
     const duct = rows.find((p) => p.attrs.sensorRef === "sensor-static-1");
     assert.equal(Boolean(duct), ductExpected);
-    assert.ok(rows.every((p) => p.attrs.roleRef !== "zone_flow"));
+    assert.ok(rows.every((p) => p.attrs.roleRef !== "discharge_air_volume_flow_rate"));
   }
 });
 
@@ -526,28 +526,26 @@ test("fdd hook: a declared-% command reaches the engine as a fraction (1 % -> 0.
   const http = fakeHttp();
   const seen = { queries: [] };
   await hook.runFdd({ sdk: { http, logEvent() {} }, config: { dryRun: true }, pack: PACK, createEngine: stubEngine(seen), now: NOW });
-  assert.equal(seen.input.history[0].fan_cmd, 0.01, "u-FANC is 1 and declares %");
-  assert.ok(seen.input.history.every((r) => r.fan_status === 0 || r.fan_status === 1));
+  assert.equal(seen.input.history[0].supply_fan_command, 0.01, "u-FANC is 1 and declares %");
+  assert.ok(seen.input.history.every((r) => r.supply_fan_operating_status === 0 || r.supply_fan_operating_status === 1));
 });
 
-test("fdd hook: a UNITLESS command point is skipped and logged; rules that need it are not assessed", async () => {
+test("fdd hook: a unitless boolean command stays 0/1 (a missing unit is not the percent ambiguity)", async () => {
   const points = POINTS.map((p) => (p.uuid === "u-FANC" ? { ...p, attrs: { ...p.attrs, unit: "" } } : p));
   const http = fakeHttp([], {}, { points });
   const seen = { queries: [] };
   const logs = [];
   const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: { dryRun: true }, pack: PACK, createEngine: stubEngine(seen), now: NOW });
-  assert.ok(logs.some((l) => /fan_cmd.*no unit/.test(l)), logs.join(" / "));
-  assert.deepEqual(summary.roles_skipped_by_unit, { fan_cmd: 1 });
-  assert.ok(logs.some((l) => /roles skipped by unit: 1 \(fan_cmd 1\)/.test(l)), logs.join(" / "));
-  assert.deepEqual(seen.queries, [], "CMD-1 and FAN-RUNTIME-HOURS require fan_cmd: not run, so not assessed (no result written)");
-  assert.ok(!seen.input || !seen.input.history.some((r) => "fan_cmd" in r), "no fan_cmd value reaches the engine");
+  assert.equal(summary.roles_skipped_by_unit && summary.roles_skipped_by_unit.supply_fan_command, undefined);
+  assert.equal(seen.input.history[0].supply_fan_command, 1, "unitless 1 on a boolean command is 1");
+  assert.ok(!logs.some((l) => /supply_fan_command.*no unit/.test(l)), logs.join(" / "));
 });
 
 test("fdd hook: a status outside 0..1 (enum, 0-100 analog) is rejected, not thresholded", async () => {
   const http = fakeHttp([], { "u-FANS": () => 3 });
   const seen = { queries: [] };
   await hook.runFdd({ sdk: { http, logEvent() {} }, config: { dryRun: true }, pack: PACK, createEngine: stubEngine(seen), now: NOW });
-  assert.ok(!seen.input.history.some((r) => "fan_status" in r), "value 3 never reaches the engine as a status");
+  assert.ok(!seen.input.history.some((r) => "supply_fan_operating_status" in r), "value 3 never reaches the engine as a status");
 });
 
 // ---- review F09: batched writes -------------------------------------------------------------------------
@@ -642,13 +640,13 @@ test("fdd writes: dryRun sends no write requests", async () => {
 });
 
 test("sweep publishing handles duplicate display labels and reordered point discovery", async () => {
-  const dupA = pt("u-sat-dup-1", "Supply Air Temp", ["discharge", "air", "temp", "sensor"], {
+  const dupA = pt("u-discharge_air_temperature-dup-1", "Supply Air Temp", ["discharge", "air", "temp", "sensor"], {
     equipRef: "AHU-1", class: "discharge-air-temp-sensor", unit: "°C",
   });
-  const dupB = pt("u-sat-dup-2", "Supply Air Temp", ["discharge", "air", "temp", "sensor"], {
+  const dupB = pt("u-discharge_air_temperature-dup-2", "Supply Air Temp", ["discharge", "air", "temp", "sensor"], {
     equipRef: "AHU-1", class: "discharge-air-temp-sensor", unit: "°C",
   });
-  const shortC = pt("u-sat-short", "Supply Air Temp", ["discharge", "air", "temp", "sensor"], {
+  const shortC = pt("u-discharge_air_temperature-short", "Supply Air Temp", ["discharge", "air", "temp", "sensor"], {
     equipRef: "AHU-1", class: "discharge-air-temp-sensor", unit: "°C",
   });
   const pack = {
@@ -665,15 +663,15 @@ test("sweep publishing handles duplicate display labels and reordered point disc
     async load() {},
     async query() {
       return [
-        { equipment_id: "AHU-1", series_id: "u-sat-dup-1", sensor_role: "sat", fault_hours: 3.5, covered_hours: 24 },
-        { equipment_id: "AHU-1", series_id: "u-sat-dup-2", sensor_role: "sat", fault_hours: 0, covered_hours: 24 },
-        { equipment_id: "AHU-1", series_id: "u-sat-short", sensor_role: "sat", fault_hours: null, covered_hours: 0 },
+        { equipment_id: "AHU-1", series_id: "u-discharge_air_temperature-dup-1", sensor_role: "discharge_air_temperature", fault_hours: 3.5, covered_hours: 24 },
+        { equipment_id: "AHU-1", series_id: "u-discharge_air_temperature-dup-2", sensor_role: "discharge_air_temperature", fault_hours: 0, covered_hours: 24 },
+        { equipment_id: "AHU-1", series_id: "u-discharge_air_temperature-short", sensor_role: "discharge_air_temperature", fault_hours: null, covered_hours: 0 },
       ];
     },
     async timeline() {
       return [
-        { equipment_id: "AHU-1", series_id: "u-sat-dup-1", sensor_role: "sat", ts_epoch: NOW / 1000, confirmed: 1, held_seconds: 300 },
-        { equipment_id: "AHU-1", series_id: "u-sat-dup-2", sensor_role: "sat", ts_epoch: NOW / 1000, confirmed: 0, held_seconds: 300 },
+        { equipment_id: "AHU-1", series_id: "u-discharge_air_temperature-dup-1", sensor_role: "discharge_air_temperature", ts_epoch: NOW / 1000, confirmed: 1, held_seconds: 300 },
+        { equipment_id: "AHU-1", series_id: "u-discharge_air_temperature-dup-2", sensor_role: "discharge_air_temperature", ts_epoch: NOW / 1000, confirmed: 0, held_seconds: 300 },
       ];
     },
     async close() {},
@@ -681,9 +679,9 @@ test("sweep publishing handles duplicate display labels and reordered point disc
 
   const runWithOrder = async (orderedPoints) => {
     const http = fakeHttp([], {
-      "u-sat-dup-1": () => 75,
-      "u-sat-dup-2": () => 22,
-      "u-sat-short": () => 22,
+      "u-discharge_air_temperature-dup-1": () => 75,
+      "u-discharge_air_temperature-dup-2": () => 22,
+      "u-discharge_air_temperature-short": () => 22,
     }, { model: MODEL, points: orderedPoints });
     const summary = await hook.runFdd({ sdk: { http, logEvent() {} }, pack, createEngine: makeEngine(), now: NOW });
     return { http, summary };
@@ -702,9 +700,9 @@ test("sweep publishing handles duplicate display labels and reordered point disc
   assert.equal(new Set(sensorPointsA.map((p) => p.uuid)).size, 3, "duplicate labels must produce 3 distinct result UUIDs");
 
   const dataByUuid = Object.fromEntries(first.http.writes.data.map((d) => [d.uuid, d.values[0].real]));
-  const pFault = sensorPointsA.find((p) => p.attrs.sensorRef === "u-sat-dup-1");
-  const pHealthy = sensorPointsA.find((p) => p.attrs.sensorRef === "u-sat-dup-2");
-  const pShort = sensorPointsA.find((p) => p.attrs.sensorRef === "u-sat-short");
+  const pFault = sensorPointsA.find((p) => p.attrs.sensorRef === "u-discharge_air_temperature-dup-1");
+  const pHealthy = sensorPointsA.find((p) => p.attrs.sensorRef === "u-discharge_air_temperature-dup-2");
+  const pShort = sensorPointsA.find((p) => p.attrs.sensorRef === "u-discharge_air_temperature-short");
   assert.equal(dataByUuid[pFault.uuid], 3.5);
   assert.equal(dataByUuid[pHealthy.uuid], 0, "healthy same-role sensor keeps explicit zero");
   assert.equal(pShort.attrs.fddStatus, "not-assessed");
@@ -735,8 +733,8 @@ test("fdd hook: a VAV's run proof is its AHU's fan status (airRef); a VAV with n
     ...vavPoints("VAV-1"), ...vavPoints("VAV-2")];
   const pack = {
     poll_seconds: STEP,
-    contract: { history: [{ name: "equipment_id", type: "text" }, { name: "timestamp_utc", type: "timestamp" }, { name: "oa_t", type: "double" },
-      { name: "reheat_valve_pct", type: "double" }, { name: "zone_flow", type: "double" }, { name: "run_proof", type: "double" }] },
+    contract: { history: [{ name: "equipment_id", type: "text" }, { name: "timestamp_utc", type: "timestamp" }, { name: "outdoor_air_intake_temperature", type: "double" },
+      { name: "terminal_unit_heating_valve_position_command", type: "double" }, { name: "discharge_air_volume_flow_rate", type: "double" }, { name: "operating_status", type: "double" }] },
     rules: { "VAV-3": { sql: "-", output_columns: ["equipment_id", "fault_hours", "covered_hours", "fault_pct"] } },
   };
   const loads = {};
@@ -747,7 +745,7 @@ test("fdd hook: a VAV's run proof is its AHU's fan status (airRef); a VAV with n
       // SQL: no proof anywhere -> fault_hours NULL, covered_hours 0 (the gate); otherwise assessed
       async query() {
         const rows = loads[equip].history;
-        return rows.some((r) => r.run_proof != null)
+        return rows.some((r) => r.operating_status != null)
           ? [{ equipment_id: equip, fault_hours: 1, covered_hours: 24, fault_pct: 4 }]
           : [{ equipment_id: equip, fault_hours: null, covered_hours: 0, fault_pct: null }];
       },
@@ -756,11 +754,11 @@ test("fdd hook: a VAV's run proof is its AHU's fan status (airRef); a VAV with n
   };
   const http = fakeHttp([], { "u-AHUFAN": (t) => ((t / 3600e3) % 2 < 1 ? 1 : 0), "u-VAV-1-RH": () => 0.9 }, { model, points });
   const summary = await hook.runFdd({ sdk: { http, logEvent() {} }, pack, createEngine, now: NOW });
-  // VAV-1: the AHU fan status rides in as the history column run_proof, on VAV-1's own grid
-  assert.ok(loads["VAV-1"].history.every((r) => r.run_proof === 0 || r.run_proof === 1), "run_proof is 0/1");
-  assert.ok(loads["VAV-1"].history.some((r) => r.run_proof === 1) && loads["VAV-1"].history.some((r) => r.run_proof === 0));
+  // VAV-1: the AHU fan status rides in as the history column operating_status, on VAV-1's own grid
+  assert.ok(loads["VAV-1"].history.every((r) => r.operating_status === 0 || r.operating_status === 1), "operating_status is 0/1");
+  assert.ok(loads["VAV-1"].history.some((r) => r.operating_status === 1) && loads["VAV-1"].history.some((r) => r.operating_status === 0));
   // VAV-2 has no airRef and the site has one AHU: the same fan is the proof (RCx and FDD agree)
-  assert.ok(loads["VAV-2"].history.every((r) => r.run_proof === 0 || r.run_proof === 1), "assumed single AHU");
+  assert.ok(loads["VAV-2"].history.every((r) => r.operating_status === 0 || r.operating_status === 1), "assumed single AHU");
   const attrsOf = (equip) => http.writes.points.find((r) => r.layer === "model" && r.attrs.ruleRef === "VAV-3" && r.attrs.equipRef === equip).attrs;
   assert.equal(attrsOf("VAV-1").fddStatus, "fault");
   assert.equal(attrsOf("VAV-2").fddStatus, "fault");
@@ -791,19 +789,19 @@ test("fdd hook: a VAV's run proof is its AHU's fan status (airRef); a VAV with n
   ];
   const pack = {
     poll_seconds: STEP,
-    contract: { history: [{ name: "equipment_id", type: "text" }, { name: "timestamp_utc", type: "timestamp" }, { name: "oa_t", type: "double" },
-      { name: "reheat_valve_pct", type: "double" }, { name: "zone_flow", type: "double" }, { name: "run_proof", type: "double" }] },
+    contract: { history: [{ name: "equipment_id", type: "text" }, { name: "timestamp_utc", type: "timestamp" }, { name: "outdoor_air_intake_temperature", type: "double" },
+      { name: "terminal_unit_heating_valve_position_command", type: "double" }, { name: "discharge_air_volume_flow_rate", type: "double" }, { name: "operating_status", type: "double" }] },
     rules: { "VAV-3": { sql: "-", timeline_sql: "-", output_columns: ["equipment_id", "fault_hours", "covered_hours", "fault_pct"] } },
     rule_tuning_templates: { ...real.rule_tuning_templates, rules: { "VAV-3": real.rule_tuning_templates.rules["VAV-3"] } },
     role_limit_templates: real.role_limit_templates,
   };
-  // the stub mirrors the SQL: gate on + no run_proof column -> nothing assessed; gate off (tuned SQL) -> assessed, with a fault
+  // the stub mirrors the SQL: gate on + no operating_status column -> nothing assessed; gate off (tuned SQL) -> assessed, with a fault
   const engineFor = (seen) => async () => ({
     async load(input) { seen.history = input.history; },
     async query(_id, tuned) {
       seen.tunedSql = tuned && tuned.sql;
       const gateOff = !!(tuned && tuned.sql);   // these tests only tune the gate off
-      return gateOff || seen.history.some((r) => r.run_proof != null)
+      return gateOff || seen.history.some((r) => r.operating_status != null)
         ? [{ equipment_id: "VAV-2", fault_hours: 2, covered_hours: 24, fault_pct: 8 }]
         : [{ equipment_id: "VAV-2", fault_hours: null, covered_hours: 0, fault_pct: null }];
     },

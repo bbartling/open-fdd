@@ -1,5 +1,5 @@
 // Occupancy schedules for Open-FDD (read-only). One place decides "is this site occupied at time t",
-// shared by the weekly-runtime schedule line, the after-hours split, synthesized `occ_mode` for
+// shared by the weekly-runtime schedule line, the after-hours split, synthesized `occupancy_status` for
 // rules, and the agent tools. Classic script (browser global `ofddSchedule`) and CommonJS, from one file
 // (same pattern as units.js). No dependencies.
 //

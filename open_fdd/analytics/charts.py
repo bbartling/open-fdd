@@ -213,20 +213,20 @@ def rule_plot_series(
         if col in series:
             continue
         if col in {
-            "zone-air-temp",
-            "discharge-air-temp",
-            "discharge-air-temp-sp",
-            "outside-air-temp",
-            "web-outside-air-temp",
-            "web-outside-air-dewpoint",
-            "mixed-air-temp",
-            "return-air-temp",
-            "outside-air-damper",
-            "cooling-valve",
-            "heating-valve",
-            "duct-static-pressure",
-            "fan-cmd",
-            "fan-status",
+            "zone_air_temperature",
+            "discharge_air_temperature",
+            "discharge_air_temperature_setpoint",
+            "outdoor_air_intake_temperature",
+            "weather_service_air_temperature",
+            "weather_service_air_dew_point_temperature",
+            "mixed_air_temperature",
+            "return_air_temperature",
+            "outdoor_air_intake_damper_position_command",
+            "cooling_valve_position_command",
+            "heating_valve_position_command",
+            "discharge_air_static_pressure",
+            "supply_fan_command",
+            "supply_fan_operating_status",
             "motor-on",
         } and df[col].notna().any():
             series[col] = df[col]
@@ -240,23 +240,23 @@ def rule_plot_series(
                 series[key] = s
     if not series:
         for col in (
-            "zone-air-temp",
-            "discharge-air-temp",
-            "discharge-air-temp-sp",
-            "outside-air-temp",
-            "mixed-air-temp",
-            "return-air-temp",
-            "outside-air-damper",
-            "cooling-valve",
-            "heating-valve",
-            "duct-static-pressure",
-            "fan-cmd",
+            "zone_air_temperature",
+            "discharge_air_temperature",
+            "discharge_air_temperature_setpoint",
+            "outdoor_air_intake_temperature",
+            "mixed_air_temperature",
+            "return_air_temperature",
+            "outdoor_air_intake_damper_position_command",
+            "cooling_valve_position_command",
+            "heating_valve_position_command",
+            "discharge_air_static_pressure",
+            "supply_fan_command",
         ):
             if col in df.columns and df[col].notna().any():
                 # Prefer OA damper / valves over fan-cmd for temperature-only fallbacks.
-                if col == "fan-cmd" and any(
-                    t in series for t in ("discharge-air-temp", "mixed-air-temp", "return-air-temp", "zone-air-temp")
-                ) and "duct-static-pressure" not in series:
+                if col == "supply_fan_command" and any(
+                    t in series for t in ("discharge_air_temperature", "mixed_air_temperature", "return_air_temperature", "zone_air_temperature")
+                ) and "discharge_air_static_pressure" not in series:
                     continue
                 series[col] = df[col]
     return series
@@ -1137,13 +1137,13 @@ def bas_vs_web_oat_overlay(
         bas = None
         if "bas-outside-air-temp" in mapped.columns and mapped["bas-outside-air-temp"].notna().any():
             bas = pd.to_numeric(mapped["bas-outside-air-temp"], errors="coerce")
-        elif "outside-air-temp" in mapped.columns and mapped["outside-air-temp"].notna().any():
-            bas = pd.to_numeric(mapped["outside-air-temp"], errors="coerce")
+        elif "outdoor_air_intake_temperature" in mapped.columns and mapped["outdoor_air_intake_temperature"].notna().any():
+            bas = pd.to_numeric(mapped["outdoor_air_intake_temperature"], errors="coerce")
         web = None
-        if "web-outside-air-temp" in mapped.columns and mapped["web-outside-air-temp"].notna().any():
-            web = pd.to_numeric(mapped["web-outside-air-temp"], errors="coerce")
-        elif weather is not None and "web-outside-air-temp" in weather.columns:
-            web = pd.to_numeric(weather["web-outside-air-temp"], errors="coerce").reindex(mapped.index)
+        if "weather_service_air_temperature" in mapped.columns and mapped["weather_service_air_temperature"].notna().any():
+            web = pd.to_numeric(mapped["weather_service_air_temperature"], errors="coerce")
+        elif weather is not None and "weather_service_air_temperature" in weather.columns:
+            web = pd.to_numeric(weather["weather_service_air_temperature"], errors="coerce").reindex(mapped.index)
         if bas is None or web is None:
             continue
         both = bas.notna() & web.notna()
@@ -1367,7 +1367,7 @@ def bas_vs_web_oat_histogram(
 ) -> go.Figure | None:
     """Histogram of BAS OAT − web OAT (°F) when both series exist.
 
-    Prefers ``bas_oa_t`` / mapped ``oa_t`` vs ``wx_oa_t`` (frame or weather).
+    Prefers ``bas_oa_t`` / mapped ``outdoor_air_intake_temperature`` vs ``wx_oa_t`` (frame or weather).
     """
     from open_fdd.analytics.role_map import apply_role_map
 
@@ -1378,13 +1378,13 @@ def bas_vs_web_oat_histogram(
         bas = None
         if "bas-outside-air-temp" in mapped.columns and mapped["bas-outside-air-temp"].notna().any():
             bas = pd.to_numeric(mapped["bas-outside-air-temp"], errors="coerce")
-        elif "outside-air-temp" in mapped.columns and mapped["outside-air-temp"].notna().any():
-            bas = pd.to_numeric(mapped["outside-air-temp"], errors="coerce")
+        elif "outdoor_air_intake_temperature" in mapped.columns and mapped["outdoor_air_intake_temperature"].notna().any():
+            bas = pd.to_numeric(mapped["outdoor_air_intake_temperature"], errors="coerce")
         web = None
-        if "web-outside-air-temp" in mapped.columns and mapped["web-outside-air-temp"].notna().any():
-            web = pd.to_numeric(mapped["web-outside-air-temp"], errors="coerce")
-        elif weather is not None and "web-outside-air-temp" in weather.columns:
-            web = pd.to_numeric(weather["web-outside-air-temp"], errors="coerce").reindex(mapped.index)
+        if "weather_service_air_temperature" in mapped.columns and mapped["weather_service_air_temperature"].notna().any():
+            web = pd.to_numeric(mapped["weather_service_air_temperature"], errors="coerce")
+        elif weather is not None and "weather_service_air_temperature" in weather.columns:
+            web = pd.to_numeric(weather["weather_service_air_temperature"], errors="coerce").reindex(mapped.index)
         if bas is None or web is None:
             continue
         d = (bas - web).dropna()

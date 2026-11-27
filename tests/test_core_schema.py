@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts/nf"))
 import build_core_schema as core  # noqa: E402
 from input_contract import input_sample_signature, load_source  # noqa: E402
 
-CORE_TABLES = ("fdd.point", "fdd.rule_config", "fdd.rule_result")
+CORE_TABLES = ("fdd.point", "fdd.rule_config", "fdd.rule_result", "fdd.schema_meta")
 needs_node = pytest.mark.skipif(shutil.which("node") is None or not core.pglite_available(),
                                 reason="regenerating the live catalog needs @electric-sql/pglite; CI checks the sha256 pin")
 
@@ -25,7 +25,7 @@ def norm(path: Path) -> bytes:
 
 def test_copies_are_byte_identical_to_the_source():
     source = norm(core.SOURCE)
-    assert source.startswith(b"-- Open-FDD core schema, core_version 4")
+    assert source.startswith(b"-- Open-FDD core schema, core_version 5")
     for copy in core.COPIES:
         assert norm(copy) == source, f"{copy.relative_to(ROOT)} differs from sql/fdd/schema/core.sql"
 
@@ -58,7 +58,7 @@ def test_catalog_equals_what_postgres_reports():
     live = core.pg_catalog(core.SOURCE)
     assert set(stored["tables"]) == set(CORE_TABLES)
     assert {k: v for k, v in live.items() if k.startswith("fdd.")} == stored["tables"]
-    assert live["_relations"] == ["point", "rule_config", "rule_result"]     # nothing else is created
+    assert live["_relations"] == ["point", "rule_config", "rule_result", "schema_meta"]
 
 
 @needs_node

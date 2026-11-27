@@ -294,19 +294,19 @@ def test_load_model(model):
 def test_binding_is_site_scoped_and_weather_only_for_web_roles(model):
     by = {(b.site, b.equip): b for b in bind_equipment(model)}
     ahu1, rtu = by[("site-north", "AHU-1")], by[("site-south", "RTU-S1")]
-    w1, w2 = ahu1.best()["web_oa_t"], rtu.best()["web_oa_t"]
+    w1, w2 = ahu1.best()["weather_service_air_temperature"], rtu.best()["weather_service_air_temperature"]
     assert w1.site_ref == "site-north" and w2.site_ref == "site-south" and w1.uuid != w2.uuid
     for b in by.values():
         for role, pts in b.roles.items():
             for p in pts:
-                assert p.has("weather") == role.startswith("web_")
+                assert p.has("weather") == (role.startswith("weather_service_") or role.startswith("web_"))
                 assert p.site_ref == b.site
     # class match outranks a marker-only match
     cat = load_catalog()
     cls_pt = Point("1", "x", "x", ["point", "fan", "run", "cmd"], "", "Number", "", "", "", "", "run-cmd", None)
     mk_pt = Point("2", "y", "y", ["point", "fan", "run", "cmd"], "", "Number", "", "", "", "", "", None)
     from open_fdd.nf.model import bind_roles
-    assert bind_roles(["fan_cmd"], [mk_pt, cls_pt], cat)["fan_cmd"][0].uuid == "1"
+    assert bind_roles(["supply_fan_command"], [mk_pt, cls_pt], cat)["supply_fan_command"][0].uuid == "1"
 
 
 def test_equipment_frames_si_conversion(client, model, window):
@@ -315,43 +315,43 @@ def test_equipment_frames_si_conversion(client, model, window):
     df = frames[("site-north", "AHU-1")]
     assert isinstance(df.index, pd.DatetimeIndex) and str(df.index.tz) == "UTC"
     assert df.attrs["equipment_type"] == "AHU" and df.attrs["site_id"] == "site-north"
-    b = df.attrs["bindings"]["discharge-air-temp"]
+    b = df.attrs["bindings"]["discharge_air_temperature"]
     raw = client.point_data([b["uuid"]], *window)[b["uuid"]]
     assert b["source_unit"] == "°F" and b["unit"] == "°C"
     raw_s = pd.Series({t: v for t, v in raw}, name="raw")
-    joined = pd.concat([raw_s, df["discharge-air-temp"].rename("si")], axis=1).dropna()
+    joined = pd.concat([raw_s, df["discharge_air_temperature"].rename("si")], axis=1).dropna()
     assert len(joined) > 100
     assert ((joined["raw"] - 32) * 5 / 9 - joined["si"]).abs().max() < 1e-9
-    assert 0 < df["duct-static-pressure"].mean() < 500  # inH2O -> Pa (1.2 inH2O is about 300 Pa)
-    assert df.attrs["role_units"]["duct-static-pressure"] == "Pa"
-    # percent -> fraction for fraction roles
-    assert df["outside-air-damper"].between(0, 1).all() and df["outside-air-damper"].max() > 0.1
-    assert df.attrs["bindings"]["outside-air-damper"]["source_unit"] == "%"
+    assert 0 < df["discharge_air_static_pressure"].mean() < 500  # inH2O -> Pa (1.2 inH2O is about 300 Pa)
+    assert df.attrs["role_units"]["discharge_air_static_pressure"] == "Pa"
+    # damper command is PERCENT 0-100 (a percent source is not divided)
+    assert df["outdoor_air_intake_damper_position_command"].between(0, 100).all() and df["outdoor_air_intake_damper_position_command"].max() > 10
+    assert df.attrs["bindings"]["outdoor_air_intake_damper_position_command"]["source_unit"] == "%"
     # 0/1 status stays 0..1
-    assert df["fan-status"].between(0, 1).all()
+    assert df["supply_fan_operating_status"].between(0, 1).all()
 
 
 def test_flow_cfm_to_litres_per_second(client, model, window):
     df = equipment_frames(client, model, *window, equip="VAV-1")[("site-north", "VAV-1")]
-    b = df.attrs["bindings"]["zone-airflow"]
+    b = df.attrs["bindings"]["discharge_air_volume_flow_rate"]
     raw = pd.Series(dict(client.point_data([b["uuid"]], *window)[b["uuid"]]), name="raw")
-    both = pd.concat([raw, df["zone-airflow"].rename("si")], axis=1).dropna()
+    both = pd.concat([raw, df["discharge_air_volume_flow_rate"].rename("si")], axis=1).dropna()
     assert b["source_unit"] == "cfm" and b["unit"] == "L/s"
     assert (both["raw"] * 0.4719474 - both["si"]).abs().max() < 1e-6
 
 
-def test_unitless_fraction_command_is_skipped_not_guessed(client, model, window):
+def test_unitless_boolean_command_stays_zero_one(client, model, window):
     df_all = equipment_frames(client, model, *window, equip="CT-1")
-    assert not df_all or "tower-fan-cmd" not in next(iter(df_all.values())).columns
-    # the plan itself, without NF
+    # A start/stop command is boolean. With no unit the value must already be 0/1, so the column is kept.
+    assert df_all and "cooling_tower_fan_command" in next(iter(df_all.values())).columns
     pt = Point("u", "n", "n", ["point"], "", "Number", "", "", "", "", "", None)
-    plan = si_plan_for("tower_fan_cmd", pt)
-    assert plan.convert is None and "no unit" in plan.reason
-    assert role_scales()["tower_fan_cmd"] == "fraction"
+    plan = si_plan_for("cooling_tower_fan_command", pt)
+    assert plan.convert is not None and plan.convert(1) == 1 and plan.convert(99) is None
+    assert role_scales()["cooling_tower_fan_command"] == "boolean"
     # a Bool point of the same role is fine, a temperature role with the wrong unit is not
-    assert si_plan_for("tower_fan_cmd", Point("u", "n", "n", ["point"], "", "Bool", "", "", "", "", "", None)).convert
-    assert si_plan_for("sat", Point("u", "n", "n", ["point"], "kPa", "Number", "", "", "", "", "", None)).convert is None
-    assert si_plan_for("sat", Point("u", "n", "n", ["point"], "", "Number", "", "", "", "", "", None)).convert is None
+    assert si_plan_for("cooling_tower_fan_command", Point("u", "n", "n", ["point"], "", "Bool", "", "", "", "", "", None)).convert
+    assert si_plan_for("discharge_air_temperature", Point("u", "n", "n", ["point"], "kPa", "Number", "", "", "", "", "", None)).convert is None
+    assert si_plan_for("discharge_air_temperature", Point("u", "n", "n", ["point"], "", "Number", "", "", "", "", "", None)).convert is None
 
 
 def test_equipment_frames_site_scoping(client, model, window):
@@ -359,10 +359,10 @@ def test_equipment_frames_site_scoping(client, model, window):
     south = equipment_frames(client, model, *window, site="site-south")
     assert {k[0] for k in north} == {"site-north"} and {k[0] for k in south} == {"site-south"}
     assert ("site-south", "RTU-S1") in south and ("site-south", "RTU-S1") not in north
-    wx_n = north[("site-north", "AHU-1")].attrs["bindings"]["web-outside-air-temp"]["uuid"]
-    wx_s = south[("site-south", "RTU-S1")].attrs["bindings"]["web-outside-air-temp"]["uuid"]
+    wx_n = north[("site-north", "AHU-1")].attrs["bindings"]["weather_service_air_temperature"]["uuid"]
+    wx_s = south[("site-south", "RTU-S1")].attrs["bindings"]["weather_service_air_temperature"]["uuid"]
     assert wx_n != wx_s
-    assert south[("site-south", "RTU-S1")].attrs["bindings"]["web-outside-air-temp"]["source_unit"] == "°F"
+    assert south[("site-south", "RTU-S1")].attrs["bindings"]["weather_service_air_temperature"]["source_unit"] == "°F"
 
 
 def test_run_rules_finds_the_seeded_faults(client, model, window):
@@ -414,13 +414,13 @@ def test_read_csv_export_and_frames(tmp_path):
     frames = csv_frames(f)
     assert list(frames) == [("csv", "AHU-9")]
     out = frames[("csv", "AHU-9")]
-    assert out["discharge-air-temp"].iloc[0] == pytest.approx((55 - 32) * 5 / 9)
-    assert out["outside-air-damper"].iloc[0] == pytest.approx(0.40)
-    assert out["fan-cmd"].iloc[0] == 1.0
+    assert out["discharge_air_temperature"].iloc[0] == pytest.approx((55 - 32) * 5 / 9)
+    assert out["outdoor_air_intake_damper_position_command"].iloc[0] == pytest.approx(40.0)
+    assert out["supply_fan_command"].iloc[0] == 1.0
     assert out.attrs["window_sec"] == 300
     assert any("mystery" in k for k in out.attrs["skipped"])
-    mapped = csv_frames(f, column_roles={"AHU-9 mystery sensor [V]": "ahu_sat"})
-    assert "discharge-air-temp" in mapped[("csv", "AHU-9")].columns
+    mapped = csv_frames(f, column_roles={"AHU-9 mystery sensor [V]": "air_handling_unit_discharge_air_temperature"})
+    assert "discharge_air_temperature" in mapped[("csv", "AHU-9")].columns
 
 
 def test_pull_csv_round_trips_through_the_reader(client, model, window, tmp_path):
@@ -430,9 +430,10 @@ def test_pull_csv_round_trips_through_the_reader(client, model, window, tmp_path
     back = csv_frames(out)
     orig = frames[("site-north", "AHU-1")]
     got = back[("csv", "AHU-1")]
-    assert {"discharge-air-temp", "fan-cmd", "outside-air-damper"} <= set(got.columns)
-    assert got["outside-air-damper"].max() <= 1.0
-    assert abs(got["discharge-air-temp"].mean() - orig["discharge-air-temp"].mean()) < 0.5
+    assert {"discharge_air_temperature", "supply_fan_command", "outdoor_air_intake_damper_position_command"} <= set(got.columns)
+    assert got["outdoor_air_intake_damper_position_command"].max() == pytest.approx(
+        orig["outdoor_air_intake_damper_position_command"].max(), abs=0.5)
+    assert abs(got["discharge_air_temperature"].mean() - orig["discharge_air_temperature"].mean()) < 0.5
 
 
 TTL = """@prefix ph: <https://project-haystack.org/def/ph/> .
@@ -442,7 +443,7 @@ TTL = """@prefix ph: <https://project-haystack.org/def/ph/> .
 @prefix local: <urn:test:> .
 local:s1 a phIoT:site ; rdfs:label "S1" ; ph:hasTag ph:site .
 local:AHU-1 a phIoT:equip ; rdfs:label "AHU-1" ; ph:hasTag local:ahu, local:equip ; phIoT:siteRef local:s1 .
-local:p1 a phIoT:point ; rdfs:label "AHU-1 sat" ; ph:hasTag local:point, local:his, local:discharge, local:air, local:temp, local:sensor ;
+local:p1 a phIoT:point ; rdfs:label "AHU-1 discharge_air_temperature" ; ph:hasTag local:point, local:his, local:discharge, local:air, local:temp, local:sensor ;
     phIoT:siteRef local:s1 ; phIoT:equipRef local:AHU-1 ; ph:unit "\\u00b0F" ; ph:kind "Number" ;
     ref:hasExternalReference [ a ref:TimeseriesReference ; ref:hasTimeseriesId "uuid-1" ] .
 """
@@ -456,7 +457,7 @@ def test_turtle_reader_builds_a_bindable_model():
     assert m.points[0].uuid == "uuid-1" and m.points[0].equip_ref == "AHU-1"
     assert m.points[0].unit == "°F"
     b = bind_equipment(m)[0]
-    assert "ahu" in b.kinds and b.best()["sat"].uuid == "uuid-1"
+    assert "ahu" in b.kinds and b.best()["discharge_air_temperature"].uuid == "uuid-1"
 
 
 @pytest.mark.parametrize("markers,kind", [
@@ -499,8 +500,8 @@ def test_turtle_haystack4_hot_water_plant_binds_like_a_boiler():
     b4 = bind_equipment(read_turtle(TTL_HW_PLANT.replace("{tags}", h4)))[0]
     bb = bind_equipment(read_turtle(TTL_HW_PLANT.replace("{tags}", "phIoT:equip, phIoT:boiler")))[0]
     assert b4.kinds == bb.kinds == ["boiler", "general"]
-    assert set(b4.roles) == set(bb.roles) and "hw_supply_t" in b4.roles
-    assert b4.best()["hw_supply_t"].uuid == bb.best()["hw_supply_t"].uuid == "uuid-hws"
+    assert set(b4.roles) == set(bb.roles) and "supply_hot_water_temperature" in b4.roles
+    assert b4.best()["supply_hot_water_temperature"].uuid == bb.best()["supply_hot_water_temperature"].uuid == "uuid-hws"
 
 
 # ---------------------------------------------------------------------------- reporting + ECM hooks
@@ -509,13 +510,13 @@ def test_report_source_and_bindings(client, model, window, tmp_path):
 
     assert {"nf", "nf_csv", "device_folder"} <= set(HISTORY_SOURCES) and "openfdd_api" not in HISTORY_SOURCES
     h = NfSource(equip="AHU-1", site="site-north", client=client, start=window[0], end=window[1]).load()
-    assert h.equipment_id == "AHU-1" and "discharge-air-temp" in h.frame.columns
+    assert h.equipment_id == "AHU-1" and "discharge_air_temperature" in h.frame.columns
     from open_fdd.ecm_engineering.haystack_bindings import adapt_nf_model
 
     res = adapt_nf_model(model, site="site-north")
     assert res.ok and any(a["equipment_id"] == "AHU-1" for a in res.assets)
     ahu = next(a for a in res.assets if a["equipment_id"] == "AHU-1")
-    assert any(p["canonical_role"] == "discharge-air-temp" and p["fdd_ready"] for p in ahu["points"])
+    assert any(p["canonical_role"] == "discharge_air_temperature" and p["fdd_ready"] for p in ahu["points"])
 
 
 def test_version_axes_are_separate():
@@ -545,7 +546,7 @@ def test_cli_model_table_and_json(capsys, mock_url):
     assert code == 0 and "RTU-S1" in out and "AHU-1" not in out
     code, out, _ = run_cli(capsys, "model", "--url", mock_url, "--equip", "AHU-1", "--json")
     rows = json.loads(out)
-    assert rows[0]["equip"] == "AHU-1" and rows[0]["roles"]["sat"]["column"] == "discharge-air-temp"
+    assert rows[0]["equip"] == "AHU-1" and rows[0]["roles"]["discharge_air_temperature"]["column"] == "discharge_air_temperature"
 
 
 def test_cli_pull_csv_and_env_file(capsys, mock_url, tmp_path):

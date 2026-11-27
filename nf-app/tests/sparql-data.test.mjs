@@ -235,13 +235,13 @@ test("rdf hook: Turtle pages join to the full model Turtle", async () => {
 });
 
 test("model.js exports an explicit ofddRole attr as local:ofddRole", async () => {
-  const recs = fixture.records.map((r) => (r.uuid === SAT ? { ...r, attrs: { ...r.attrs, ofddRole: "sat" } } : r));
+  const recs = fixture.records.map((r) => (r.uuid === SAT ? { ...r, attrs: { ...r.attrs, ofddRole: "discharge_air_temperature" } } : r));
   const { sdk } = mockSdk({ records: recs });
   const ttl = (await rdf.buildTurtle(sdk, {})).turtle;
-  assert.match(ttl, /local:ofddRole "sat"/);
+  assert.match(ttl, /local:ofddRole "discharge_air_temperature"/);
   const out = await hook.handle({ sdk, args: { query: "SELECT ?p ?role WHERE { ?p local:ofddRole ?role }", ...range(1) } });
   assert.equal(out.ok, true, JSON.stringify(out));
-  assert.equal(out.points[SAT].role, "sat");
+  assert.equal(out.points[SAT].role, "discharge_air_temperature");
 });
 
 test("hardening: runaway SPARQL is stopped by the worker timeout; huge results are refused, not truncated", async () => {
@@ -340,13 +340,13 @@ test("a windowHours-only request gets the bucket-aligned default window", () => 
 const SAT_ONLY_Q = `SELECT ?uuid WHERE { ?p a phIoT:point ; ref:hasExternalReference/ref:hasTimeseriesId ?uuid .
   FILTER(STR(?uuid) = "${SAT}") }`;
 
-test("handle: run_proof is the FDD hook's resolution; a proof point off the page comes back in run_proof_series", async () => {
+test("handle: operating_status is the FDD hook's resolution; a proof point off the page comes back in run_proof_series", async () => {
   const { sdk } = mockSdk({ series: { [SAT]: ramp(12), [FAN]: ramp(12, (i) => (i < 6 ? 1 : 0)) } });
   const ans = await hook.handle({ sdk, args: { query: SAT_ONLY_Q, ...range(1) } });
   assert.equal(ans.ok, true, ans.error);
   assert.deepEqual(Object.keys(ans.series), [SAT], "series holds only the page's points");
-  assert.equal(ans.run_proof.length, 1);
-  assert.deepEqual({ ...ans.run_proof[0], site: undefined }, { site: undefined, equip: "AHU-1", uuid: FAN, source: "command", tier: "own", via: "self", unit: "" });
+  assert.equal(ans.operating_status.length, 1);
+  assert.deepEqual({ ...ans.operating_status[0], site: undefined }, { site: undefined, equip: "AHU-1", uuid: FAN, source: "command", tier: "own", via: "self", unit: "" });
   assert.deepEqual(ans.run_proof_series[FAN].map(([, v]) => v), [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]);
 });
 
@@ -355,15 +355,15 @@ test("handle: an equipment with no status or command bound gets the no-binding m
   const { sdk } = mockSdk({ records, series: { [SAT]: ramp(12) } });
   const ans = await hook.handle({ sdk, args: { query: SAT_ONLY_Q, ...range(1) } });
   assert.equal(ans.ok, true, ans.error);
-  assert.equal(ans.run_proof[0].uuid, null);
+  assert.equal(ans.operating_status[0].uuid, null);
   assert.deepEqual(ans.run_proof_series, {});
 });
 
-test("runProofOf: an explicit ofddRole run_proof pin wins; pinned own status is the last resort", () => {
+test("runProofOf: an explicit ofddRole operating_status pin wins; pinned own status is the last resort", () => {
   const e = { site: "s", id: "U1" };
   const pt = (uuid, role) => ({ uuid, equipRef: "U1", siteRef: "s", units: "", tags: [], rec: { attrs: { ofddRole: role } } });
-  const model = { equips: [], points: [pt("st", "fan_status"), pt("rp", "run_proof")] };
+  const model = { equips: [], points: [pt("st", "supply_fan_operating_status"), pt("rp", "operating_status")] };
   assert.equal(hook.runProofOf(model, [e])[0].uuid, "rp");
-  assert.equal(hook.runProofOf({ equips: [], points: [pt("st", "fan_status")] }, [e])[0].uuid, "st");
+  assert.equal(hook.runProofOf({ equips: [], points: [pt("st", "supply_fan_operating_status")] }, [e])[0].uuid, "st");
   assert.equal(hook.runProofOf({ equips: [], points: [] }, [e])[0].uuid, null);
 });

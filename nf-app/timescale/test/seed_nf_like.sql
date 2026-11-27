@@ -31,9 +31,9 @@ INSERT INTO public.instances VALUES (md5('instance')::uuid, 'nf-test');
 DROP TABLE IF EXISTS pg_temp.roles;
 CREATE TEMP TABLE roles (role text, unit text);
 INSERT INTO roles VALUES
-  ('sat', 'degF'), ('sat_aux', 'degF'), ('sat_sp', 'degF'), ('rat', 'degF'), ('mat', 'degF'), ('oa_t', 'degF'), ('oa_h', '%RH'),
-  ('zone_t', 'degF'), ('duct_static', 'in h₂0'), ('duct_static_sp', 'inH2O'), ('fan_status', ''), ('fan_cmd', '%'),
-  ('oa_damper_pct', '%'), ('htg_valve_pct', '%'), ('clg_valve_pct', '%');
+  ('discharge_air_temperature', 'degF'), ('sat_aux', 'degF'), ('discharge_air_temperature_setpoint', 'degF'), ('return_air_temperature', 'degF'), ('mixed_air_temperature', 'degF'), ('outdoor_air_intake_temperature', 'degF'), ('outdoor_air_intake_relative_humidity', '%RH'),
+  ('zone_air_temperature', 'degF'), ('discharge_air_static_pressure', 'in h₂0'), ('discharge_air_static_pressure_setpoint', 'inH2O'), ('supply_fan_operating_status', ''), ('supply_fan_command', '%'),
+  ('outdoor_air_intake_damper_position_command', '%'), ('heating_valve_position_command', '%'), ('cooling_valve_position_command', '%');
 
 INSERT INTO public.points
 SELECT md5('AHU-1/' || role)::uuid, md5('instance')::uuid, 'AHU-1/' || role, unit FROM roles;
@@ -41,23 +41,23 @@ SELECT md5('AHU-1/' || role)::uuid, md5('instance')::uuid, 'AHU-1/' || role, uni
 INSERT INTO public.data (point_id, "time", value)
 SELECT md5('AHU-1/' || r.role)::uuid, g.t,
   CASE r.role
-    WHEN 'oa_t'   THEN s.oa
-    WHEN 'oa_h'   THEN 55 + 25 * sin(g.d * 0.9) + s.nz * 4
-    WHEN 'rat'    THEN 72 + s.nz * 0.4
-    WHEN 'zone_t' THEN 72.5 + s.nz * 0.6
-    WHEN 'mat'    THEN 0.3 * s.oa + 0.7 * (72 + s.nz * 0.4)
-    WHEN 'sat_sp' THEN 55
+    WHEN 'outdoor_air_intake_temperature'   THEN s.oa
+    WHEN 'outdoor_air_intake_relative_humidity'   THEN 55 + 25 * sin(g.d * 0.9) + s.nz * 4
+    WHEN 'return_air_temperature'    THEN 72 + s.nz * 0.4
+    WHEN 'zone_air_temperature' THEN 72.5 + s.nz * 0.6
+    WHEN 'mixed_air_temperature'    THEN 0.3 * s.oa + 0.7 * (72 + s.nz * 0.4)
+    WHEN 'discharge_air_temperature_setpoint' THEN 55
     WHEN 'sat_aux' THEN 55
-    WHEN 'sat'    THEN CASE WHEN s.fan_on THEN 55 + s.nz * 0.5 + CASE WHEN g.d BETWEEN 30 AND 32 THEN 9 ELSE 0 END ELSE 72 END
-    WHEN 'duct_static_sp' THEN 1.5
-    WHEN 'duct_static' THEN CASE WHEN NOT s.fan_on THEN 0.02
+    WHEN 'discharge_air_temperature'    THEN CASE WHEN s.fan_on THEN 55 + s.nz * 0.5 + CASE WHEN g.d BETWEEN 30 AND 32 THEN 9 ELSE 0 END ELSE 72 END
+    WHEN 'discharge_air_static_pressure_setpoint' THEN 1.5
+    WHEN 'discharge_air_static_pressure' THEN CASE WHEN NOT s.fan_on THEN 0.02
                                  WHEN g.d BETWEEN 10 AND 12 THEN 0.45 + s.nz * 0.02
                                  ELSE 1.5 + s.nz * 0.03 END
-    WHEN 'fan_status' THEN CASE WHEN s.fan_on THEN 1 ELSE 0 END
-    WHEN 'fan_cmd'    THEN CASE WHEN NOT s.fan_on THEN 0 WHEN g.d BETWEEN 10 AND 12 THEN 100 ELSE 60 + 10 * sin(g.d) END
-    WHEN 'oa_damper_pct' THEN CASE WHEN NOT s.fan_on THEN 0 ELSE least(100, greatest(15, 20 + 80 * (s.oa - 50) / 30.0)) END
-    WHEN 'htg_valve_pct' THEN CASE WHEN s.fan_on AND s.oa < 50 THEN least(100, (55 - s.oa) * 4) ELSE 0 END
-    WHEN 'clg_valve_pct' THEN CASE WHEN s.fan_on AND s.oa > 65 THEN least(100, (s.oa - 60) * 5)
+    WHEN 'supply_fan_operating_status' THEN CASE WHEN s.fan_on THEN 1 ELSE 0 END
+    WHEN 'supply_fan_command'    THEN CASE WHEN NOT s.fan_on THEN 0 WHEN g.d BETWEEN 10 AND 12 THEN 100 ELSE 60 + 10 * sin(g.d) END
+    WHEN 'outdoor_air_intake_damper_position_command' THEN CASE WHEN NOT s.fan_on THEN 0 ELSE least(100, greatest(15, 20 + 80 * (s.oa - 50) / 30.0)) END
+    WHEN 'heating_valve_position_command' THEN CASE WHEN s.fan_on AND s.oa < 50 THEN least(100, (55 - s.oa) * 4) ELSE 0 END
+    WHEN 'cooling_valve_position_command' THEN CASE WHEN s.fan_on AND s.oa > 65 THEN least(100, (s.oa - 60) * 5)
                                    WHEN s.fan_on AND g.d BETWEEN 40 AND 41 THEN 80 ELSE 0 END
   END
 FROM generate_series(timestamptz '2026-09-01 00:00:00+00', timestamptz '2026-10-30 23:55:00+00', interval '5 minutes') AS g0(t)
@@ -69,6 +69,6 @@ CROSS JOIN LATERAL (
          (extract(dow FROM g.t) BETWEEN 1 AND 5 AND extract(hour FROM g.t) BETWEEN 6 AND 18) AS fan_on
 ) s
 -- a 3 hour outage of the SAT sensor on day 20 (gap handling)
-WHERE NOT (r.role = 'sat' AND g.d BETWEEN 20 AND 20.125);
+WHERE NOT (r.role = 'discharge_air_temperature' AND g.d BETWEEN 20 AND 20.125);
 
 ANALYZE public.data;

@@ -12,9 +12,9 @@ def scheduling_fan_bins(*, fan_kw_total: float, existing_schedule: OperatingSche
     details = []
     for row in bins.rows:
         hours = existing_schedule.total_operating_hours(row.shift_hours)
-        kwh = fan_kw_total * hours
-        baseline += kwh
-        details.append({"temp_f": row.temp_f, "operating_hours": hours, "baseline_kwh": kwh, "saved_kwh": kwh * reduction})
+        electric_energy = fan_kw_total * hours
+        baseline += electric_energy
+        details.append({"temp_f": row.temp_f, "operating_hours": hours, "baseline_kwh": electric_energy, "saved_kwh": electric_energy * reduction})
     savings = baseline * reduction
     return {"baseline_kwh": baseline, "proposed_kwh": baseline - savings, "savings_kwh": savings, "hours_reduction_fraction": reduction, "bins": details}
 
@@ -42,8 +42,8 @@ def scheduling_cooling_bins(*, oa_cfm_total: float, kw_per_ton: float, existing_
     for row in bins.rows:
         hours = existing_schedule.total_operating_hours(row.shift_hours)
         ton_h = 0.0 if row.oa_enthalpy is None else max(0.0, oa_cfm_total * (row.oa_enthalpy - supply_enthalpy_btu_lb) * 4.5 / 12000.0)
-        kwh = ton_h * hours * kw_per_ton
-        baseline += kwh
-        details.append({"temp_f": row.temp_f, "operating_hours": hours, "baseline_kwh": kwh, "saved_kwh": kwh * reduction})
+        electric_energy = ton_h * hours * kw_per_ton
+        baseline += electric_energy
+        details.append({"temp_f": row.temp_f, "operating_hours": hours, "baseline_kwh": electric_energy, "saved_kwh": electric_energy * reduction})
     savings = baseline * reduction
     return {"baseline_kwh": baseline, "proposed_kwh": baseline - savings, "savings_kwh": savings, "bins": details}

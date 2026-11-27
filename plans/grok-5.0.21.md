@@ -109,7 +109,7 @@ No failures observed on these heads at the time of the last plan edit. Several l
 | 1666 | PR READY (#1677, #1679, #1693, #1698) | ModeGated `assessment()` in detect should pick up via `hasattr` once #1677 merges; that combination is not tested in the #1698 stack |
 | 1652-1662 | PR READY (see table) | #1662 split: #1689 + #1694 |
 | 1667 | PR partial (#1691, #1695, #1696) | still open: acceptance 1 (SQL/pandas/RDF-reproduced episode), 4 (tuner before/after replay), scrubbed real-data half of 6, a real labeled corpus for 5 |
-| 1635 | PR partial (#1692) | hook must emit `run_proof` / `run_proof_series` (Claude) |
+| 1635 | PR partial (#1692) | hook must emit `operating_status` / `run_proof_series` (Claude) |
 | 1569 | PR partial (#1697, Python audit half) | namespace, extension TTL, SHACL shapes and vocabulary edits stay with the ontology/RDF owner. Shipped vocab audit: 29 `no_standard_parent`, 28 `no_label`, 28 `no_definition`; no terms minted in a standard namespace. Vocabulary was not changed. |
 | 1663 | OPEN | tracker; closes only after children and 4.5.12 release evidence |
 | 1669 (Claude) | INDEPENDENTLY VERIFIED on `723d90d3` | stays open until integrated and released |

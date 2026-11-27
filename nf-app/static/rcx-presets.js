@@ -15,11 +15,11 @@
 //
 // Conventions (same physical defaults as the old central UI, expressed in SI):
 //   comfort band      21.111-23.889 C (70-75 F) unless the zone has a setpoint: then
-//                     sp +/- 1.3889 delta C (2.5 delta F), or heating_sp..cooling_sp when both exist.
+//                     sp +/- 1.3889 delta C (2.5 delta F), or zone_heating_air_temperature_setpoint..zone_cooling_air_temperature_setpoint when both exist.
 //   degree days       daily mean outdoor-air temperature, base 18.333 C (65 F): CDD = max(0, mean-base),
 //                     HDD = max(0, base-mean), in C-days, summed per calendar month (UTC days; NF's
 //                     daily resample buckets). Shown in F-days (x1.8) in the imperial display system.
-//                     Outdoor air = NF weather points (web_oa_t) first, else the equip's own oa_t.
+//                     Outdoor air = NF weather points (weather_service_air_temperature) first, else the equip's own outdoor_air_intake_temperature.
 (function () {
   "use strict";
 
@@ -542,7 +542,7 @@
       note() {
         if (!ctx.ahuOn) return "";
         const all = [...seen.values()], done = all.filter((x) => x.filtered), assumed = done.filter((x) => x.assumed).length;
-        const roles = [...new Set(done.map((x) => x.role === "fan_status" ? "status" : "command"))].join("/");
+        const roles = [...new Set(done.map((x) => x.role === "supply_fan_operating_status" ? "status" : "command"))].join("/");
         return ` · AHU on only: ${done.length} of ${all.length} filtered by the feeding AHU's fan ${roles || "signal"}`
           + (assumed ? `; AHU assumed for ${assumed} (the site has one AHU and no airRef)` : "")
           + (all.length - done.length ? `; ${all.length - done.length} without a known AHU fan signal left unfiltered` : "");
@@ -622,7 +622,7 @@
   }
 
   // ---- the 18 presets -------------------------------------------------------------------
-  /** Per-sample comfort band (degC) for zone_t series `arr`: heating..cooling sp, else sp +/- 1.3889 delta C, else 21.111-23.889 C. */
+  /** Per-sample comfort band (degC) for zone_air_temperature series `arr`: heating..cooling sp, else sp +/- 1.3889 delta C, else 21.111-23.889 C. */
   function bandsFor(arr, data, step, w) {
     const [dl, dh] = defaultBand(), half = spHalfWidth();       // degC; data is SI
     const sp = w.sp ? bucketMap(data.get(w.sp.uuid) || [], step) : null;
@@ -641,10 +641,10 @@
   // Zones. Fleet analytics (pies, rankings, the all-zones band) draw only in the all-devices view.
   rcxView({
     id: "zone_comfort_rank", group: "Zones", title: "Zones — comfort ranking (% time in band)",
-    kinds: [], scope: "site", minEquips: 1, hours: 168, fleet: true, headline: true,
-    roles: { required: ["zone_t"], optional: ["zone_air_temp_sp", "cooling_sp", "heating_sp"] },
+    kinds: ZONES, scope: "site", minEquips: 1, hours: 168, fleet: true, headline: true,
+    roles: { required: ["zone_air_temperature"], optional: ["zone_air_temperature_setpoint", "zone_cooling_air_temperature_setpoint", "zone_heating_air_temperature_setpoint"] },
     render: async (el, ctx) => {
-      const want = ctx.equips.map((eq) => ({ eq, t: ctx.first(eq, "zone_t"), sp: ctx.first(eq, "zone_air_temp_sp"), c: ctx.first(eq, "cooling_sp"), h: ctx.first(eq, "heating_sp") }));
+      const want = ctx.equips.map((eq) => ({ eq, t: ctx.first(eq, "zone_air_temperature"), sp: ctx.first(eq, "zone_air_temperature_setpoint"), c: ctx.first(eq, "zone_cooling_air_temperature_setpoint"), h: ctx.first(eq, "zone_heating_air_temperature_setpoint") }));
       const { data, step, windowSec } = await load(ctx, want.flatMap((w) => [w.t, w.sp, w.c, w.h]).filter(Boolean));
       const filt = ahuFilter(ctx, windowSec);
       const rows = [];
@@ -671,10 +671,10 @@
   // below p10 are drawn in their own colours, every other zone is muted. One zone (single-device view): just its line.
   rcxView({
     id: "zone_temps", group: "Zones", title: "Zones — all space temps (10th–90th percentile band)",
-    kinds: [], scope: "site", minEquips: 1, hours: 168, headline: true, wide: true,
-    roles: { required: ["zone_t"], optional: [] },
+    kinds: ZONES, scope: "site", minEquips: 1, hours: 168, headline: true, wide: true,
+    roles: { required: ["zone_air_temperature"], optional: [] },
     render: async (el, ctx) => {
-      const want = ctx.equips.map((eq) => ({ eq, y: ctx.first(eq, "zone_t") }));
+      const want = ctx.equips.map((eq) => ({ eq, y: ctx.first(eq, "zone_air_temperature") }));
       const { data, step, windowSec } = await load(ctx, want.map((w) => w.y));
       const filt = ahuFilter(ctx, windowSec);
       const zones = [];
@@ -703,9 +703,9 @@
   rcxView({
     id: "vav_health", group: "VAV", title: "VAV — health (rogue dampers and reheat valves)",
     kinds: ZONES, scope: "site", minEquips: 1, hours: 168, fleet: true, headline: true,
-    roles: { required: [], anyOf: ["damper_pct", "damper_cmd", "reheat_valve_pct"], optional: [] },
+    roles: { required: [], anyOf: ["damper_position", "damper_position_command", "terminal_unit_heating_valve_position_command"], optional: [] },
     render: async (el, ctx) => {
-      const want = ctx.equips.map((eq) => ({ eq, dm: firstOf(ctx, eq, ["damper_pct", "damper_cmd"]), rh: ctx.first(eq, "reheat_valve_pct") }))
+      const want = ctx.equips.map((eq) => ({ eq, dm: firstOf(ctx, eq, ["damper_position", "damper_position_command"]), rh: ctx.first(eq, "terminal_unit_heating_valve_position_command") }))
         .filter((w) => w.dm || w.rh);
       if (!want.length) return noData("VAV damper or reheat valve");
       const { data, windowSec } = await load(ctx, want.flatMap((w) => [w.dm, w.rh]).filter(Boolean));
@@ -738,14 +738,14 @@
   rcxView({
     id: "vav_positions", group: "VAV", title: "VAV — damper and reheat valve position (timeseries)",
     kinds: ZONES, scope: "site", minEquips: 1, hours: 168,
-    roles: { required: [], anyOf: ["damper_pct", "damper_cmd", "reheat_valve_pct"], optional: [] },
+    roles: { required: [], anyOf: ["damper_position", "damper_position_command", "terminal_unit_heating_valve_position_command"], optional: [] },
     render: async (el, ctx) => {
-      const want = ctx.equips.map((eq) => ({ eq, dm: firstOf(ctx, eq, ["damper_pct", "damper_cmd"]), rh: ctx.first(eq, "reheat_valve_pct") })).filter((w) => w.dm || w.rh);
+      const want = ctx.equips.map((eq) => ({ eq, dm: firstOf(ctx, eq, ["damper_position", "damper_position_command"]), rh: ctx.first(eq, "terminal_unit_heating_valve_position_command") })).filter((w) => w.dm || w.rh);
       if (!want.length) return noData("VAV damper or reheat valve");
       const { data } = await load(ctx, want.flatMap((w) => [w.dm, w.rh]).filter(Boolean));
       const rows = [];
       for (const w of want) {
-        for (const [part, p] of [["damper", w.dm], ["reheat valve", w.rh]]) {
+        for (const [part, p] of [["damper_position", w.dm], ["reheat valve", w.rh]]) {
           if (!p) continue;
           for (const [t, v] of data.get(p.uuid) || []) if (finite(v)) rows.push({ equipment_id: labelOf(w.eq), series: part, ts: t, value: +(rcxStats.frac(v) * 100).toFixed(1) });
         }
@@ -759,9 +759,9 @@
   rcxView({
     id: "vav_reheat_dats", group: "VAV", title: "VAV — reheat discharge temps (timeseries)",
     kinds: ZONES, scope: "site", minEquips: 1, hours: 168,
-    roles: { required: ["vav_discharge_t"], optional: ["reheat_valve_pct"] },
+    roles: { required: ["terminal_unit_discharge_air_temperature"], optional: ["terminal_unit_heating_valve_position_command"] },
     render: async (el, ctx) => {
-      const want = ctx.equips.filter((eq) => ctx.first(eq, "reheat_valve_pct")).map((eq) => ({ eq, y: ctx.first(eq, "vav_discharge_t") }));
+      const want = ctx.equips.filter((eq) => ctx.first(eq, "terminal_unit_heating_valve_position_command")).map((eq) => ({ eq, y: ctx.first(eq, "terminal_unit_discharge_air_temperature") }));
       if (!want.length) return "No VAV with a reheat valve and a discharge temperature here.";
       const { data } = await load(ctx, want.map((w) => w.y));
       const rows = want.flatMap((w) => ctx.dispSeries(data.get(w.y.uuid) || [], ctx.siUnit(w.y)).map(([t, v]) => ({ equipment_id: labelOf(w.eq), series: "primary", ts: t, value: v })));
@@ -772,19 +772,19 @@
   });
 
   // Air handlers
-  timeseriesPreset({ id: "ahu_dats", group: "Air handlers", title: "AHU — all DATs / SAT (timeseries)", kinds: AIR, role: "sat", overlay: "sat_sp", rules: ["AHU-SATDEV"] });
-  timeseriesPreset({ id: "ahu_mats", group: "Air handlers", title: "AHU — all MATs (timeseries)", kinds: AIR, role: "mat" });
-  timeseriesPreset({ id: "ahu_rats", group: "Air handlers", title: "AHU — all RATs (timeseries)", kinds: AIR, role: "rat" });
-  timeseriesPreset({ id: "ahu_dampers", group: "Air handlers", title: "AHU — OA dampers (timeseries)", kinds: AIR, role: "oa_damper_pct" });
-  timeseriesPreset({ id: "fan_speeds", group: "Air handlers", title: "AHU — fan speeds / cmds (timeseries)", kinds: AIR, role: "fan_cmd" });
-  timeseriesPreset({ id: "duct_static_ts", group: "Air handlers", title: "AHU — duct static + setpoint (timeseries)", kinds: AIR, role: "duct_static", overlay: "duct_static_sp", rules: ["FC1", "AHU-DUCTHI"] });
+  timeseriesPreset({ id: "ahu_dats", group: "Air handlers", title: "AHU — all DATs / SAT (timeseries)", kinds: AIR, role: "discharge_air_temperature", overlay: "discharge_air_temperature_setpoint", rules: ["AHU-SATDEV"] });
+  timeseriesPreset({ id: "ahu_mats", group: "Air handlers", title: "AHU — all MATs (timeseries)", kinds: AIR, role: "mixed_air_temperature" });
+  timeseriesPreset({ id: "ahu_rats", group: "Air handlers", title: "AHU — all RATs (timeseries)", kinds: AIR, role: "return_air_temperature" });
+  timeseriesPreset({ id: "ahu_dampers", group: "Air handlers", title: "AHU — OA dampers (timeseries)", kinds: AIR, role: "outdoor_air_intake_damper_position_command" });
+  timeseriesPreset({ id: "fan_speeds", group: "Air handlers", title: "AHU — fan speeds / cmds (timeseries)", kinds: AIR, role: "supply_fan_command" });
+  timeseriesPreset({ id: "duct_static_ts", group: "Air handlers", title: "AHU — duct static + setpoint (timeseries)", kinds: AIR, role: "discharge_air_static_pressure", overlay: "discharge_air_static_pressure_setpoint", rules: ["FC1", "AHU-DUCTHI"] });
 
   rcxView({
     id: "duct_static_box", group: "Air handlers", title: "AHU — duct static, fan on (box)",
     kinds: AIR, scope: "site", minEquips: 1, hours: 168,
-    roles: { required: ["duct_static"], optional: ["fan_status", "fan_cmd"] },
+    roles: { required: ["discharge_air_static_pressure"], optional: ["supply_fan_operating_status", "supply_fan_command"] },
     render: async (el, ctx) => {
-      const want = ctx.equips.map((eq) => ({ eq, y: ctx.first(eq, "duct_static"), fan: firstOf(ctx, eq, ["fan_status", "fan_cmd"]) }));
+      const want = ctx.equips.map((eq) => ({ eq, y: ctx.first(eq, "discharge_air_static_pressure"), fan: firstOf(ctx, eq, ["supply_fan_operating_status", "supply_fan_command"]) }));
       const { data, step } = await load(ctx, want.flatMap((w) => [w.y, w.fan]).filter(Boolean));
       const rows = [];
       let filtered = 0;
@@ -803,23 +803,23 @@
     },
   });
 
-  resetPreset({ id: "ahu_sat_reset_scatter", group: "Scatter plots", title: "AHU — SAT vs web dry-bulb (scatter)", kinds: AIR, role: "sat", xRoles: ["web_oa_t", "oa_t"], xLabel: "OAT" });
+  resetPreset({ id: "ahu_sat_reset_scatter", group: "Scatter plots", title: "AHU — SAT vs web dry-bulb (scatter)", kinds: AIR, role: "discharge_air_temperature", xRoles: ["weather_service_air_temperature", "outdoor_air_intake_temperature"], xLabel: "OAT" });
 
   // Plant
   // Scatter plots draw wherever their roles exist (no equipment-kind restriction): outdoor-air temperature vs the hot-water
   // supply temperature (HW reset), and vs the chilled-water supply temperature when a chilled-water system exists.
-  resetPreset({ id: "hw_reset_scatter", group: "Scatter plots", title: "Hot water — HWS vs web dry-bulb (scatter)", kinds: [], role: "hw_supply_t", xRoles: ["web_oa_t", "oa_t"], xLabel: "OAT" });
-  resetPreset({ id: "chw_reset_scatter", group: "Scatter plots", title: "Chilled water — CHWS vs web dry-bulb (scatter)", kinds: [], role: "chw_supply_t", xRoles: ["web_oa_t", "oa_t"], xLabel: "OAT" });
-  resetPreset({ id: "cw_reset_scatter", group: "Scatter plots", title: "Tower / CW — leave temp vs wet-bulb (dry-bulb fallback)", kinds: [...CHW, "cooling_tower"], role: "cw_supply_t", xRoles: ["web_wb_t", "web_oa_t", "oa_t"], xLabel: "OA wet-bulb / dry-bulb" });
-  timeseriesPreset({ id: "chw_temps_ts", group: "Plant", title: "Chiller — CHW supply / return / ΔT (timeseries)", kinds: CHW, role: "chw_supply_t", ret: "chw_return_t", rules: ["CHW-1"] });
-  timeseriesPreset({ id: "cw_temps_ts", group: "Plant", title: "Tower / CW — supply / return / ΔT (timeseries)", kinds: [...CHW, "cooling_tower"], role: "cw_supply_t", ret: "cw_return_t" });
+  resetPreset({ id: "hw_reset_scatter", group: "Scatter plots", title: "Hot water — HWS vs web dry-bulb (scatter)", kinds: [], role: "supply_hot_water_temperature", xRoles: ["weather_service_air_temperature", "outdoor_air_intake_temperature"], xLabel: "OAT" });
+  resetPreset({ id: "chw_reset_scatter", group: "Scatter plots", title: "Chilled water — CHWS vs web dry-bulb (scatter)", kinds: [], role: "supply_chilled_water_temperature", xRoles: ["weather_service_air_temperature", "outdoor_air_intake_temperature"], xLabel: "OAT" });
+  resetPreset({ id: "cw_reset_scatter", group: "Scatter plots", title: "Tower / CW — leave temp vs wet-bulb (dry-bulb fallback)", kinds: [...CHW, "cooling_tower"], role: "supply_condenser_water_temperature", xRoles: ["weather_service_air_wet_bulb_temperature", "weather_service_air_temperature", "outdoor_air_intake_temperature"], xLabel: "OA wet-bulb / dry-bulb" });
+  timeseriesPreset({ id: "chw_temps_ts", group: "Plant", title: "Chiller — CHW supply / return / ΔT (timeseries)", kinds: CHW, role: "supply_chilled_water_temperature", ret: "return_chilled_water_temperature", rules: ["CHW-1"] });
+  timeseriesPreset({ id: "cw_temps_ts", group: "Plant", title: "Tower / CW — supply / return / ΔT (timeseries)", kinds: [...CHW, "cooling_tower"], role: "supply_condenser_water_temperature", ret: "return_condenser_water_temperature" });
 
   // Metering: monthly energy vs degree days. The catalog has electric roles only; gas meters
   // are found by their Haystack markers (gas + energy/volume/flow) on the meter equip.
   async function meterRender(el, ctx, kind) {
     const gas = kind === "gas";
     const dd = gas ? "hdd" : "cdd";
-    const wx = (eq) => firstOf(ctx, eq, ["web_oa_t", "oa_t"]) || ctx.weather.find((p) => p.tags.includes("temp")) || null;
+    const wx = (eq) => firstOf(ctx, eq, ["weather_service_air_temperature", "outdoor_air_intake_temperature"]) || ctx.weather.find((p) => p.tags.includes("temp")) || null;
     const sources = [];
     for (const eq of ctx.equips) {
       if (gas) {
@@ -828,14 +828,14 @@
             sources.push({ eq, p, rate: p.tags.includes("flow") });
         }
       } else {
-        const reg = firstOf(ctx, eq, ["electric_kwh", "kwh"]);
-        const kw = ctx.first(eq, "electric_kw");
+        const reg = firstOf(ctx, eq, ["electric_energy", "electric_energy"]);
+        const kw = ctx.first(eq, "electric_power");
         if (reg) sources.push({ eq, p: reg, rate: false }); else if (kw) sources.push({ eq, p: kw, rate: true });
       }
     }
     if (!sources.length) return gas ? "No gas meter point (tags: point + gas + energy/volume/flow) on these equips." : "No kWh or kW point on these equips.";
     const oat = wx(sources[0].eq);
-    if (!oat) return "No outdoor-air temperature (web_oa_t / oa_t) for degree days.";
+    if (!oat) return "No outdoor-air temperature (weather_service_air_temperature / outdoor_air_intake_temperature) for degree days.";
     const windowSec = 86400;                       // daily buckets
     const { data } = await load(ctx, [...sources.map((s) => s.p), oat], { windowSec });
     // a register needs LAST (difference) and an interval-energy point needs SUM: refetch by mode
@@ -867,13 +867,13 @@
   rcxView({
     id: "meter_elec_cdd", group: "Metering", title: "Metering — electric kWh/month vs CDD",
     kinds: ["meter"], scope: "site", minEquips: 1, hours: 24 * 400,
-    roles: { required: [], optional: ["electric_kwh", "kwh", "electric_kw", "web_oa_t", "oa_t"] },
+    roles: { required: [], optional: ["electric_energy", "electric_energy", "electric_power", "weather_service_air_temperature", "outdoor_air_intake_temperature"] },
     render: (el, ctx) => meterRender(el, ctx, "electric"),
   });
   rcxView({
     id: "meter_gas_hdd", group: "Metering", title: "Metering — gas/month vs HDD",
     kinds: ["meter"], scope: "site", minEquips: 1, hours: 24 * 400,
-    roles: { required: [], optional: ["web_oa_t", "oa_t"] },       // no gas role in fdd-catalog.json
+    roles: { required: [], optional: ["weather_service_air_temperature", "outdoor_air_intake_temperature"] },       // no gas role in fdd-catalog.json
     render: (el, ctx) => meterRender(el, ctx, "gas"),
   });
 

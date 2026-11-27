@@ -41,7 +41,7 @@ local:22222222-0000-4000-8000-000000000010
     phIct:deviceRef local:22222222-0000-4000-8000-000000000003 ;
     ph:unit "degC" ;
     ph:kind "Number" ;
-    local:ofddRole "discharge-air-temp" ;
+    local:ofddRole "discharge_air_temperature" ;
     ref:hasExternalReference [ a ref:TimeseriesReference ;
             rdfs:label "NF history" ;
             ref:hasTimeseriesId "22222222-0000-4000-8000-000000000010" ;
@@ -57,7 +57,7 @@ local:22222222-0000-4000-8000-000000000011
     phIct:deviceRef local:22222222-0000-4000-8000-000000000003 ;
     ph:unit "degC" ;
     ph:kind "Number" ;
-    local:ofddRole "discharge-air-temp" ;
+    local:ofddRole "discharge_air_temperature" ;
     ref:hasExternalReference [ a ref:TimeseriesReference ;
             rdfs:label "NF history" ;
             ref:hasTimeseriesId "22222222-0000-4000-8000-000000000011" ;

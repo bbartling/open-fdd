@@ -1,10 +1,10 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- sched247_always_on.sql — Always-on fan or pump runtime (#1670)
--- Unit-free: ALWAYS_ON_PCT is a fraction of proven run time.
+-- ALWAYS_ON_PCT is a percent of proven run time (95 means 95%).
 --
 -- Proof per sample: the first non-NULL status (fan, pump, chw pump, chiller, compressor, chiller current) wins over
--- the commands (tower fan, fan, chw pump); run when > 0.05 (sql/fdd/run_proof.json threshold); a sample with
+-- the commands (tower fan, fan, chw pump); run when > 0.05 (sql/fdd/operating_status.json threshold); a sample with
 -- neither is UNKNOWN (never a proven OFF). Each sample holds forward to the next one; a hold longer than
 -- MAX_GAP_HOURS, and the last sample, hold nothing.
 --
@@ -20,15 +20,15 @@ WITH proof AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
-      WHEN chw_pump_status IS NOT NULL THEN CASE WHEN chw_pump_status > 0.05 THEN 1 ELSE 0 END
-      WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
-      WHEN compressor_status IS NOT NULL THEN CASE WHEN compressor_status > 0.05 THEN 1 ELSE 0 END
-      WHEN chiller_current IS NOT NULL THEN CASE WHEN chiller_current > 0.05 THEN 1 ELSE 0 END
-      WHEN tower_fan_cmd IS NOT NULL THEN CASE WHEN tower_fan_cmd > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.05 THEN 1 ELSE 0 END
-      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN pump_operating_status IS NOT NULL THEN CASE WHEN pump_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chilled_water_pump_operating_status IS NOT NULL THEN CASE WHEN chilled_water_pump_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chiller_operating_status IS NOT NULL THEN CASE WHEN chiller_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN compressor_operating_status IS NOT NULL THEN CASE WHEN compressor_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chiller_electric_current IS NOT NULL THEN CASE WHEN chiller_electric_current > 0.05 THEN 1 ELSE 0 END
+      WHEN cooling_tower_fan_command IS NOT NULL THEN CASE WHEN cooling_tower_fan_command > 0.5 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
+      WHEN chilled_water_pump_command IS NOT NULL THEN CASE WHEN chilled_water_pump_command > 0.5 THEN 1 ELSE 0 END
       ELSE NULL
     END AS INT) AS on_bit
   FROM history
@@ -79,7 +79,7 @@ base AS (
     h.gap_after,
     CAST(CASE
       WHEN v.assessment = 'assessed'
-       AND v.on_seconds / (v.on_seconds + v.off_seconds) >= {{ALWAYS_ON_PCT}}
+       AND 100.0 * v.on_seconds / (v.on_seconds + v.off_seconds) >= {{ALWAYS_ON_PCT}}
        AND h.on_bit = 1 THEN 1
       ELSE 0
     END AS INT) AS raw_fault

@@ -14,7 +14,7 @@ Hard rules
 1. Never silently drop the **59 canonical** cookbook rules.
 2. Custom rule ids **must** start with ``CUSTOM-`` (e.g. ``CUSTOM-SAT-HIGH``).
 3. ``compute(df, params, poll_seconds) -> pd.Series`` of **bool** (raw fault mask), index-aligned.
-4. Prefer cookbook roles (``sat``, ``fan_status``, …) after role_map — do not hardcode raw CSV names.
+4. Prefer cookbook roles (``discharge_air_temperature``, ``supply_fan_operating_status``, …) after role_map — do not hardcode raw CSV names.
 5. Always include ``CONFIRM_PARAM()`` so UI gets a 0–60 min fault-delay slider (default 5).
 6. Custom rules need no catalog regeneration; run them with ``open_fdd.rules.run_rule("CUSTOM-...", df)``.
 
@@ -94,13 +94,13 @@ def make_custom_rule(
 def compute_sat_high_while_fan_on(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     """Raw fault when discharge air is hotter than ``sat_hi`` and fan is on."""
     del poll  # unused — runner supplies poll for confirm_fault
-    if "discharge-air-temp" not in d.columns:
+    if "discharge_air_temperature" not in d.columns:
         return _false(d.index)
-    sat = pd.to_numeric(d["discharge-air-temp"], errors="coerce")
+    discharge_air_temperature = pd.to_numeric(d["discharge_air_temperature"], errors="coerce")
     thr = _f(p, "sat_hi", 23.888889)
-    fault = sat.notna() & (sat > thr)
-    # Prefer fan_status; fall back to fan_cmd
-    for role in ("fan-status", "fan-cmd"):
+    fault = discharge_air_temperature.notna() & (discharge_air_temperature > thr)
+    # Prefer supply_fan_operating_status; fall back to supply_fan_command
+    for role in ("supply_fan_operating_status", "supply_fan_command"):
         if role in d.columns and d[role].notna().any():
             num = pd.to_numeric(d[role], errors="coerce")
             on = num.fillna(0) > 0.05   # fan-status (0/1) and fan-cmd (fraction 0-1): one declared scale each
@@ -112,8 +112,8 @@ EXAMPLE_SAT_HIGH = make_custom_rule(
     rule_id="CUSTOM-SAT-HIGH",
     title="SAT high while fan on (boilerplate)",
     compute=compute_sat_high_while_fan_on,
-    required_roles=["discharge-air-temp"],
-    optional_roles=["fan-status", "fan-cmd"],
+    required_roles=["discharge_air_temperature"],
+    optional_roles=["supply_fan_operating_status", "supply_fan_command"],
     equation="Fan on AND SAT > sat_hi (°C). Boilerplate threshold rule for agents.",
     equipment_kinds=["ahu"],
     family="custom",
@@ -137,7 +137,7 @@ def compute_rolling_zscore_anomaly(d: pd.DataFrame, p: dict, poll: float) -> pd.
     add that dependency — keep pandas by default.
     """
     del poll
-    role = str(p.get("signal_role", "discharge-air-temp") or "discharge-air-temp")
+    role = str(p.get("signal_role", "discharge_air_temperature") or "discharge_air_temperature")
     if role not in d.columns:
         return _false(d.index)
     s = pd.to_numeric(d[role], errors="coerce")
@@ -153,7 +153,7 @@ EXAMPLE_ZSCORE = make_custom_rule(
     rule_id="CUSTOM-ZSCORE",
     title="Rolling z-score anomaly (boilerplate ML)",
     compute=compute_rolling_zscore_anomaly,
-    required_roles=["discharge-air-temp"],  # override via params["signal_role"] if mapped
+    required_roles=["discharge_air_temperature"],  # override via params["signal_role"] if mapped
     optional_roles=[],
     equation=(
         "Rolling |z-score| of signal_role > z_thr (default window ~3h @ 5‑min). "
@@ -179,7 +179,7 @@ def sklearn_isolation_forest_sketch() -> str:
 # Optional upgrade (requires scikit-learn in the environment):
 # from sklearn.ensemble import IsolationForest
 # def compute_iforest(d, p, poll):
-#     role = p.get("signal_role", "discharge-air-temp")
+#     role = p.get("signal_role", "discharge_air_temperature")
 #     x = pd.to_numeric(d[role], errors="coerce").to_frame("x").dropna()
 #     if len(x) < 30:
 #         return pd.Series(False, index=d.index)

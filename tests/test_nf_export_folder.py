@@ -69,9 +69,9 @@ def test_export_folder_is_si_and_feeds_the_offline_tools(mock_url, tmp_path, cap
     assert code == 0 and "SI" in so
     cmap = json.loads((out / "column_map.json").read_text(encoding="utf-8"))
     assert cmap["equipType"] == "AHU" and cmap["site_id"] == "site-north" and cmap["equipment_id"] == "AHU-1"
-    assert cmap["units"]["discharge-air-temp"] == "°C" and cmap["units"]["duct-static-pressure"] == "Pa"
-    assert cmap["bindings"]["discharge-air-temp"]["source_unit"] == "°F"
-    assert cmap["units"]["outside-air-damper"] == "fraction"
+    assert cmap["units"]["discharge_air_temperature"] == "°C" and cmap["units"]["discharge_air_static_pressure"] == "Pa"
+    assert cmap["bindings"]["discharge_air_temperature"]["source_unit"] == "°F"
+    assert cmap["units"]["outdoor_air_intake_damper_position_command"] == "PERCENT"
     assert cmap["skipped"] == {} and cmap["unit_unverified"] == {} and isinstance(cmap["unmapped_points"], list)
 
     # values equal the SI frames the rules use
@@ -81,11 +81,11 @@ def test_export_folder_is_si_and_feeds_the_offline_tools(mock_url, tmp_path, cap
     from open_fdd.analytics.anomaly.io import load_device_folder
 
     dev = load_device_folder(out)  # default ahu_only=True: the AHU stamp is honoured
-    assert ("discharge-air-temp", "discharge-air-temp") in dev.points and not dev.missing
-    got = dev.frame["discharge-air-temp"]
+    assert ("discharge_air_temperature", "discharge_air_temperature") in dev.points and not dev.missing
+    got = dev.frame["discharge_air_temperature"]
     assert len(got) == len(ref)
-    assert abs(got.to_numpy() - ref["discharge-air-temp"].to_numpy()).max() < 1e-9
-    assert dev.frame["outside-air-damper"].between(0, 1).all()
+    assert abs(got.to_numpy() - ref["discharge_air_temperature"].to_numpy()).max() < 1e-9
+    assert dev.frame["outdoor_air_intake_damper_position_command"].between(0, 100).all()
 
 
 def test_unconvertible_unit_fails_loudly_unless_allowed(mock_url, tmp_path, capsys):
@@ -96,8 +96,10 @@ def test_unconvertible_unit_fails_loudly_unless_allowed(mock_url, tmp_path, caps
     code, _, err = run(capsys, "export-folder", "--url", mock_url, "--equip", "CT-1", "--days", "1", "--out", str(out),
                        "--allow-skips")
     cmap = json.loads((out / "column_map.json").read_text(encoding="utf-8"))
-    assert code == 0 and "tower_fan_cmd" in cmap["skipped"] and "no unit" in cmap["skipped"]["tower_fan_cmd"]
-    assert "skipped: tower_fan_cmd" in err
+    assert code == 0 and "supply_condenser_water_temperature" in cmap["skipped"]
+    assert "no unit" in cmap["skipped"]["supply_condenser_water_temperature"]
+    assert "cooling_tower_fan_command" not in cmap["skipped"]
+    assert "skipped: supply_condenser_water_temperature" in err
 
 
 def test_needs_one_equipment(mock_url, tmp_path, capsys):

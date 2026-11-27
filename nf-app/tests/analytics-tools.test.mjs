@@ -84,7 +84,7 @@ test("analyze_ahu_weekly_runtime: per (siteRef, equipUuid) ISO week equals TRUTH
       near(r.schedule_hours, w.scheduleHours, `${id} w${k} schedule_hours`);
       assert.equal(r.partial_week, false, `${id} w${k} is a full week`);
       assert.ok(Number.isFinite(r.mean_oat_on_c), "mean OAT while on, in degC");
-      assert.equal(r.signal_role, "fan_status");
+      assert.equal(r.signal_role, "supply_fan_operating_status");
     });
   }
   const a = rows.filter((r) => r.equipUuid === A.equipUuid), b = rows.filter((r) => r.equipUuid === B.equipUuid);
@@ -125,7 +125,7 @@ test("analyze_mechanical_cooling: the <10 degC bin is the 20 min event (1/3 h); 
     const rows = result.rows.filter((r) => r.equipUuid === S.equipUuid);
     assert.equal(rows.length, 1, `${id}: one compressor row`);
     const r = rows[0];
-    assert.equal(r.signal_role, "compressor_status");
+    assert.equal(r.signal_role, "compressor_operating_status");
     assert.equal(r.bins.length, 6);
     assert.deepEqual(r.bins.map((b) => b.label), ["<10", "10-16", "16-21", "21-27", "27-32", ">=32"]);
     TRUTH[id].cooling.binHours.forEach((h, i) => near(r.bins[i].hours, h, `${id} bin ${r.bins[i].label}`));
@@ -171,7 +171,7 @@ test("get_fdd_fault_timeline: CMD-1 confirmed 14:05-15:25 then ok; the null-tele
   assert.equal(result.summary.first_confirmed, new Date(wall(2026, 11, 6, 14, 5, tz)).toISOString());
   assert.equal(result.summary.last_confirmed, new Date(wall(2026, 11, 6, 15, 25, tz)).toISOString());
   assert.equal(result.summary.last_state, "ok");
-  // the fan_status gap (Tue 2026-10-27 10:00-13:00) is unknown: a marker, and no ok inside it
+  // the supply_fan_operating_status gap (Tue 2026-10-27 10:00-13:00) is unknown: a marker, and no ok inside it
   const g0 = wall(2026, 10, 27, 10, 0, tz), g1 = wall(2026, 10, 27, 13, 0, tz);
   const inGap = result.timeline.filter((x) => Date.parse(x.ts) >= g0 && Date.parse(x.ts) < g1);
   assert.ok(inGap.some((x) => x.state === "unknown"), "unknown marker at the gap");
@@ -266,11 +266,11 @@ test("resolve_equipment_roles: bound roles by equipUuid or (siteRef, equipRef); 
   assert.equal(a.equipUuid, A.equipUuid);
   assert.equal(b.equipUuid, B.equipUuid);
   assert.ok(a.kinds.includes("ahu"));
-  for (const role of ["fan_status", "fan_cmd", "oa_t", "rat", "mat", "oa_damper_pct", "compressor_status"]) {
+  for (const role of ["supply_fan_operating_status", "supply_fan_command", "outdoor_air_intake_temperature", "return_air_temperature", "mixed_air_temperature", "outdoor_air_intake_damper_position_command", "compressor_operating_status"]) {
     assert.deepEqual(a.roles[role].map((p) => p.uuid), [A.points[role].uuid], `site-a ${role}`);
     assert.deepEqual(b.roles[role].map((p) => p.uuid), [B.points[role].uuid], `site-b ${role}`);
   }
-  assert.ok(a.roles.fan_status.every((p) => p.siteRef === "site-a") && b.roles.fan_status.every((p) => p.siteRef === "site-b"));
+  assert.ok(a.roles.supply_fan_operating_status.every((p) => p.siteRef === "site-a") && b.roles.supply_fan_operating_status.every((p) => p.siteRef === "site-b"));
   assert.ok(Array.isArray(a.runnable_rules) && a.runnable_rules.includes("CMD-1"));
   const amb = (await run({ tool: "resolve_equipment_roles", equipRef: "AHU-1" })).result;
   assert.equal(amb.ok, false);
@@ -284,12 +284,12 @@ test("resolve_equipment_roles: bound roles by equipUuid or (siteRef, equipRef); 
 test("explain_missing_rcx_view: names the missing role, the kind mismatch, and no-data", async () => {
   const miss = (await ok({ tool: "explain_missing_rcx_view", viewId: "duct_static_ts" })).result;
   assert.equal(miss.available, false);
-  assert.ok(miss.missing_roles.includes("duct_static"), "the registry's rcxMissing role");
+  assert.ok(miss.missing_roles.includes("discharge_air_static_pressure"), "the registry's rcxMissing role");
   assert.equal(miss.view.id, "duct_static_ts");
   assert.equal(miss.equips.length, 2);
   assert.deepEqual(miss.equips.map((e) => e.equipUuid).sort(), [A.equipUuid, B.equipUuid].sort());
-  assert.ok(miss.equips.every((e) => e.status === "missing_roles" && e.missing_roles.includes("duct_static")));
-  assert.ok(miss.reasons.some((r) => /duct_static/.test(r)));
+  assert.ok(miss.equips.every((e) => e.status === "missing_roles" && e.missing_roles.includes("discharge_air_static_pressure")));
+  assert.ok(miss.reasons.some((r) => /discharge_air_static_pressure/.test(r)));
   const kind = (await ok({ tool: "explain_missing_rcx_view", viewId: "weekly-pump", site: "site-a" })).result;
   assert.equal(kind.available, false);
   assert.equal(kind.equips.length, 1);
@@ -300,7 +300,7 @@ test("explain_missing_rcx_view: names the missing role, the kind mismatch, and n
   // bound roles but no history in the span (the clock is far past the data)
   const empty = (await ok({ tool: "explain_missing_rcx_view", viewId: "weekly-fan" }, { now: NOW + 3 * 365 * 86400e3 })).result;
   assert.equal(empty.available, false);
-  assert.ok(empty.equips.every((e) => e.status === "no_data" && e.no_data_roles.includes("fan_status")));
+  assert.ok(empty.equips.every((e) => e.status === "no_data" && e.no_data_roles.includes("supply_fan_operating_status")));
   const unknown = (await run({ tool: "explain_missing_rcx_view", viewId: "nope" })).result;
   assert.equal(unknown.ok, false);
   assert.ok(unknown.views.includes("weekly-fan"));

@@ -73,7 +73,7 @@ def _gate_row(rule_id: str) -> dict[str, Any]:
         proof = list(FAN_PROOF_ROLES) + list(PUMP_PROOF_ROLES) + list(COMPRESSOR_ROLES)
         cmd = list(FAN_CMD_FALLBACK) + list(PUMP_CMD_FALLBACK)
     elif spec.kind == "control_loop":
-        proof = list(FAN_PROOF_ROLES) + ["loop-enabled"]
+        proof = list(FAN_PROOF_ROLES) + ["operating_mode_status"]
         cmd = list(FAN_CMD_FALLBACK)
     return {
         "kind": spec.kind,

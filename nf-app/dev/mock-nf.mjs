@@ -50,50 +50,60 @@ const oat = (t) => 58 + 14 * wave(t, 24, -9) + 6 * wave(t, 24 * 5) + noise(t, 1)
 function signal(role, i, t) {
   const o = occ(t), n = (s) => noise(t, s + i * 7);
   switch (role) {
-    case "oa_t": return oat(t) + 1.5 + n(2);                       // BAS sensor reads a bit warm
-    case "web_oa_t": return Math.round(oat(t) * 10) / 10;
-    case "web_oa_dp": return oat(t) - 12 + n(3);
-    case "web_wb_t": return oat(t) - 6 + n(4);
-    case "oa_h": return 55 + 20 * wave(t, 24, 3) + n(5) * 4;
-    case "rat": return 72 + n(6) + (o ? 1 : -2);
-    case "sat": return o ? 55 + (i === 1 ? 4 : 0) + n(7) : 68 + n(7);   // AHU-2 runs warm (SATDEV)
-    case "sat_sp": return o ? 55 : 65;
-    case "mat": { const d = signal("oa_damper_pct", i, t) / 100; return d * oat(t) + (1 - d) * signal("rat", i, t) + n(8); }
-    case "oa_damper_pct": return o ? (i === 0 && oat(t) > 70 ? 80 : Math.min(100, Math.max(15, (68 - oat(t)) * 4))) : 0;
-    case "fan_cmd": return i === 1 ? 1 : o;                          // AHU-2 runs 24/7 (SCHED-247)
-    case "fan_status": return signal("fan_cmd", i, t);
-    case "clg_valve_pct": return o && oat(t) > 60 ? Math.min(100, (oat(t) - 60) * 5) : 0;
-    case "htg_valve_pct": return o && oat(t) < 50 ? Math.min(100, (50 - oat(t)) * 5) : 0;
-    case "duct_static": return o || i === 1 ? 1.2 + 0.15 * n(9) - (i === 0 ? 0.35 : 0) : 0.02;
-    case "duct_static_sp": return o || i === 1 ? 1.25 : 0;
-    case "zone_t": return 72 + 2.5 * wave(t, 24, i) + (i === 2 ? 4 : 0) - (i === 5 ? 6 : 0) + n(10);   // VAV-3 runs hot, VAV-6 runs cold
-    case "zone_air_temp_sp": return o ? 72 : 76;
-    case "cooling_sp": return o ? 74 : 80;
-    case "heating_sp": return o ? 70 : 64;
-    case "zone_flow": return o ? 450 + 150 * wave(t, 6, i) + 20 * n(11) - (i === 3 ? 300 : 0) : 120;
-    case "zone_airflow_sp": return o ? 450 + 150 * wave(t, 6, i) : 120;
-    case "damper_pct": case "damper_cmd": return i === 2 ? 100 : i === 6 ? 0 : o ? 40 + 30 * wave(t, 6, i) : 15;  // VAV-3 pinned open, VAV-7 pinned closed
-    case "reheat_valve_pct": return i === 4 ? 100 : o ? 15 + 25 * (1 + wave(t, 5, i)) : 0;   // VAV-5 reheat stuck open
-    case "vav_discharge_t": return 58 + (signal("reheat_valve_pct", i, t) / 100) * 30 + n(19);
-    case "chw_supply_t": return 44 + (o ? 0 : 3) + n(12);
-    case "chw_return_t": return signal("chw_supply_t", i, t) + (o ? 4 : 1.5);    // low ΔT → CHW-1
-    case "chiller_status": case "chw_pump_status": case "compressor_status": case "chiller_cmd": return o && oat(t) > 55 ? 1 : 0;
-    case "cw_supply_t": return 85 + n(13);
-    case "cw_return_t": return 94 + n(14);
-    case "tower_fan_cmd": return o && oat(t) > 60 ? 70 : 0;
-    case "hw_supply_t": return 160 - (oat(t) - 40) * 0.8 + n(15);
-    case "hw_return_t": return signal("hw_supply_t", i, t) - 20;
-    case "pump_status": return o ? 1 : 0;
-    case "electric_kw": return (i === 0 ? 220 : 140) + 160 * o + 3 * Math.max(0, oat(t) - 65) + 10 * n(16);
-    case "electric_kwh": return ((t - START) / 3600e3) * ((i === 0 ? 300 : 200)) + 5 * n(17);
+    case "outdoor_air_intake_temperature": return oat(t) + 1.5 + n(2);                       // BAS sensor reads a bit warm
+    case "weather_service_air_temperature": return Math.round(oat(t) * 10) / 10;
+    case "weather_service_air_dew_point_temperature": return oat(t) - 12 + n(3);
+    case "weather_service_air_wet_bulb_temperature": return oat(t) - 6 + n(4);
+    case "outdoor_air_intake_relative_humidity": return 55 + 20 * wave(t, 24, 3) + n(5) * 4;
+    case "return_air_temperature": return 72 + n(6) + (o ? 1 : -2);
+    case "discharge_air_temperature": return o ? 55 + (i === 1 ? 4 : 0) + n(7) : 68 + n(7);   // AHU-2 runs warm (SATDEV)
+    case "discharge_air_temperature_setpoint": return o ? 55 : 65;
+    case "mixed_air_temperature": { const d = signal("outdoor_air_intake_damper_position_command", i, t) / 100; return d * oat(t) + (1 - d) * signal("return_air_temperature", i, t) + n(8); }
+    case "outdoor_air_intake_damper_position_command": return o ? (i === 0 && oat(t) > 70 ? 80 : Math.min(100, Math.max(15, (68 - oat(t)) * 4))) : 0;
+    case "supply_fan_command": return i === 1 ? 1 : o;                          // AHU-2 runs 24/7 (SCHED-247)
+    case "supply_fan_operating_status": return signal("supply_fan_command", i, t);
+    case "cooling_valve_position_command": return o && oat(t) > 60 ? Math.min(100, (oat(t) - 60) * 5) : 0;
+    case "heating_valve_position_command": return o && oat(t) < 50 ? Math.min(100, (50 - oat(t)) * 5) : 0;
+    case "discharge_air_static_pressure": return o || i === 1 ? 1.2 + 0.15 * n(9) - (i === 0 ? 0.35 : 0) : 0.02;
+    case "discharge_air_static_pressure_setpoint": return o || i === 1 ? 1.25 : 0;
+    case "zone_air_temperature": return 72 + 2.5 * wave(t, 24, i) + (i === 2 ? 4 : 0) - (i === 5 ? 6 : 0) + n(10);   // VAV-3 runs hot, VAV-6 runs cold
+    case "zone_air_temperature_setpoint": return o ? 72 : 76;
+    case "zone_cooling_air_temperature_setpoint": return o ? 74 : 80;
+    case "zone_heating_air_temperature_setpoint": return o ? 70 : 64;
+    case "discharge_air_volume_flow_rate": return o ? 450 + 150 * wave(t, 6, i) + 20 * n(11) - (i === 3 ? 300 : 0) : 120;
+    case "discharge_air_volume_flow_rate_setpoint": return o ? 450 + 150 * wave(t, 6, i) : 120;
+    case "damper_position": case "damper_position_command": return i === 2 ? 100 : i === 6 ? 0 : o ? 40 + 30 * wave(t, 6, i) : 15;  // VAV-3 pinned open, VAV-7 pinned closed
+    case "terminal_unit_heating_valve_position_command": return i === 4 ? 100 : o ? 15 + 25 * (1 + wave(t, 5, i)) : 0;   // VAV-5 reheat stuck open
+    case "terminal_unit_discharge_air_temperature": return 58 + (signal("terminal_unit_heating_valve_position_command", i, t) / 100) * 30 + n(19);
+    case "supply_chilled_water_temperature": return 44 + (o ? 0 : 3) + n(12);
+    case "return_chilled_water_temperature": return signal("supply_chilled_water_temperature", i, t) + (o ? 4 : 1.5);    // low ΔT → CHW-1
+    case "chiller_operating_status": case "chilled_water_pump_operating_status": case "compressor_operating_status": case "chiller_command": return o && oat(t) > 55 ? 1 : 0;
+    case "supply_condenser_water_temperature": return 85 + n(13);
+    case "return_condenser_water_temperature": return 94 + n(14);
+    case "cooling_tower_fan_command": return o && oat(t) > 60 ? 70 : 0;
+    case "supply_hot_water_temperature": return 160 - (oat(t) - 40) * 0.8 + n(15);
+    case "return_hot_water_temperature": return signal("supply_hot_water_temperature", i, t) - 20;
+    case "pump_operating_status": return o ? 1 : 0;
+    case "electric_power": return (i === 0 ? 220 : 140) + 160 * o + 3 * Math.max(0, oat(t) - 65) + 10 * n(16);
+    case "electric_energy": return ((t - START) / 3600e3) * ((i === 0 ? 300 : 200)) + 5 * n(17);
     default: return 50 + 10 * wave(t, 24, i) + n(18);
   }
 }
 
-const UNITS = (role) => (/(_t|_sp|temp)$/.test(role) || ["sat", "mat", "rat"].includes(role)) && !/static|airflow/.test(role) ? "°F"
-  : /pct|damper|valve|_h$/.test(role) ? "%" : /static/.test(role) ? "inH₂O" : /flow/.test(role) ? "cfm"
-  : role === "electric_kw" ? "kW" : role === "electric_kwh" ? "kWh" : /status|cmd$/.test(role) ? "" : "";
-const isBool = (role) => /(_status|^fan_cmd|chiller_cmd)$/.test(role);
+const UNITS = (role) => {
+  const scale = catalog.roles[role] && catalog.roles[role].scale;
+  if (scale === "DEG_C" || scale === "K") return "°F";
+  if (scale === "PERCENT_RH") return "%RH";
+  if (scale === "PERCENT") return "%";
+  if (scale === "PA") return "inH₂O";
+  if (scale === "L-PER-SEC") return "cfm";
+  if (scale === "KiloW") return "kW";
+  if (scale === "KiloW-HR") return "kWh";
+  if (scale === "A") return "A";
+  if (scale === "PPM") return "ppm";
+  return "";
+};
+const isBool = (role) => catalog.roles[role] && catalog.roles[role].scale === "boolean";
 
 // ---- the building -----------------------------------------------------------------------
 const sites = [
@@ -101,17 +111,17 @@ const sites = [
   { id: "site-south", dis: "South Annex", area: "31000", tz: "America/Chicago", lat: 43.05, lon: -89.42 },
 ];
 const equips = [
-  { id: "AHU-1", site: 0, markers: "equip,ahu", roles: ["sat", "sat_sp", "mat", "rat", "oa_t", "oa_damper_pct", "fan_cmd", "fan_status", "clg_valve_pct", "htg_valve_pct", "duct_static", "duct_static_sp"] },
-  { id: "AHU-2", site: 0, markers: "equip,ahu", roles: ["sat", "sat_sp", "mat", "rat", "oa_t", "oa_damper_pct", "fan_cmd", "fan_status", "clg_valve_pct", "duct_static", "duct_static_sp"] },
+  { id: "AHU-1", site: 0, markers: "equip,ahu", roles: ["discharge_air_temperature", "discharge_air_temperature_setpoint", "mixed_air_temperature", "return_air_temperature", "outdoor_air_intake_temperature", "outdoor_air_intake_damper_position_command", "supply_fan_command", "supply_fan_operating_status", "cooling_valve_position_command", "heating_valve_position_command", "discharge_air_static_pressure", "discharge_air_static_pressure_setpoint"] },
+  { id: "AHU-2", site: 0, markers: "equip,ahu", roles: ["discharge_air_temperature", "discharge_air_temperature_setpoint", "mixed_air_temperature", "return_air_temperature", "outdoor_air_intake_temperature", "outdoor_air_intake_damper_position_command", "supply_fan_command", "supply_fan_operating_status", "cooling_valve_position_command", "discharge_air_static_pressure", "discharge_air_static_pressure_setpoint"] },
   // VAVs are fed by AHU-1 (odd) / AHU-2 (even) through the Haystack ref airRef, like a real model
   ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ id: `VAV-${n}`, site: 0, markers: "equip,vav", airRef: n % 2 ? "AHU-1" : "AHU-2",
-    roles: ["zone_t", "zone_air_temp_sp", "cooling_sp", "heating_sp", "zone_flow", "zone_airflow_sp", "damper_pct", "reheat_valve_pct", "vav_discharge_t"] })),
-  { id: "CH-1", site: 0, markers: "equip,chiller", roles: ["chw_supply_t", "chw_return_t", "chiller_status", "chiller_cmd", "chw_pump_status", "cw_supply_t", "cw_return_t", "compressor_status"] },
-  { id: "CT-1", site: 0, markers: "equip,coolingTower", roles: ["cw_supply_t", "cw_return_t", "tower_fan_cmd"] },
-  { id: "BLR-1", site: 0, markers: "equip,boiler", roles: ["hw_supply_t", "hw_return_t", "pump_status"] },
-  { id: "MTR-N", site: 0, markers: "equip,meter,elecMeter", roles: ["electric_kw", "electric_kwh"] },
-  { id: "RTU-S1", site: 1, markers: "equip,ahu,rtu", roles: ["sat", "sat_sp", "mat", "rat", "oa_t", "oa_damper_pct", "fan_cmd", "fan_status", "duct_static"] },
-  { id: "MTR-S", site: 1, markers: "equip,meter,elecMeter", roles: ["electric_kw", "electric_kwh"] },
+    roles: ["zone_air_temperature", "zone_air_temperature_setpoint", "zone_cooling_air_temperature_setpoint", "zone_heating_air_temperature_setpoint", "discharge_air_volume_flow_rate", "discharge_air_volume_flow_rate_setpoint", "damper_position", "terminal_unit_heating_valve_position_command", "terminal_unit_discharge_air_temperature"] })),
+  { id: "CH-1", site: 0, markers: "equip,chiller", roles: ["supply_chilled_water_temperature", "return_chilled_water_temperature", "chiller_operating_status", "chiller_command", "chilled_water_pump_operating_status", "supply_condenser_water_temperature", "return_condenser_water_temperature", "compressor_operating_status"] },
+  { id: "CT-1", site: 0, markers: "equip,coolingTower", roles: ["supply_condenser_water_temperature", "return_condenser_water_temperature", "cooling_tower_fan_command"] },
+  { id: "BLR-1", site: 0, markers: "equip,boiler", roles: ["supply_hot_water_temperature", "return_hot_water_temperature", "pump_operating_status"] },
+  { id: "MTR-N", site: 0, markers: "equip,meter,elecMeter", roles: ["electric_power", "electric_energy"] },
+  { id: "RTU-S1", site: 1, markers: "equip,ahu,rtu", roles: ["discharge_air_temperature", "discharge_air_temperature_setpoint", "mixed_air_temperature", "return_air_temperature", "outdoor_air_intake_temperature", "outdoor_air_intake_damper_position_command", "supply_fan_command", "supply_fan_operating_status", "discharge_air_static_pressure"] },
+  { id: "MTR-S", site: 1, markers: "equip,meter,elecMeter", roles: ["electric_power", "electric_energy"] },
 ];
 const uuidOf = (name) => {
   const h = crypto.createHash("sha1").update(`mock:${name}`).digest("hex");
@@ -134,12 +144,14 @@ equips.forEach((e, ei) => {
     const uuid = uuidOf(`${e.id}/${role}`);
     records.push({ uuid, name: `${e.id} ${role}`, layer: "default", pointType: "POINT", attrs: {
       dis: `${e.id} ${def.name}`, markers: ["point", "his", ...def.markers].join(","), class: def.classes[0] || "",
-      equipRef: e.id, siteRef: site, unit: UNITS(role), kind: isBool(role) ? "Bool" : "Number" } });
+      equipRef: e.id, siteRef: site,
+      unit: e.id === "CT-1" && role === "supply_condenser_water_temperature" ? "" : UNITS(role),
+      kind: isBool(role) ? "Bool" : "Number" } });
     signals.set(uuid, (t) => signal(role, idx, t));
   }
 });
 for (const s of sites) {
-  for (const role of ["web_oa_t", "web_oa_dp", "web_wb_t"]) {
+  for (const role of ["weather_service_air_temperature", "weather_service_air_dew_point_temperature", "weather_service_air_wet_bulb_temperature"]) {
     const def = catalog.roles[role];
     const uuid = uuidOf(`${s.id}/${role}`);
     records.push({ uuid, name: `${s.id} ${role}`, layer: "default", pointType: "POINT", attrs: {

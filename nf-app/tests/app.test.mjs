@@ -159,20 +159,20 @@ test("FDD binding: kinds from equip markers, inputs by NF class or markers", () 
   assert.ok(Array.from(ctx.equipKinds(FIXTURE.equips[0], catalog)).includes("ahu"));
   const rows = ctx.equipRules(FIXTURE.equips[0], model, catalog);
   const byId = Object.fromEntries(Array.from(rows, (r) => [r.rule.id, r]));
-  // FAN-RUNTIME-HOURS needs only fan_cmd: FAN-C carries fan,run,cmd (no class) -> runnable by markers
+  // FAN-RUNTIME-HOURS needs only supply_fan_command: FAN-C carries fan,run,cmd (no class) -> runnable by markers
   assert.equal(byId["FAN-RUNTIME-HOURS"].runnable, true);
-  assert.equal(byId["FAN-RUNTIME-HOURS"].bound.fan_cmd[0].uuid, "u-FAN-C");
-  // sat is filled by class (discharge-air-temp-sensor), oa_t by class outside-air-temp-sensor
-  const satRule = rows.find((r) => r.rule.required_roles.includes("sat"));
-  assert.equal(satRule.bound.sat[0].uuid, "u-SAT");
+  assert.equal(byId["FAN-RUNTIME-HOURS"].bound.supply_fan_command[0].uuid, "u-FAN-C");
+  // discharge_air_temperature is filled by class (discharge-air-temp-sensor), outdoor_air_intake_temperature by class outside-air-temp-sensor
+  const satRule = rows.find((r) => r.rule.required_roles.includes("discharge_air_temperature"));
+  assert.equal(satRule.bound.discharge_air_temperature[0].uuid, "u-SAT");
   // a rule needing a role nobody has is listed with what is missing
   const econ = byId["ECON-1"];
-  assert.ok(econ && !econ.runnable && Array.from(econ.missing).includes("oa_damper_pct"));
-  // weather-service points fill web_* roles only; equipment sensors win oa_t
-  const web = rows.find((r) => r.rule.required_roles.includes("web_oa_t"));
-  if (web) assert.equal(web.bound.web_oa_t[0].uuid, "u-WX");
-  const oat = rows.find((r) => r.rule.required_roles.includes("oa_t"));
-  assert.deepEqual(Array.from(oat.bound.oa_t, (p) => p.uuid), ["u-OAT"]);
+  assert.ok(econ && !econ.runnable && Array.from(econ.missing).includes("outdoor_air_intake_damper_position_command"));
+  // weather-service points fill web_* roles only; equipment sensors win outdoor_air_intake_temperature
+  const web = rows.find((r) => r.rule.required_roles.includes("weather_service_air_temperature"));
+  if (web) assert.equal(web.bound.weather_service_air_temperature[0].uuid, "u-WX");
+  const oat = rows.find((r) => r.rule.required_roles.includes("outdoor_air_intake_temperature"));
+  assert.deepEqual(Array.from(oat.bound.outdoor_air_intake_temperature, (p) => p.uuid), ["u-OAT"]);
   // rules with no point roles read other data and are not "runnable"
   for (const r of rows) if (!r.pointInputs) assert.equal(r.runnable, false);
   // duplicate required/optional roles are listed once
@@ -191,7 +191,7 @@ test("FDD catalog covers every registry rule and only names NF classes", () => {
   }
   for (const [role, def] of Object.entries(catalog.roles)) {
     for (const c of def.classes) assert.ok(nf.has(c), `${role}: ${c} is not an NF class`);
-    if (role === catalog.run_proof.role) continue;   // resolved from the model (own proof, feeding equipment), never class- or marker-bound
+    if (role === catalog.operating_status.role) continue;   // resolved from the model (own proof, feeding equipment), never class- or marker-bound
     assert.ok(def.classes.length || def.markers.length, `${role} cannot match anything`);
   }
 });
@@ -225,7 +225,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
       return Array.from(samples || []).filter(([t]) => t >= first);
     },
     FAULT_LANE: { lineStyle: { color: "#e11d48" } },
-    fddCatalog: { sensor_sweep_roles: { "SV-STALE": ["sat", "mat", "oa_t", "rat"] } },
+    fddCatalog: { sensor_sweep_roles: { "SV-STALE": ["discharge_air_temperature", "mixed_air_temperature", "outdoor_air_intake_temperature", "return_air_temperature"] } },
     echarts: { getInstanceByDom: () => ({ dispose: () => { disposedCharts++; } }) },
     chartTimeZone: (tz) => tz || "UTC", resolveSiteTimeZone: (s) => ({ zone: s?.attrs?.tz || s?.attrs?.timezone || "UTC" }),
     getChartRangeState: () => chosenRange,
@@ -240,22 +240,22 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   const mixedHistory = multiSensorEquip.unitBoundarySeries();
   const mixedBoundary = new Date(mixedHistory[multiSensorEquip.unitBoundaryIndex].ts).toISOString();
   const sensorRoles = {
-    "sensor-sat-1": "sat", "sensor-sat-2": "sat", "sensor-mat-1": "mat", "sensor-oa-1": "oa_t",
-    "sensor-rat-1": "rat", "sensor-static-1": "duct_static",
+    "sensor-discharge_air_temperature-1": "discharge_air_temperature", "sensor-discharge_air_temperature-2": "discharge_air_temperature", "sensor-mixed_air_temperature-1": "mixed_air_temperature", "sensor-oa-1": "outdoor_air_intake_temperature",
+    "sensor-return_air_temperature-1": "return_air_temperature", "sensor-static-1": "discharge_air_static_pressure",
   };
   const inputs = multiSensorEquip.points.filter((p) => p.attrs.equipRef === "AHU-A").map((p) => point(
     p.uuid, p.attrs.dis, p.attrs.equipRef, p.attrs.markers.split(","), p.attrs, multiSensorEquip.historyValue(p.uuid, 1),
   ));
   const rules = ["SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE", "SV-RATE"];
-  const faultRole = { "SV-RANGE": "rat", "SV-FLATLINE": "sensor-sat-2", "SV-SPIKE": "mat", "SV-RATE": "mat" };
+  const faultRole = { "SV-RANGE": "return_air_temperature", "SV-FLATLINE": "sensor-discharge_air_temperature-2", "SV-SPIKE": "mixed_air_temperature", "SV-RATE": "mixed_air_temperature" };
   const results = [];
   for (const rule of rules) {
     const values = inputs.map((input) => {
       const role = sensorRoles[input.uuid];
       let status = faultRole[rule] === input.uuid || faultRole[rule] === role ? "fault" : "ok";
-      if (rule === "SV-STALE" && input.uuid === "sensor-sat-1") status = "stale";
-      if (rule === "SV-STALE" && role === "duct_static") status = "not-assessed";
-      if (rule === "SV-RATE" && input.uuid === "sensor-rat-1") status = "not-assessed";
+      if (rule === "SV-STALE" && input.uuid === "sensor-discharge_air_temperature-1") status = "stale";
+      if (rule === "SV-STALE" && role === "discharge_air_static_pressure") status = "not-assessed";
+      if (rule === "SV-RATE" && input.uuid === "sensor-return_air_temperature-1") status = "not-assessed";
       const value = status === "fault" ? 2 : status === "ok" ? 0 : null;
       return point(`${rule}-${input.uuid}`, `${input.name} ${rule}`, "AHU-A", ["fdd", "fault"], {
         ruleRef: rule, fddSummary: "sensor", sensorRef: input.uuid, roleRef: role,
@@ -273,7 +273,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
     fddStatus: "fault", fddWindowHours: "24",
   }, 2.25, mixedHistory.map((x) => [Date.parse(x.ts), x.value]));
   const otherSiteResult = point("other-site-result", "other site", "AHU-A", ["fdd", "fault"], {
-    ruleRef: "SV-RANGE", fddSummary: "sensor", sensorRef: "other-sensor", roleRef: "rat", siteRef: "site-other", unit: "h", fddOutput: "fault_hours", fddStatus: "fault",
+    ruleRef: "SV-RANGE", fddSummary: "sensor", sensorRef: "other-sensor", roleRef: "return_air_temperature", siteRef: "site-other", unit: "h", fddOutput: "fault_hours", fddStatus: "fault",
   }, 99);
   const vavResult = point("vav-result", "VAV-only result", "VAV-A", ["fdd", "fault"], {
     ruleRef: "FC1", siteRef: "site-fixture", unit: "%", fddOutput: "fault_pct", fddStatus: "fault",
@@ -323,7 +323,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   assert.ok(hCells.some((x) => x[2] === 0), "assessed-zero cells remain visible");
   assert.ok(hCells.every((x) => x[2] != null), "missing samples are not displayed as zeros");
   assert.ok(!chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-1}")), "empty stale sensor lane is collapsed");
-  assert.ok(!chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.includes("duct_static")), "empty excluded-role lane is collapsed");
+  assert.ok(!chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.includes("discharge_air_static_pressure")), "empty excluded-role lane is collapsed");
   assert.ok(chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-2}")), "assessed-zero peer stays visible");
   assert.ok(hCells.every((x) => x[2] !== 18 && x[2] !== 95 && x[2] !== 80), "pre-boundary % history is excluded");
   const hRow = chartOption.yAxis.data.findIndex((x) => x.includes("SV-RANGE") && x.includes("sensor-5"));
@@ -334,7 +334,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   el("fddFaultedOnly").checked = true;
   await vm.runInContext("renderFddResults(model.equips)", ctx);
   html = el("fddResultRows").innerHTML;
-  assert.doesNotMatch(html, /data-rule="SV-RANGE" data-equip="AHU-A" data-sensor="sensor-sat-1"/);
+  assert.doesNotMatch(html, /data-rule="SV-RANGE" data-equip="AHU-A" data-sensor="sensor-discharge_air_temperature-1"/);
   assert.doesNotMatch(html, /stale|not-assessed/);
   el("fddFaultedOnly").checked = false;
   await vm.runInContext("renderFddResults(model.equips)", ctx);
@@ -404,7 +404,7 @@ test("161 fault lanes render an option using the real chunked All history path",
   const points = Array.from({ length: 161 }, (_, i) => {
     const uuid = `00000000-0000-4000-8000-${i.toString(16).padStart(12, "0")}`;
     return { uuid, name: `sensor-${i}`, dis: `sensor-${i}`, units: "h", equipRef: "equip-1", siteRef: "site-1", tags: ["fdd", "fault"], latest: { double: 1, ts: "2026-01-01T00:00:00Z" },
-      rec: { attrs: { ruleRef: "SV-RANGE", sensorRef: uuid, roleRef: "sat", fddSummary: "sensor", fddOutput: "fault_hours", fddStatus: "fault" } } };
+      rec: { attrs: { ruleRef: "SV-RANGE", sensorRef: uuid, roleRef: "discharge_air_temperature", fddSummary: "sensor", fddOutput: "fault_hours", fddStatus: "fault" } } };
   });
   ctx.testModel = { equips: [{ id: "equip-1", name: "equip-1", attrs: { siteRef: "site-1" } }], points };
   vm.runInContext('model = testModel; scope.site = "site-1"', ctx);

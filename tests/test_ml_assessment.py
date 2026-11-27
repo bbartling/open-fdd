@@ -13,21 +13,21 @@ def _ahu(n: int = 600, seed: int = 0) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     idx = pd.date_range("2026-01-05", periods=n, freq="5min", tz="UTC")
     oat = 10 + 12 * np.sin(np.arange(n) / 288 * 2 * np.pi) + rng.normal(0, 0.3, n)
-    rat = 22 + rng.normal(0, 0.2, n)
+    return_air_temperature = 22 + rng.normal(0, 0.2, n)
     damper = np.clip(0.1 + 0.8 * (oat < 15) * (oat > 2), 0.1, 1.0)
-    mat = damper * oat + (1 - damper) * rat + rng.normal(0, 0.1, n)
-    valve = np.clip((mat - 13) / 10, 0, 1)
-    sat = mat - 10 * valve + rng.normal(0, 0.1, n)
-    return pd.DataFrame({"discharge-air-temp": sat, "discharge-air-temp-sp": 13.0, "mixed-air-temp": mat,
-                         "return-air-temp": rat, "outside-air-temp": oat, "outside-air-damper": damper,
-                         "cooling-valve": valve, "fan-status": 1.0}, index=idx)
+    mixed_air_temperature = damper * oat + (1 - damper) * return_air_temperature + rng.normal(0, 0.1, n)
+    valve = np.clip((mixed_air_temperature - 13) / 10, 0, 1)
+    discharge_air_temperature = mixed_air_temperature - 10 * valve + rng.normal(0, 0.1, n)
+    return pd.DataFrame({"discharge_air_temperature": discharge_air_temperature, "discharge_air_temperature_setpoint": 13.0, "mixed_air_temperature": mixed_air_temperature,
+                         "return_air_temperature": return_air_temperature, "outdoor_air_intake_temperature": oat, "outdoor_air_intake_damper_position_command": damper,
+                         "cooling_valve_position_command": valve, "supply_fan_operating_status": 1.0}, index=idx)
 
 
 def test_issue_repro_greybox_without_its_inputs_is_unassessed_not_healthy():
     """The #1666 repro: 100 active rows, every trained residual input removed -> 100 NaN scores, 0 flags."""
     gb = GreyBox().fit(_ahu())
-    bare = _ahu(100, seed=1).drop(columns=["mixed-air-temp", "return-air-temp", "outside-air-damper",
-                                           "cooling-valve", "discharge-air-temp-sp"])
+    bare = _ahu(100, seed=1).drop(columns=["mixed_air_temperature", "return_air_temperature", "outdoor_air_intake_damper_position_command",
+                                           "cooling_valve_position_command", "discharge_air_temperature_setpoint"])
     assert gb.scores(bare).isna().all() and not gb.flags(bare).any()  # what a caller used to read as "no fault"
     a = gb.assessment(bare)
     assert (a == "missing_inputs").all() and not gb.assessed_mask(bare).any()
@@ -37,8 +37,8 @@ def test_issue_repro_greybox_without_its_inputs_is_unassessed_not_healthy():
 def test_greybox_assessed_inactive_and_no_residual():
     gb = GreyBox().fit(_ahu())
     f = _ahu(200, seed=2)
-    f.iloc[:20, f.columns.get_loc("fan-status")] = 0.0
-    f.iloc[20:40, [f.columns.get_loc(c) for c in ("mixed-air-temp", "discharge-air-temp")]] = np.nan
+    f.iloc[:20, f.columns.get_loc("supply_fan_operating_status")] = 0.0
+    f.iloc[20:40, [f.columns.get_loc(c) for c in ("mixed_air_temperature", "discharge_air_temperature")]] = np.nan
     a = gb.assessment(f)
     assert (a.iloc[:20] == "inactive").all()
     assert (a.iloc[20:40] == "no_residual").all()  # inputs exist in the frame, NaN on these rows
@@ -50,13 +50,13 @@ def test_greybox_assessed_inactive_and_no_residual():
 def test_pca_assessment_and_missing_roles():
     pca = PCASPE().fit(_ahu())
     f = _ahu(120, seed=3)
-    f.iloc[:10, f.columns.get_loc("fan-status")] = 0.0
-    f.iloc[10:30, f.columns.get_loc("mixed-air-temp")] = np.nan
+    f.iloc[:10, f.columns.get_loc("supply_fan_operating_status")] = 0.0
+    f.iloc[10:30, f.columns.get_loc("mixed_air_temperature")] = np.nan
     a = pca.assessment(f)
     assert (a.iloc[:10] == "inactive").all() and (a.iloc[10:30] == "missing_inputs").all()
     assert (a.iloc[30:] == "assessed").all()
-    assert pca.missing_roles(f.drop(columns=["mixed-air-temp"])) == ["mixed-air-temp"]
-    assert (pca.assessment(f.drop(columns=["mixed-air-temp"])).iloc[10:] == "missing_inputs").all()
+    assert pca.missing_roles(f.drop(columns=["mixed_air_temperature"])) == ["mixed_air_temperature"]
+    assert (pca.assessment(f.drop(columns=["mixed_air_temperature"])).iloc[10:] == "missing_inputs").all()
 
 
 def test_unfitted_models_refuse_to_assess():

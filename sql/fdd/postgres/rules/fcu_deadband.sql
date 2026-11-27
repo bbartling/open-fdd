@@ -5,8 +5,8 @@
 WITH ordered AS (
   SELECT
     equipment_id,
-    cooling_sp,
-    heating_sp,
+    zone_cooling_air_temperature_setpoint,
+    zone_heating_air_temperature_setpoint,
     EXTRACT(EPOCH FROM (
       LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
       - timestamp_utc
@@ -16,8 +16,8 @@ WITH ordered AS (
 held AS (
   SELECT
     equipment_id,
-    cooling_sp,
-    heating_sp,
+    zone_cooling_air_temperature_setpoint,
+    zone_heating_air_temperature_setpoint,
     CASE
       WHEN dt_seconds IS NULL OR dt_seconds <= 0.0 OR dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
       THEN 0.0
@@ -28,14 +28,14 @@ held AS (
 SELECT
   equipment_id,
   SUM(CASE
-    WHEN cooling_sp IS NOT NULL AND heating_sp IS NOT NULL
-     AND cooling_sp - heating_sp < {{DEADBAND}}
+    WHEN zone_cooling_air_temperature_setpoint IS NOT NULL AND zone_heating_air_temperature_setpoint IS NOT NULL
+     AND zone_cooling_air_temperature_setpoint - zone_heating_air_temperature_setpoint < {{DEADBAND}}
     THEN held_seconds ELSE 0.0
   END) / 3600.0 AS fault_hours,
   SUM(held_seconds) / 3600.0 AS covered_hours,
   100.0 * SUM(CASE
-    WHEN cooling_sp IS NOT NULL AND heating_sp IS NOT NULL
-     AND cooling_sp - heating_sp < {{DEADBAND}}
+    WHEN zone_cooling_air_temperature_setpoint IS NOT NULL AND zone_heating_air_temperature_setpoint IS NOT NULL
+     AND zone_cooling_air_temperature_setpoint - zone_heating_air_temperature_setpoint < {{DEADBAND}}
     THEN held_seconds ELSE 0.0
   END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM held

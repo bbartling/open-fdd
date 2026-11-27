@@ -31,7 +31,7 @@ try:
         for ahu in ("AHU-1", "AHU-2"):
             warm = ahu == "AHU-1" and tick >= 20
             sat_c = round((19.0 if warm else 13.0) + 0.2 * math.sin(tick), 2)
-            samples.append((f"{ahu}/sat", stamp, sat_c))
+            samples.append((f"{ahu}/discharge_air_temperature", stamp, sat_c))
             samples.append((f"{ahu}/cooling_enabled", stamp, 1.0))
             print(f"{stamp:%H:%M} UTC  {ahu}  SAT {sat_c:.1f} C", flush=True)
 

@@ -28,7 +28,7 @@ def _folder(tmp_path, n=3 * 288):
     folder.mkdir()
     hist.to_csv(folder / "history_wide.csv", index=False)
     (folder / "column_map.json").write_text(
-        json.dumps({"equipType": "AHU", "points": {"sat": "SAT", "fan_status": "FAN"}}), encoding="utf-8"
+        json.dumps({"equipType": "AHU", "points": {"discharge_air_temperature": "SAT", "supply_fan_operating_status": "FAN"}}), encoding="utf-8"
     )
     return folder
 

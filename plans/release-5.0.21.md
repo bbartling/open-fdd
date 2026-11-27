@@ -32,7 +32,7 @@ Issues stay open after integration (READY FOR RELEASE); Grok posts closure recei
 | #1703 | `dbdb7e8e` | nf_app_sync: refuse --dry-run outside install before any login (#1634) |
 | #1705 | `be62de7c` | doctor: errored runs show as failed; scheduled hooks need a success within two intervals (#1638) |
 | #1664 | `6bf8baf2` | docs: remove two stale prompt notes |
-| #1706 | `a5e219e6` | FDD hook: synthesized occ_mode follows the saved occupancy calendar on every engine (#1636) |
+| #1706 | `a5e219e6` | FDD hook: synthesized occupancy_status follows the saved occupancy calendar on every engine (#1636) |
 | #1711 | `9f78d949` | sparql-data hook: answer the resolved run proof per equipment (#1635, hook half) |
 | #1713 | `9df54ae6` | ci: docs-pages builds of different PRs no longer cancel each other |
 | #1680 | `691956f1` | plans: Grok 5.0.21 checkpoint |
@@ -72,7 +72,7 @@ Issues stay open after integration (READY FOR RELEASE); Grok posts closure recei
 - #1633 Deploy: nf_app_sync push should preflight the Timescale schema version before writing hooks
 - #1634 nf_app_sync: --dry-run is silently ignored by push (it writes and restarts the app)
 - #1635 SPARQL client frames: carry the resolved run proof so client-side rules gate like the hook
-- #1636 FDD hook: synthesized occ_mode ignores the saved weekly occupancy calendar
+- #1636 FDD hook: synthesized occupancy_status ignores the saved weekly occupancy calendar
 - #1638 Health reporting: surface errored hook runs (no end time, queue failed=0) as failures
 - #1652 PyPI tools: document the device-folder format and add a command to build one from a CSV or the LBNL files
 - #1654 open-fdd-anomaly screen: default methods fail on an [ml]-only install and --help does not name the extra
@@ -211,7 +211,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | #1708 | Claude | #1671 one timer per rule | draft, stacked on #1700 | merge after #1700 |
 | #1709 | Claude | #1672 tuner sliders | draft, stacked on #1708 | merge after #1708 |
 | #1710 | Claude | #1631 TRIM-3/4 plant proof | ready (base release) | Grok acceptance, CI |
-| #1711 | Claude | #1635 hook half: run_proof in sparql-data | ready (base release) | Grok acceptance, CI |
+| #1711 | Claude | #1635 hook half: operating_status in sparql-data | ready (base release) | Grok acceptance, CI |
 | #1712 | Claude | #1642 ECON-3/7, MECH-OAT-1 parity gaps | ready (base release) | Grok acceptance, CI |
 | #1713 | Claude | CI: docs-pages concurrency per PR | ready | Grok acceptance |
 | #1714 | Claude | #1631 gate-off keeps GL36 fan gate (Ben call 2) | ready | Grok acceptance, CI |
@@ -250,7 +250,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 - Opened #1702 (#1631 item 1), #1703 (#1634), #1704 (#1633), #1705 (#1638). #1700 (#1673) ready after its suite.
 - GitHub Actions backlog: new PRs sit with 20+ pending checks; merges wait for green on the exact head.
 - Next code items (priority order): #1671 tuner contract -> #1672 sliders; #1631 remaining items; #1636; #1641; #1642;
-  #1635 hook half (sparql-data emits run_proof/run_proof_series); then #1649 analytics.
+  #1635 hook half (sparql-data emits operating_status/run_proof_series); then #1649 analytics.
 
 ### 2026-11-18 ~00:30 local (Claude): checkpoint 2
 
@@ -272,7 +272,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
   Opened #1708 (#1671) as a draft stacked on #1700. Next: #1672 sliders.
 - ~07:20: opened #1709 (#1672) as a draft on #1708. Next: #1631 remaining items, #1641, #1642, #1639.
 - ~08:00: opened #1710 (#1631 TRIM-3/4). Posted the #1631 triage: the denominator (`active_hours`) and the gate-off fan gate on the FC rules need Ben's call; FC4, CW-FAN/OPT, fallback startup delay, command-unit check and the SQLite timeline remain.
-- ~09:15: opened #1711 (#1635 hook half). The SPARQL parity leg now uses the hook's run_proof (no harness stamp).
+- ~09:15: opened #1711 (#1635 hook half). The SPARQL parity leg now uses the hook's operating_status (no harness stamp).
 - ~11:30: #1702 window as-of (150b5862) after the 365 s Timescale run. Opened #1712 (#1642): ECON-3 / MECH-OAT-1 exact on basic tiers, ECON-7 0.25 h; baselines 52/19 and 49/22.
 - ~15:30: Ben approved both #1631 design calls ("Yes, as proposed"). #1714 fan gate; active_hours built (PR after the full suite). #1710 gained CW-FAN/OPT. #1713-#1718 opened; Grok tasked on #1701 (review, own PR fixes, Linux tests).
 

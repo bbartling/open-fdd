@@ -23,36 +23,36 @@ REASON_IMPOSSIBLE = "IMPOSSIBLE_FOR_ROLE"
 # Role family -> (lo, hi) in SI (degC, L/s, Pa) after 0-1 vs 0-100 scaling for positions.
 # None bound means "do not apply that side". Inputs are SI: no unit is converted here.
 ROLE_BOUNDS: dict[str, tuple[float | None, float | None]] = {
-    "zone-air-temp": (4.444444, 37.777778),
+    "zone_air_temperature": (4.444444, 37.777778),
     "zone-temp": (4.444444, 37.777778),
-    "discharge-air-temp": (1.666667, 60.0),
+    "discharge_air_temperature": (1.666667, 60.0),
     "supply-air-temp": (1.666667, 60.0),
-    "mixed-air-temp": (-6.666667, 54.444444),
-    "return-air-temp": (4.444444, 43.333333),
-    "outside-air-temp": (-40.0, 54.444444),
-    "chilled-water-supply-temp": (0.0, 26.666667),
-    "chilled-water-return-temp": (0.0, 32.222222),
-    "hot-water-supply-temp": (15.555556, 104.444444),
-    "hot-water-return-temp": (10.0, 98.888889),
-    "zone-airflow": (0.0, 9438.94),
+    "mixed_air_temperature": (-6.666667, 54.444444),
+    "return_air_temperature": (4.444444, 43.333333),
+    "outdoor_air_intake_temperature": (-40.0, 54.444444),
+    "supply_chilled_water_temperature": (0.0, 26.666667),
+    "return_chilled_water_temperature": (0.0, 32.222222),
+    "supply_hot_water_temperature": (15.555556, 104.444444),
+    "return_hot_water_temperature": (10.0, 98.888889),
+    "discharge_air_volume_flow_rate": (0.0, 9438.94),
     "supply-airflow": (0.0, 47194.7),
     "airflow": (0.0, 47194.7),
-    "duct-static-pressure": (-497.68, 1493.04),
-    "chw-diff-pressure": (0.0, 344737.85),
-    "chw-flow": (0.0, 1261.804),
+    "discharge_air_static_pressure": (-497.68, 1493.04),
+    "chilled_water_pressure_delta": (0.0, 344737.85),
+    "chilled_water_volume_flow_rate": (0.0, 1261.804),
     "water-flow": (0.0, 1261.804),
-    "cooling-valve": (0.0, 100.0),
-    "heating-valve": (0.0, 100.0),
+    "cooling_valve_position_command": (0.0, 100.0),
+    "heating_valve_position_command": (0.0, 100.0),
     "economizer-damper": (0.0, 100.0),
     "oa-damper": (0.0, 100.0),
-    "damper": (0.0, 100.0),
+    "damper_position": (0.0, 100.0),
     "valve": (0.0, 100.0),
     "fan-power": (0.0, 500.0),
-    "chiller-power": (0.0, 5000.0),
+    "chiller_electric_power": (0.0, 5000.0),
     "pump-power": (0.0, 500.0),
     "elec-power": (0.0, 50000.0),
     "fan-current": (0.0, 500.0),
-    "chiller-current": (0.0, 2000.0),
+    "chiller_electric_current": (0.0, 2000.0),
     "pump-current": (0.0, 500.0),
     "fan-speed-feedback": (0.0, 100.0),
     "pump-speed-feedback": (0.0, 100.0),
@@ -60,32 +60,32 @@ ROLE_BOUNDS: dict[str, tuple[float | None, float | None]] = {
 
 
 STATUS_ROLES = {
-    "fan-status",
-    "pump-status",
-    "chw-pump-status",
+    "supply_fan_operating_status",
+    "pump_operating_status",
+    "chilled_water_pump_operating_status",
     "hw-pump-status",
-    "chiller-status",
-    "compressor-status",
-    "boiler-status",
-    "occupied",
+    "chiller_operating_status",
+    "compressor_operating_status",
+    "boiler_operating_status",
+    "occupancy_status",
     "occ-mode",
     "equipment-enable",
-    "loop-enabled",
+    "operating_mode_status",
 }
 COMMAND_ROLES = {
-    "fan-cmd",
+    "supply_fan_command",
     "pump-cmd",
-    "chw-pump-cmd",
+    "chilled_water_pump_command",
     "hw-pump-cmd",
-    "tower-fan-cmd",
-    "cw-fan-cmd",
+    "cooling_tower_fan_command",
+    "cooling_tower_fan_command",
 }
 POSITION_ROLES = {
-    "cooling-valve",
-    "heating-valve",
+    "cooling_valve_position_command",
+    "heating_valve_position_command",
     "economizer-damper",
     "oa-damper",
-    "damper",
+    "damper_position",
     "valve",
     "fan-speed-feedback",
     "pump-speed-feedback",
@@ -194,7 +194,7 @@ def normalize_role_series(
         occ_ok = raw.map(
             lambda x: str(x).strip().lower()
             in {
-                "occupied",
+                "occupancy_status",
                 "unoccupied",
                 "occ",
                 "unocc",
@@ -252,7 +252,7 @@ def normalize_role_series(
     if lo_hi is not None:
         lo, hi = lo_hi  # declared_unit is informational: values are SI by contract
         scaled = _scale_position(num)
-        if family in POSITION_ROLES or any(k in family for k in ("valve", "damper", "speed")):
+        if family in POSITION_ROLES or any(k in family for k in ("valve", "damper_position", "speed")):
             # Accept 0–1 or 0–100
             in_frac = scaled.between(0.0, 1.0)
             in_pct = scaled.between(0.0, 100.0)

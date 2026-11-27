@@ -7,15 +7,15 @@
 -- Operating states: 1 = min OA / heating, 2 = economizer, 3 = mechanical cooling
 -- (0 = fan off, not counted).
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
 rps AS (
-  SELECT equipment_id, timestamp_utc, MAX(run_proof) AS run_proof
+  SELECT equipment_id, timestamp_utc, MAX(operating_status) AS operating_status
   FROM history
   GROUP BY equipment_id, timestamp_utc
 ),
@@ -25,16 +25,16 @@ h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    oa_damper_pct AS oa_d,
-    clg_valve_pct AS clg,
+    outdoor_air_intake_damper_position_command AS oa_d,
+    cooling_valve_position_command AS clg,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
-      WHEN fan_cmd IS NULL THEN NULL
-      ELSE fan_cmd
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1.0 ELSE 0.0 END
+      WHEN supply_fan_command IS NULL THEN NULL
+      ELSE supply_fan_command
     END AS fan,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -45,12 +45,12 @@ modes AS (
     h.timestamp_utc,
     DATE_TRUNC('hour', h.timestamp_utc) AS clock_hour,
     CASE
-      WHEN fan IS NULL OR fan < {{FAN_ON_MIN}} THEN 0
+      WHEN fan IS NULL OR fan < 0.5 THEN 0
       WHEN clg IS NOT NULL AND clg > 0.1 THEN 3
       WHEN oa_d IS NOT NULL AND oa_d > 0.5 THEN 2
       ELSE 1
     END AS op_mode,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN rps.run_proof > 0.05 THEN 1 ELSE 0 END AS proven
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN rps.operating_status > 0.05 THEN 1 ELSE 0 END AS proven
   FROM h
   LEFT JOIN rps USING (equipment_id, timestamp_utc)
 ),
@@ -97,14 +97,14 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN entries_min_oa > {{DELTA_OS_MAX}} THEN 1
       WHEN entries_econ > {{DELTA_OS_MAX}} THEN 1
       WHEN entries_mech > {{DELTA_OS_MAX}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM hourly
   LEFT JOIN rps USING (equipment_id, timestamp_utc)
 ),

@@ -18,10 +18,10 @@ const START = Date.UTC(2026, 0, 1);
 function input(proofWhen) {
   const history = [];
   for (let i = 0; i <= 48; i++) {
-    history.push({ equipment_id: "ahu-1", ts: START + i * 300_000, run_proof: proofWhen(i) ? 1 : 0, fan_status: 1,
-      fan_cmd: 1, clg_valve_pct: i % 2 ? 0 : 0.5, htg_valve_pct: 0, oa_damper_pct: 0 });
+    history.push({ equipment_id: "ahu-1", ts: START + i * 300_000, operating_status: proofWhen(i) ? 1 : 0, supply_fan_operating_status: 1,
+      supply_fan_command: 1, cooling_valve_position_command: i % 2 ? 0 : 0.5, heating_valve_position_command: 0, outdoor_air_intake_damper_position_command: 0 });
   }
-  const cols = ["run_proof", "fan_status", "fan_cmd", "clg_valve_pct", "htg_valve_pct", "oa_damper_pct"];
+  const cols = ["operating_status", "supply_fan_operating_status", "supply_fan_command", "cooling_valve_position_command", "heating_valve_position_command", "outdoor_air_intake_damper_position_command"];
   return { historyColumns: cols.map((name) => ({ name, type: "double" })), history, weather: [], sensorHistory: [] };
 }
 

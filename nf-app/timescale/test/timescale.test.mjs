@@ -68,20 +68,20 @@ function scaled(r2u, units, kinds = {}) {
   for (const [role, uuid] of Object.entries(r2u)) roles[role] = { uuid, name: role, units: units[uuid] || "", kind: kinds[uuid] };
   const plan = hook.siPlan(roles, catalog);
   const kept = Object.fromEntries(Object.entries(r2u).filter(([role]) => !plan.skipped.has(role)));
-  return { plan, args: { roleToUuid: kept, unitsByUuid: units, fractionRoles: [...plan.scaled], booleanRoles: [...plan.bool] } };
+  return { plan, args: { roleToUuid: kept, unitsByUuid: units, fractionRoles: [...plan.scaled], booleanRoles: [...plan.bool], percentRoles: [...(plan.percent || [])], raisedRoles: [...(plan.raised || [])] } };
 }
 
 /**
  * The hook's run-proof binding (#1608) for a test role map: the equipment's own status role, else its own command role
- * (catalog.run_proof.own order), as the history column run_proof, scaled like its source. No proof role = none bound.
+ * (catalog.operating_status.own order), as the history column operating_status, scaled like its source. No proof role = none bound.
  */
 function withRunProof(args) {
   const r2u = args.roleToUuid || {};
-  if (r2u.run_proof) return args;
-  const own = catalog.run_proof.own, role = [...own.status, ...own.command].find((x) => r2u[x]);
+  if (r2u.operating_status) return args;
+  const own = catalog.operating_status.own, role = [...own.status, ...own.command].find((x) => r2u[x]);
   if (!role) return args;
-  const tag = (list) => (list && list.includes(role) ? [...list, "run_proof"] : list);
-  return { ...args, roleToUuid: { ...r2u, run_proof: r2u[role] }, fractionRoles: tag(args.fractionRoles), booleanRoles: tag(args.booleanRoles) };
+  const tag = (list) => (list && list.includes(role) ? [...list, "operating_status"] : list);
+  return { ...args, roleToUuid: { ...r2u, operating_status: r2u[role] }, fractionRoles: tag(args.fractionRoles), booleanRoles: tag(args.booleanRoles) };
 }
 
 /** The engine's load(): mirror the bound points into fdd.point, then build the TEMP history from fdd.input_sample. */
@@ -191,9 +191,9 @@ test("fdd.input_sample has exactly the signature the input contract declares", {
 });
 
 test("fdd.input_sample applies the point's scale and uses NF's (point_id, time) index", { skip }, async () => {
-  const { rows: pr } = await db.query("SELECT id::text AS id, name, units FROM public.points WHERE name = 'AHU-1/sat'");
+  const { rows: pr } = await db.query("SELECT id::text AS id, name, units FROM public.points WHERE name = 'AHU-1/discharge_air_temperature'");
   const id = pr[0].id;
-  await ts.syncPoints(db, { siteId: "ix", equipId: "IX", rows: ts.pointRows({ pack, siteId: "ix", equipId: "IX", roleToUuid: { sat: id }, unitsByUuid: { [id]: pr[0].units } }) });
+  await ts.syncPoints(db, { siteId: "ix", equipId: "IX", rows: ts.pointRows({ pack, siteId: "ix", equipId: "IX", roleToUuid: { discharge_air_temperature: id }, unitsByUuid: { [id]: pr[0].units } }) });
   const t = "2026-10-05T10:00:00Z";
   const raw = (await db.query("SELECT value FROM public.data WHERE point_id = $1::uuid AND \"time\" = $2", [id, t])).rows[0].value;
   const si = (await db.query("SELECT value FROM fdd.input_sample WHERE site_id = 'ix' AND point_key = $1 AND ts = $2", [id, t])).rows[0].value;
@@ -229,8 +229,8 @@ test("upgrade v3 -> v4: results are copied into fdd.rule_result, legacy tables d
   await makeV3(`
     INSERT INTO openfdd.fdd_results (run_ts, equip, site, rule_id, fault_pct, fault_hours, covered_hours, metric, engine, window_start, window_end, sensor_ref, role) VALUES
       ('2026-10-12T00:00:00Z', 'fixture', 'site-1', 'FC1', 10, 2.5, 24, '{"x": 1}', 'timescale', '2026-10-11T00:00:00Z', '2026-10-12T00:00:00Z', '', NULL),
-      ('2026-10-12T00:00:00Z', 'fixture', 'site-1', 'SV-RATE', 0, 0, 24, NULL, 'timescale', '2026-10-11T00:00:00Z', '2026-10-12T00:00:00Z', 'u-1', 'sat'),
-      ('2026-10-12T00:00:00Z', 'fixture', 'site-1', 'SV-RATE', NULL, NULL, 0, NULL, 'timescale', '2026-10-11T00:00:00Z', '2026-10-12T00:00:00Z', 'u-2', 'sat'),
+      ('2026-10-12T00:00:00Z', 'fixture', 'site-1', 'SV-RATE', 0, 0, 24, NULL, 'timescale', '2026-10-11T00:00:00Z', '2026-10-12T00:00:00Z', 'u-1', 'discharge_air_temperature'),
+      ('2026-10-12T00:00:00Z', 'fixture', 'site-1', 'SV-RATE', NULL, NULL, 0, NULL, 'timescale', '2026-10-11T00:00:00Z', '2026-10-12T00:00:00Z', 'u-2', 'discharge_air_temperature'),
       ('2026-10-13T00:00:00Z', 'fixture', NULL, 'FC2', 5, 1, 24, NULL, 'pglite', NULL, NULL, '', NULL);
     INSERT INTO openfdd.retention_log (status, dry_run, result) VALUES ('under_cap', false, '{}');`);
   assert.equal(await ts.schemaVersion(db), 3);
@@ -274,19 +274,19 @@ test("upgrade v3 -> v4 refuses on a row-count mismatch and leaves both tables un
 
 test("syncPoints mirrors the bound points and drops the equipment's unbound ones; writeResults is an idempotent upsert", { skip }, async () => {
   const ids = (await db.query("SELECT id::text AS id FROM public.points ORDER BY name LIMIT 3")).rows.map((r) => r.id);
-  const rows = (keys) => keys.map((k) => ({ site_id: "sync", point_key: k, equipment_id: "SYNC", role: "sat", role_source: "t", kind: "numeric", unit: "degC", source_unit: "degF", si_scale: 5 / 9, si_offset: -160 / 9, attrs: { dis: k } }));
+  const rows = (keys) => keys.map((k) => ({ site_id: "sync", point_key: k, equipment_id: "SYNC", role: "discharge_air_temperature", role_source: "t", kind: "numeric", unit: "degC", source_unit: "degF", si_scale: 5 / 9, si_offset: -160 / 9, attrs: { dis: k } }));
   assert.deepEqual(await ts.syncPoints(db, { siteId: "sync", equipId: "SYNC", rows: rows(ids) }), { upserted: 3, removed: 0 });
   assert.deepEqual(await ts.syncPoints(db, { siteId: "sync", equipId: "SYNC", rows: rows(ids.slice(0, 2)) }), { upserted: 2, removed: 1 });
   assert.equal((await db.query("SELECT count(*)::int AS n FROM fdd.point WHERE site_id = 'sync'")).rows[0].n, 2);
   await db.query("DELETE FROM fdd.point WHERE site_id = 'sync'");
 
   const result = (row) => ts.toResultRow({ runTs: "2026-10-13T00:00:00Z", equip: "fixture", site: "w", ruleId: "SV-RATE", row, windowStart: FROM, windowEnd: TO });
-  const details = { first: { role: "sat", name: "first", hours: 1, status: "fault" } };
+  const details = { first: { role: "discharge_air_temperature", name: "first", hours: 1, status: "fault" } };
   const out = [
     result({ fault_hours: 1, covered_hours: 2, sensor_fault_hours: details }),
-    result({ series_id: "first", sensor_role: "sat", fault_hours: 1, covered_hours: 2 }),
-    result({ series_id: "second", sensor_role: "sat", fault_hours: 0, covered_hours: 2 }),
-    result({ series_id: "unassessed", sensor_role: "sat", fault_hours: 0, covered_hours: 0 }),
+    result({ series_id: "first", sensor_role: "discharge_air_temperature", fault_hours: 1, covered_hours: 2 }),
+    result({ series_id: "second", sensor_role: "discharge_air_temperature", fault_hours: 0, covered_hours: 2 }),
+    result({ series_id: "unassessed", sensor_role: "discharge_air_temperature", fault_hours: 0, covered_hours: 0 }),
   ];
   assert.equal(await ts.writeResults(db, out), 4);
   assert.equal(await ts.writeResults(db, out), 4);
@@ -294,9 +294,9 @@ test("syncPoints mirrors the bound points and drops the equipment's unbound ones
     WHERE equipment_id = 'fixture' ORDER BY subject_key`)).rows;
   assert.deepEqual(saved, [
     { subject_key: "", role: null, status: "FAULT", fault_hours: 1, covered_hours: 2, metrics: { sensor_fault_hours: details }, poll_seconds: 300 },
-    { subject_key: "first", role: "sat", status: "FAULT", fault_hours: 1, covered_hours: 2, metrics: {}, poll_seconds: 300 },
-    { subject_key: "second", role: "sat", status: "PASS", fault_hours: 0, covered_hours: 2, metrics: {}, poll_seconds: 300 },
-    { subject_key: "unassessed", role: "sat", status: "INCONCLUSIVE", fault_hours: null, covered_hours: 0, metrics: {}, poll_seconds: 300 },
+    { subject_key: "first", role: "discharge_air_temperature", status: "FAULT", fault_hours: 1, covered_hours: 2, metrics: {}, poll_seconds: 300 },
+    { subject_key: "second", role: "discharge_air_temperature", status: "PASS", fault_hours: 0, covered_hours: 2, metrics: {}, poll_seconds: 300 },
+    { subject_key: "unassessed", role: "discharge_air_temperature", status: "INCONCLUSIVE", fault_hours: null, covered_hours: 0, metrics: {}, poll_seconds: 300 },
   ]);
   await db.query("DELETE FROM fdd.rule_result WHERE equipment_id = 'fixture'");
 });
@@ -305,50 +305,50 @@ test("loadHistory builds the wide history in SI", { skip }, async () => {
   loaded = await load({ equipId: EQUIP, siteId: "site-1", ...scaled(roleToUuid, unitsByUuid).args, from: FROM, to: TO, stepSec: STEP });
   const days = (Date.parse(TO) - Date.parse(FROM)) / 864e5;
   assert.equal(loaded.rows, days * 288, "one row per 5-minute bucket");
-  assert.equal(loaded.si.sat, "°C");
-  assert.equal(loaded.si.duct_static, "Pa");
+  assert.equal(loaded.si.discharge_air_temperature, "°C");
+  assert.equal(loaded.si.discharge_air_static_pressure, "Pa");
   const t = "2026-10-05T10:00:00Z";
   const rawv = (await db.query(
-    `SELECT avg(d.value) FILTER (WHERE p.name = 'AHU-1/sat') AS sat, avg(d.value) FILTER (WHERE p.name = 'AHU-1/duct_static') AS ds,
-            avg(d.value) FILTER (WHERE p.name = 'AHU-1/fan_status') AS fs, avg(d.value) FILTER (WHERE p.name = 'AHU-1/fan_cmd') AS fc
+    `SELECT avg(d.value) FILTER (WHERE p.name = 'AHU-1/discharge_air_temperature') AS discharge_air_temperature, avg(d.value) FILTER (WHERE p.name = 'AHU-1/discharge_air_static_pressure') AS ds,
+            avg(d.value) FILTER (WHERE p.name = 'AHU-1/supply_fan_operating_status') AS fs, avg(d.value) FILTER (WHERE p.name = 'AHU-1/supply_fan_command') AS fc
      FROM public.data d JOIN public.points p ON p.id = d.point_id WHERE d."time" >= $1 AND d."time" < $1::timestamptz + interval '5 minutes'`, [t])).rows[0];
-  const h = (await db.query("SELECT sat, duct_static, fan_status, fan_cmd, zone_t FROM pg_temp.history WHERE timestamp_utc = $1", [t])).rows[0];
-  assert.ok(rawv.sat > 40 && rawv.sat < 100, `raw sat is in degF (${rawv.sat})`);
-  assert.ok(Math.abs(h.sat - (rawv.sat - 32) * 5 / 9) < 1e-9, `sat ${rawv.sat} degF -> ${h.sat} degC`);
-  assert.ok(h.sat > 5 && h.sat < 40, "sat is plausible degC");
-  assert.ok(Math.abs(h.duct_static - rawv.ds * ofddUnits.toSI(1, "inH2O").value) < 1e-9, "duct static inH2O -> Pa");
-  assert.equal(h.fan_status, rawv.fs, "unitless status passes through");
-  assert.ok(Math.abs(h.fan_cmd - rawv.fc / 100) < 1e-9, `declared-% fan command ${rawv.fc} % -> fraction ${h.fan_cmd}`);
+  const h = (await db.query("SELECT discharge_air_temperature, discharge_air_static_pressure, supply_fan_operating_status, supply_fan_command, zone_air_temperature FROM pg_temp.history WHERE timestamp_utc = $1", [t])).rows[0];
+  assert.ok(rawv.discharge_air_temperature > 40 && rawv.discharge_air_temperature < 100, `raw discharge_air_temperature is in degF (${rawv.discharge_air_temperature})`);
+  assert.ok(Math.abs(h.discharge_air_temperature - (rawv.discharge_air_temperature - 32) * 5 / 9) < 1e-9, `discharge_air_temperature ${rawv.discharge_air_temperature} degF -> ${h.discharge_air_temperature} degC`);
+  assert.ok(h.discharge_air_temperature > 5 && h.discharge_air_temperature < 40, "discharge_air_temperature is plausible degC");
+  assert.ok(Math.abs(h.discharge_air_static_pressure - rawv.ds * ofddUnits.toSI(1, "inH2O").value) < 1e-9, "duct static inH2O -> Pa");
+  assert.equal(h.supply_fan_operating_status, rawv.fs, "unitless status passes through");
+  assert.ok(Math.abs(h.supply_fan_command - rawv.fc / 100) < 1e-9, `declared-% fan command ${rawv.fc} % -> fraction ${h.supply_fan_command}`);
   const w = (await db.query("SELECT count(*)::int AS n FROM pg_temp.weather")).rows[0].n;
-  assert.equal(w, loaded.rows, "weather mirrors the oa_t grid");
+  assert.equal(w, loaded.rows, "weather mirrors the outdoor_air_intake_temperature grid");
 });
 
 test("scales: loadHistory applies exactly what siPlan decided (fraction, boolean range check, humidity, plain SI)", { skip }, async () => {
   const two = { from: "2026-09-21T00:00:00Z", to: "2026-09-23T00:00:00Z", stepSec: STEP };
-  const r2u = { oa_h: roleToUuid.oa_h, fan_cmd: roleToUuid.fan_cmd, fan_status: roleToUuid.fan_status };
+  const r2u = { outdoor_air_intake_relative_humidity: roleToUuid.outdoor_air_intake_relative_humidity, supply_fan_command: roleToUuid.supply_fan_command, supply_fan_operating_status: roleToUuid.supply_fan_operating_status };
   // no decisions passed: plain SI conversions by unit, nothing is divided by 100 (loadHistory never guesses)
   let h = await load({ equipId: EQUIP, roleToUuid: r2u, unitsByUuid, ...two });
-  let r = (await db.query("SELECT max(fan_cmd) AS fc, max(oa_h) AS oh, max(fan_status) AS fs FROM pg_temp.history")).rows[0];
-  assert.ok(r.fc > 1, `no fractionRoles: fan_cmd stays 0-100 (${r.fc})`);
-  assert.ok(r.oh > 30, "oa_h stays 0-100 %RH");
+  let r = (await db.query("SELECT max(supply_fan_command) AS fc, max(outdoor_air_intake_relative_humidity) AS oh, max(supply_fan_operating_status) AS fs FROM pg_temp.history")).rows[0];
+  assert.ok(r.fc > 1, `no fractionRoles: supply_fan_command stays 0-100 (${r.fc})`);
+  assert.ok(r.oh > 30, "outdoor_air_intake_relative_humidity stays 0-100 %RH");
   // siPlan's decisions
   const { plan, args } = scaled(r2u, unitsByUuid);
-  assert.deepEqual([...plan.scaled], ["fan_cmd"]);
-  assert.deepEqual([...plan.bool], ["fan_status"]);
+  assert.deepEqual([...plan.scaled], ["supply_fan_command"]);
+  assert.deepEqual([...plan.bool], ["supply_fan_operating_status"]);
   h = await load({ equipId: EQUIP, ...args, ...two });
-  r = (await db.query("SELECT max(fan_cmd) AS fc, max(oa_h) AS oh, max(fan_status) AS fs, min(fan_status) AS fm FROM pg_temp.history")).rows[0];
-  assert.ok(r.fc <= 1 && r.fc > 0.5, `fan_cmd is a fraction (${r.fc})`);
-  assert.ok(r.oh > 30, "oa_h stays %RH 0-100");
-  assert.ok(r.fs <= 1 && r.fm >= 0, "fan_status is 0/1 on-fractions");
-  assert.equal(h.si.fan_cmd, "fraction");
-  assert.equal(h.si.fan_status, "bool");
-  assert.equal(h.si.oa_h, "%");
+  r = (await db.query("SELECT max(supply_fan_command) AS fc, max(outdoor_air_intake_relative_humidity) AS oh, max(supply_fan_operating_status) AS fs, min(supply_fan_operating_status) AS fm FROM pg_temp.history")).rows[0];
+  assert.ok(r.fc <= 1 && r.fc > 0.5, `supply_fan_command is a fraction (${r.fc})`);
+  assert.ok(r.oh > 30, "outdoor_air_intake_relative_humidity stays %RH 0-100");
+  assert.ok(r.fs <= 1 && r.fm >= 0, "supply_fan_operating_status is 0/1 on-fractions");
+  assert.equal(h.si.supply_fan_command, "bool");
+  assert.equal(h.si.supply_fan_operating_status, "bool");
+  assert.equal(h.si.outdoor_air_intake_relative_humidity, "%");
   // a boolean role whose bucket average leaves [0, 1] is rejected (NULL), not rescaled or thresholded
   await db.query(`INSERT INTO public.data (point_id, "time", value) SELECT md5('bad/status')::uuid, g, 2 FROM generate_series('2026-09-21T00:00:00Z'::timestamptz, '2026-09-21T23:55:00Z', interval '5 minutes') g`);
   const bad = (await db.query("SELECT md5('bad/status')::uuid::text AS u")).rows[0].u;
-  await load({ equipId: "BAD", roleToUuid: { fan_status: bad, fan_cmd: roleToUuid.fan_cmd }, unitsByUuid: { ...unitsByUuid, [bad]: "" },
-    fractionRoles: ["fan_cmd"], booleanRoles: ["fan_status"], ...two });
-  const n = (await db.query("SELECT count(fan_status)::int AS fs, count(fan_cmd)::int AS fc FROM pg_temp.history")).rows[0];
+  await load({ equipId: "BAD", roleToUuid: { supply_fan_operating_status: bad, supply_fan_command: roleToUuid.supply_fan_command }, unitsByUuid: { ...unitsByUuid, [bad]: "" },
+    fractionRoles: ["supply_fan_command"], booleanRoles: ["supply_fan_operating_status"], ...two });
+  const n = (await db.query("SELECT count(supply_fan_operating_status)::int AS fs, count(supply_fan_command)::int AS fc FROM pg_temp.history")).rows[0];
   assert.equal(n.fs, 0, "a status of 2 is rejected");
   assert.ok(n.fc > 0);
   sourceDirty = true;
@@ -359,37 +359,37 @@ test("FC1 on declared-% fan commands: Timescale == PGlite for 1 %, 2 % and 99 %"
   const out = {};
   for (const pct of [1, 2, 99]) {
     const equip = `PCT-${pct}`;
-    const ids = { fan_cmd: `md5('${equip}/fan_cmd')::uuid`, duct_static: `md5('${equip}/ds')::uuid`, duct_static_sp: `md5('${equip}/sp')::uuid` };
+    const ids = { supply_fan_command: `md5('${equip}/supply_fan_command')::uuid`, discharge_air_static_pressure: `md5('${equip}/ds')::uuid`, discharge_air_static_pressure_setpoint: `md5('${equip}/sp')::uuid` };
     await db.query(
       `INSERT INTO public.data (point_id, "time", value)
        SELECT x.id, g, x.v FROM generate_series($1::timestamptz, $2::timestamptz - interval '5 minutes', interval '5 minutes') g,
-         (VALUES (${ids.fan_cmd}, ${pct}::double precision), (${ids.duct_static}, 0::double precision), (${ids.duct_static_sp}, 1.5::double precision)) AS x(id, v)`,
+         (VALUES (${ids.supply_fan_command}, ${pct}::double precision), (${ids.discharge_air_static_pressure}, 0::double precision), (${ids.discharge_air_static_pressure_setpoint}, 1.5::double precision)) AS x(id, v)`,
       [from, to]);
     const uu = {};
     for (const [role, expr] of Object.entries(ids)) uu[role] = (await db.query(`SELECT ${expr}::text AS u`)).rows[0].u;
-    const units = { [uu.fan_cmd]: "%", [uu.duct_static]: "inH2O", [uu.duct_static_sp]: "inH2O" };
-    const r2u = { fan_cmd: uu.fan_cmd, duct_static: uu.duct_static, duct_static_sp: uu.duct_static_sp };
+    const units = { [uu.supply_fan_command]: "%", [uu.discharge_air_static_pressure]: "inH2O", [uu.discharge_air_static_pressure_setpoint]: "inH2O" };
+    const r2u = { supply_fan_command: uu.supply_fan_command, discharge_air_static_pressure: uu.discharge_air_static_pressure, discharge_air_static_pressure_setpoint: uu.discharge_air_static_pressure_setpoint };
 
     // Timescale path
     const n = await load({ equipId: equip, siteId: "s", ...scaled(r2u, units).args, from, to, stepSec: STEP });
     assert.equal(n.rows, 288);
     const tsFc1 = (await ts.runRules(db, pack, ["FC1"])).results.FC1;
-    const fan = (await db.query("SELECT max(fan_cmd) AS m FROM pg_temp.history")).rows[0].m;
+    const fan = (await db.query("SELECT max(supply_fan_command) AS m FROM pg_temp.history")).rows[0].m;
     assert.ok(Math.abs(fan - pct / 100) < 1e-12, `${pct} % reaches SQL as ${pct / 100} (got ${fan})`);
 
     // PGlite path: values converted by the hook's own siPlan (the scale rule lives there)
     const roles = {
-      fan_cmd: { uuid: uu.fan_cmd, name: "fan", units: "%", kind: "Number" },
-      duct_static: { uuid: uu.duct_static, name: "ds", units: "inH2O", kind: "Number" },
-      duct_static_sp: { uuid: uu.duct_static_sp, name: "sp", units: "inH2O", kind: "Number" },
+      supply_fan_command: { uuid: uu.supply_fan_command, name: "fan", units: "%", kind: "Number" },
+      discharge_air_static_pressure: { uuid: uu.discharge_air_static_pressure, name: "ds", units: "inH2O", kind: "Number" },
+      discharge_air_static_pressure_setpoint: { uuid: uu.discharge_air_static_pressure_setpoint, name: "sp", units: "inH2O", kind: "Number" },
     };
     const plan = hook.siPlan(roles, catalog);
-    const rawVals = { fan_cmd: pct, duct_static: 0, duct_static_sp: 1.5 };
+    const rawVals = { supply_fan_command: pct, discharge_air_static_pressure: 0, discharge_air_static_pressure_setpoint: 1.5 };
     const hist = [];
     for (let t = Date.parse(from); t < Date.parse(to); t += STEP * 1000) {
       const row = { equipment_id: equip, ts: t };
       for (const role of Object.keys(roles)) row[role] = plan.convert[role](rawVals[role]);
-      row.run_proof = row.fan_cmd;            // the hook binds the fan command as this AHU's run proof (#1608)
+      row.operating_status = row.supply_fan_command;            // the hook binds the fan command as this AHU's run proof (#1608)
       hist.push(row);
     }
     const eng = await createEngine({ kind: "duckdb", pack });
@@ -414,7 +414,7 @@ test("valve (VAV-3) and unitless command: Timescale == PGlite, unitless role is 
   const results = {};
   for (const [label, pct, unit] of [["1pct", 1, "%"], ["99pct", 99, "%"], ["unitless", 99, ""]]) {
     const equip = `VLV-${label}`;
-    const defs = { oa_t: [30, "degC"], zone_flow: [100, "L/s"], fan_status: [1, ""], reheat_valve_pct: [pct, unit] };
+    const defs = { outdoor_air_intake_temperature: [30, "degC"], discharge_air_volume_flow_rate: [100, "L/s"], supply_fan_operating_status: [1, ""], terminal_unit_heating_valve_position_command: [pct, unit] };
     const r2u = {}, units = {}, vals = [];
     for (const [role, [v, u]] of Object.entries(defs)) {
       const id = await uuidOf(`md5('${equip}/${role}')::uuid`);
@@ -425,11 +425,11 @@ test("valve (VAV-3) and unitless command: Timescale == PGlite, unitless role is 
        SELECT x.id, g, x.v FROM generate_series($1::timestamptz, $2::timestamptz - interval '5 minutes', interval '5 minutes') g, (VALUES ${vals.join(", ")}) AS x(id, v)`, [from, to]);
     const { plan, args } = scaled(r2u, units);
     if (label === "unitless") {
-      assert.ok(plan.skipped.has("reheat_valve_pct"), "unitless valve command is skipped");
-      assert.ok(!("reheat_valve_pct" in args.roleToUuid), "and never reaches Timescale");
-      // VAV-3 requires reheat_valve_pct: with the role gone the hook does not run it (no result = not assessed)
+      assert.ok(plan.skipped.has("terminal_unit_heating_valve_position_command"), "unitless valve command is skipped");
+      assert.ok(!("terminal_unit_heating_valve_position_command" in args.roleToUuid), "and never reaches Timescale");
+      // VAV-3 requires terminal_unit_heating_valve_position_command: with the role gone the hook does not run it (no result = not assessed)
       const reg = catalog.rules.find((x) => x.id === "VAV-3");
-      assert.ok(reg.required_roles.includes("reheat_valve_pct"));
+      assert.ok(reg.required_roles.includes("terminal_unit_heating_valve_position_command"));
       results[label] = null;
       continue;
     }
@@ -455,9 +455,9 @@ test("valve (VAV-3) and unitless command: Timescale == PGlite, unitless role is 
 
 test("rules in Timescale == the pglite engine on the same history", { skip, timeout: 280000 }, async () => {
   if (sourceDirty) await seed();
-  const sensorSeries = ["sat", "sat_aux", "mat", "oa_t", "rat", "duct_static"].map((name) => ({
-    uuid: roleToUuid[name], role: name === "sat_aux" ? "sat" : name,
-    unit: name === "duct_static" ? "Pa" : "°C",
+  const sensorSeries = ["discharge_air_temperature", "sat_aux", "mixed_air_temperature", "outdoor_air_intake_temperature", "return_air_temperature", "discharge_air_static_pressure"].map((name) => ({
+    uuid: roleToUuid[name], role: name === "sat_aux" ? "discharge_air_temperature" : name,
+    unit: name === "discharge_air_static_pressure" ? "Pa" : "°C",
   }));
   loaded = await load({ equipId: EQUIP, siteId: "site-1", ...scaled(roleToUuid, unitsByUuid).args,
     unitsByUuid, sensorSeries, from: FROM, to: TO, stepSec: STEP });
@@ -469,7 +469,7 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
   const weather = (await q("SELECT * FROM pg_temp.weather ORDER BY timestamp_utc")).map(({ timestamp_utc, ...r }) => ({ ...r, ts: timestamp_utc.getTime() }));
   const sensorHistory = (await q("SELECT * FROM pg_temp.sensor_history")).map(({ timestamp_utc, ...r }) => ({ ...r, ts: timestamp_utc.getTime() }));
   assert.equal(new Set(sensorHistory.map((row) => row.series_id)).size, 6);
-  assert.equal(new Set(sensorHistory.filter((row) => row.sensor_role === "sat").map((row) => row.series_id)).size, 2);
+  assert.equal(new Set(sensorHistory.filter((row) => row.sensor_role === "discharge_air_temperature").map((row) => row.series_id)).size, 2);
   // #1673: load() declares every fetched series with the requested window [FROM, TO). Give pglite the same
   // declaration, or SV-STALE there falls back to the observed window (which ends one step before TO).
   const sweepSeries = (await q("SELECT * FROM pg_temp.sweep_series")).map(({ window_start, window_end, ...r }) => ({
@@ -521,9 +521,9 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
     const expectedSeries = sensorSeries.filter((series) => catalog.sensor_sweep_roles[id]?.includes(series.role));
     assert.equal(ruleRun.results[id]?.length, expectedSeries.length, `${id} scores its assessable physical sensors`);
     assert.deepEqual(new Set(ruleRun.results[id].map((row) => row.series_id)), new Set(expectedSeries.map((series) => series.uuid)));
-    const sat = ruleRun.results[id].filter((row) => row.sensor_role === "sat");
-    assert.equal(sat.length, 2, `${id} preserves both supply-air sensors`);
-    assert.ok(sat.every((row) => row.covered_hours > 0), `${id} reports real coverage`);
+    const discharge_air_temperature = ruleRun.results[id].filter((row) => row.sensor_role === "discharge_air_temperature");
+    assert.equal(discharge_air_temperature.length, 2, `${id} preserves both supply-air sensors`);
+    assert.ok(discharge_air_temperature.every((row) => row.covered_hours > 0), `${id} reports real coverage`);
   }
 });
 
@@ -582,7 +582,7 @@ test("writeResults upserts rule results into fdd.rule_result", { skip }, async (
     hook.equipmentResult(pack.rules["SV-STALE"], ruleRun.results["SV-STALE"], EQUIP).sensor_fault_hours);
   assert.equal(summary.fault_hours, Math.max(...sensors.map((row) => row.fault_hours)));
   assert.equal(summary.covered_hours, Math.max(...sensors.map((row) => row.covered_hours)));
-  assert.equal(sensors.filter((row) => row.role === "sat").length, 2);
+  assert.equal(sensors.filter((row) => row.role === "discharge_air_temperature").length, 2);
 });
 
 test("sweep role-limit overrides (#1589): tuning hook preview / save / reset / rollback; the run uses and records the revision", { skip, timeout: 120000 }, async () => {
@@ -596,38 +596,38 @@ test("sweep role-limit overrides (#1589): tuning hook preview / save / reset / r
   const first = await call({ action: "get", site: SITE });
   assert.equal(first.ok, true, first.error);
   assert.deepEqual(first.history, [], "no revisions yet");
-  assert.equal(first.effective.sources["discharge-air-temp"].hi, "shipped");
+  assert.equal(first.effective.sources["discharge_air_temperature"].hi, "shipped");
 
   // invalid overrides are rejected and nothing is stored
-  const bad = await call({ action: "save", site: SITE, overrides: JSON.stringify({ version: 1, roles: { "discharge-air-temp": { lo: 30, hi: 20 } } }) });
+  const bad = await call({ action: "save", site: SITE, overrides: JSON.stringify({ version: 1, roles: { "discharge_air_temperature": { lo: 30, hi: 20 } } }) });
   assert.equal(bad.ok, false);
   assert.match(bad.error, /lo \(30\) must be < hi \(20\)/);
-  for (const roles of [{ "no-such-role": { lo: 1 } }, { "discharge-air-temp": { spike_delta: -1 } }, { "discharge-air-temp": { colour: 1 } }]) {
+  for (const roles of [{ "no-such-role": { lo: 1 } }, { "discharge_air_temperature": { spike_delta: -1 } }, { "discharge_air_temperature": { colour: 1 } }]) {
     const r = await call({ action: "save", site: SITE, overrides: JSON.stringify({ version: 1, roles }) });
     assert.equal(r.ok, false, JSON.stringify(roles));
   }
   assert.equal((await db.query("SELECT count(*)::int AS n FROM fdd.rule_config WHERE rule_id = 'SV-LIMITS'")).rows[0].n, 0);
 
   // preview validates without writing
-  const siteOv = { version: 1, roles: { "discharge-air-temp": { lo: 4, hi: 16 } } };
+  const siteOv = { version: 1, roles: { "discharge_air_temperature": { lo: 4, hi: 16 } } };
   const pv = await call({ action: "preview", site: SITE, overrides: JSON.stringify(siteOv) });
   assert.equal(pv.ok, true, pv.error);
   assert.equal(pv.written, false);
-  assert.equal(pv.effective.roles["discharge-air-temp"].hi, 16);
-  assert.equal(pv.effective.sources["discharge-air-temp"].hi, "site");
+  assert.equal(pv.effective.roles["discharge_air_temperature"].hi, 16);
+  assert.equal(pv.effective.sources["discharge_air_temperature"].hi, "site");
   assert.equal((await db.query("SELECT count(*)::int AS n FROM fdd.rule_config WHERE rule_id = 'SV-LIMITS'")).rows[0].n, 0);
 
   // save: site, then equipment (precedence shipped < site < equipment)
   const s1 = await call({ action: "save", site: SITE, overrides: JSON.stringify(siteOv), note: "tighter supply band", by: "test" });
   assert.equal(s1.ok, true, s1.error);
   assert.equal(s1.revision, 1);
-  const e1 = await call({ action: "save", site: SITE, scope: "equip:" + EQUIP, overrides: JSON.stringify({ version: 1, roles: { "discharge-air-temp": { hi: 13 } } }) });
+  const e1 = await call({ action: "save", site: SITE, scope: "equip:" + EQUIP, overrides: JSON.stringify({ version: 1, roles: { "discharge_air_temperature": { hi: 13 } } }) });
   assert.equal(e1.ok, true, e1.error);
-  assert.equal(e1.effective.roles["discharge-air-temp"].lo, 4, "site value inherited");
-  assert.equal(e1.effective.sources["discharge-air-temp"].lo, "site");
-  assert.equal(e1.effective.roles["discharge-air-temp"].hi, 13, "equipment wins");
-  assert.equal(e1.effective.sources["discharge-air-temp"].hi, "equipment");
-  assert.equal(e1.effective.sources["mixed-air-temp"].hi, "shipped");
+  assert.equal(e1.effective.roles["discharge_air_temperature"].lo, 4, "site value inherited");
+  assert.equal(e1.effective.sources["discharge_air_temperature"].lo, "site");
+  assert.equal(e1.effective.roles["discharge_air_temperature"].hi, 13, "equipment wins");
+  assert.equal(e1.effective.sources["discharge_air_temperature"].hi, "equipment");
+  assert.equal(e1.effective.sources["mixed_air_temperature"].hi, "shipped");
 
   // the scheduled run: the fdd hook's loader re-renders the sweeps for this equipment and records the revision
   const engine = await createEngine({ kind: "timescale", pack, client: db });
@@ -639,14 +639,14 @@ test("sweep role-limit overrides (#1589): tuning hook preview / save / reset / r
   assert.notEqual(lim.sweeps["SV-RANGE"].sql, pack.rules["SV-RANGE"].sql);
   assert.equal(lim.sweeps["SV-SPIKE"].sql, pack.rules["SV-SPIKE"].sql, "rules whose limits did not change keep the pack SQL");
   assert.equal(tuned.forEquip("site-2", EQUIP), null, "another site keeps the shipped limits");
-  const sensorSeries = ["sat", "mat", "oa_t"].map((name) => ({ uuid: roleToUuid[name], role: name, unit: "°C" }));
+  const sensorSeries = ["discharge_air_temperature", "mixed_air_temperature", "outdoor_air_intake_temperature"].map((name) => ({ uuid: roleToUuid[name], role: name, unit: "°C" }));
   await load({ equipId: EQUIP, siteId: SITE, ...scaled(roleToUuid, unitsByUuid).args, unitsByUuid, sensorSeries, from: FROM, to: TO, stepSec: STEP });
   const base = await engine.query("SV-RANGE");
   const over = await engine.query("SV-RANGE", lim.sweeps["SV-RANGE"]);
-  const satHours = (rows) => rows.find((r) => r.sensor_role === "sat").fault_hours;
+  const satHours = (rows) => rows.find((r) => r.sensor_role === "discharge_air_temperature").fault_hours;
   assert.ok(satHours(over) > satHours(base), `a 4..13 degC band flags more supply-air hours (${satHours(base)} -> ${satHours(over)})`);
-  const mat = (rows) => rows.find((r) => r.sensor_role === "mat").fault_hours;
-  assert.equal(mat(over), mat(base), "roles without an override are unchanged");
+  const mixed_air_temperature = (rows) => rows.find((r) => r.sensor_role === "mixed_air_temperature").fault_hours;
+  assert.equal(mixed_air_temperature(over), mixed_air_temperature(base), "roles without an override are unchanged");
   const row = hook.equipmentResult(pack.rules["SV-RANGE"], over, EQUIP);
   const runTs = "2026-10-14T01:00:00Z";
   const extra = { ruleHash: lim.ruleHashes["SV-RANGE"], configHash: lim.configHash, configRevision: lim.configRevision, parameters: lim.parameters };
@@ -661,41 +661,41 @@ test("sweep role-limit overrides (#1589): tuning hook preview / save / reset / r
   // reset (equipment back to the site) and rollback (a new revision with the old parameters; history append-only)
   const r2 = await call({ action: "reset", site: SITE, scope: "equip:" + EQUIP });
   assert.equal(r2.revision, 2);
-  assert.equal(r2.effective.roles["discharge-air-temp"].hi, 16, "back to the site value");
+  assert.equal(r2.effective.roles["discharge_air_temperature"].hi, 16, "back to the site value");
   const rb = await call({ action: "rollback", site: SITE, scope: "equip:" + EQUIP, revision: "1" });
   assert.equal(rb.ok, true, rb.error);
   assert.equal(rb.revision, 3);
-  assert.equal(rb.effective.roles["discharge-air-temp"].hi, 13);
+  assert.equal(rb.effective.roles["discharge_air_temperature"].hi, 13);
   assert.deepEqual(rb.history.map((h) => [h.revision, h.active]), [[3, true], [2, false], [1, false]]);
   assert.equal(rb.history[0].parameters.rollback_of, 1);
   const actives = (await db.query("SELECT scope_key, revision FROM fdd.rule_config WHERE rule_id = 'SV-LIMITS' AND active ORDER BY scope_key")).rows;
   assert.deepEqual(actives.map((r) => [r.scope_key, Number(r.revision)]), [["equip:" + EQUIP, 3], ["site", 1]], "one active revision per scope");
   const site0 = await call({ action: "reset", site: SITE });
-  assert.equal(site0.effective.sources["discharge-air-temp"].lo, "shipped", "site reset: shipped defaults below");
+  assert.equal(site0.effective.sources["discharge_air_temperature"].lo, "shipped", "site reset: shipped defaults below");
   assert.ok(logs.some((m) => m.includes("revision 1")), "saves are logged");
   await db.query("DELETE FROM fdd.rule_config WHERE rule_id = 'SV-LIMITS'");
 });
 
 test("history_buckets and historyRoute (bounds against the real database)", { skip }, async () => {
-  const sat = roleToUuid.sat;
+  const discharge_air_temperature = roleToUuid.discharge_air_temperature;
   const { rows } = await db.query(
-    "SELECT * FROM openfdd.history_buckets($1::text[], '2026-09-15Z', '2026-10-15Z', interval '1 day')", [[sat]]);
+    "SELECT * FROM openfdd.history_buckets($1::text[], '2026-09-15Z', '2026-10-15Z', interval '1 day')", [[discharge_air_temperature]]);
   assert.equal(rows.length, 30);
   const day = rows.find((r) => r.bucket.toISOString() === "2026-10-05T00:00:00.000Z");
   const rawd = (await db.query(
-    "SELECT avg(value) AS a, min(value) AS mn, max(value) AS mx, count(*)::int AS n FROM public.data WHERE point_id = $1::uuid AND \"time\" >= '2026-10-05Z' AND \"time\" < '2026-10-06Z'", [sat])).rows[0];
+    "SELECT avg(value) AS a, min(value) AS mn, max(value) AS mx, count(*)::int AS n FROM public.data WHERE point_id = $1::uuid AND \"time\" >= '2026-10-05Z' AND \"time\" < '2026-10-06Z'", [discharge_air_temperature])).rows[0];
   assert.ok(close(day.avg, rawd.a) && close(day.min, rawd.mn) && close(day.max, rawd.mx));
   assert.equal(Number(day.n), rawd.n);
   const gapDay = rows.find((r) => r.bucket.toISOString() === "2026-09-21T00:00:00.000Z");
   assert.equal(Number(gapDay.n), 288 - 37, "the 3 h SAT outage leaves 251 samples");
 
-  const r = await ts.historyRoute(db, { uuids: [sat, roleToUuid.oa_t], from: "2026-09-15T00:00:00Z", to: "2026-10-15T00:00:00Z", bucket: "1 day" });
+  const r = await ts.historyRoute(db, { uuids: [discharge_air_temperature, roleToUuid.outdoor_air_intake_temperature], from: "2026-09-15T00:00:00Z", to: "2026-10-15T00:00:00Z", bucket: "1 day" });
   assert.equal(r.rows.length, 60);
   assert.equal(r.truncated, false);
   assert.equal(r.coarsened, false);
   assert.equal(r.coverage.with_data, 2);
-  assert.equal(r.coverage.points[sat].buckets, 30);
-  const auto = await ts.historyRoute(db, { uuids: [sat], from: "2026-09-01T00:00:00Z", to: "2026-10-30T00:00:00Z" });
+  assert.equal(r.coverage.points[discharge_air_temperature].buckets, 30);
+  const auto = await ts.historyRoute(db, { uuids: [discharge_air_temperature], from: "2026-09-01T00:00:00Z", to: "2026-10-30T00:00:00Z" });
   assert.equal(auto.bucket, "6 hours", "59 days / ~1000 buckets");
   // byte cap (200 KB) still truncates when the point budget is raised
   const big = await ts.historyRoute(db, { uuids: Object.values(roleToUuid), from: "2026-09-01T00:00:00Z", to: "2026-10-30T00:00:00Z", bucket: "5 minutes" }, { maxPoints: 5000000 });
@@ -708,9 +708,9 @@ test("history_buckets and historyRoute (bounds against the real database)", { sk
   assert.equal(co.requested_bucket, "5 minutes");
   assert.notEqual(co.bucket, "5 minutes");
   assert.ok(co.total <= 200000);
-  await assert.rejects(ts.historyRoute(db, { uuids: [sat], from: "2026-09-01Z", to: "2026-10-01Z", bucket: "1 day; drop table x" }));
+  await assert.rejects(ts.historyRoute(db, { uuids: [discharge_air_temperature], from: "2026-09-01Z", to: "2026-10-01Z", bucket: "1 day; drop table x" }));
   // unknown uuids: empty answer with explicit coverage
-  const unk = await ts.historyRoute(db, { uuids: ["00000000-0000-0000-0000-000000000000", sat], from: "2026-09-15T00:00:00Z", to: "2026-10-15T00:00:00Z", bucket: "1 day" });
+  const unk = await ts.historyRoute(db, { uuids: ["00000000-0000-0000-0000-000000000000", discharge_air_temperature], from: "2026-09-15T00:00:00Z", to: "2026-10-15T00:00:00Z", bucket: "1 day" });
   assert.deepEqual(unk.coverage.without_data, ["00000000-0000-0000-0000-000000000000"]);
   assert.equal(unk.coverage.with_data, 1);
   // statement timeout: the query is cancelled, the connection stays usable
@@ -967,9 +967,9 @@ test("maybeEnforceCap: job present -> skipped; no job -> once a day, scoped", { 
 test("openfdd_rt least-privilege role can read views and write fdd tables, never public.data (#1606)", { skip }, async () => {
   await seed();
   await ts.install(db);
-  const { rows: pr } = await db.query("SELECT id::text AS id FROM public.points WHERE name = 'AHU-1/sat'");
+  const { rows: pr } = await db.query("SELECT id::text AS id FROM public.points WHERE name = 'AHU-1/discharge_air_temperature'");
   const ptId = pr[0].id;
-  await ts.syncPoints(db, { siteId: "s1", equipId: "AHU-1", rows: ts.pointRows({ pack, siteId: "s1", equipId: "AHU-1", roleToUuid: { sat: ptId }, unitsByUuid: { [ptId]: "degF" } }) });
+  await ts.syncPoints(db, { siteId: "s1", equipId: "AHU-1", rows: ts.pointRows({ pack, siteId: "s1", equipId: "AHU-1", roleToUuid: { discharge_air_temperature: ptId }, unitsByUuid: { [ptId]: "degF" } }) });
   const dbName = (await db.query("SELECT current_database() AS d")).rows[0].d;
   const role = `openfdd_rt_${Math.random().toString(16).slice(2, 10)}`;
   await db.query(`CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`);
@@ -1074,7 +1074,7 @@ test("one combined Save (rule parameters + SV-LIMITS) commits both or neither on
   await db.query("DELETE FROM fdd.rule_config WHERE site_id = $1", [SITE]);
   const both = (exp, limExp, hi) => call({ action: "save", site: SITE, scope: SCOPE, rule_id: "SV-RANGE",
     overrides: JSON.stringify({ version: 1, params: { confirm_min: 20 } }), expected_revision: exp,
-    limits_overrides: JSON.stringify({ version: 1, roles: { "discharge-air-temp": { hi } } }), limits_expected_revision: limExp });
+    limits_overrides: JSON.stringify({ version: 1, roles: { "discharge_air_temperature": { hi } } }), limits_expected_revision: limExp });
   const ok = await both(0, 0, 30);
   assert.equal(ok.ok, true, ok.error);
   assert.equal(ok.revision, 1);

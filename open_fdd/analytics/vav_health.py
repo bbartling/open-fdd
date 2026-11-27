@@ -53,17 +53,17 @@ def _norm_damper(s: pd.Series) -> pd.Series:
 
 
 def _air_on(df: pd.DataFrame, flow_on_min: float) -> pd.Series:
-    if "fan_status" in df.columns:
-        st = pd.to_numeric(df["fan_status"], errors="coerce")
+    if "supply_fan_operating_status" in df.columns:
+        st = pd.to_numeric(df["supply_fan_operating_status"], errors="coerce")
         if st.notna().any():
             return st > 0.05
-    if "fan_cmd" in df.columns:
-        cmd = pd.to_numeric(df["fan_cmd"], errors="coerce")
+    if "supply_fan_command" in df.columns:
+        cmd = pd.to_numeric(df["supply_fan_command"], errors="coerce")
         cmd = cmd.where(cmd.le(1.0), cmd / 100.0)
         if cmd.notna().any():
             return cmd > 0.01
-    if "zone_flow" in df.columns:
-        fl = pd.to_numeric(df["zone_flow"], errors="coerce")
+    if "discharge_air_volume_flow_rate" in df.columns:
+        fl = pd.to_numeric(df["discharge_air_volume_flow_rate"], errors="coerce")
         return fl > flow_on_min
     return pd.Series(False, index=df.index)
 
@@ -146,7 +146,7 @@ def vav_health_matrix(
         fail_pct = None
         occ_h = 0.0
         occ_samples = 0
-        zone = _col(df, "zone_t", "zone-air-temp")
+        zone = _col(df, "zone_air_temperature", "zone_air_temperature")
         if zone is not None and n:
             om = occupied_mask(pd.DatetimeIndex(idx), occ)
             om = om.reindex(idx).fillna(False)
@@ -169,7 +169,7 @@ def vav_health_matrix(
         d_h = 0.0
         notes: list[str] = []
         dmp_col = None
-        for c in ("damper_pct", "damper", "zone-damper"):
+        for c in ("damper_position", "damper_position", "zone-damper"):
             if c in df.columns:
                 dmp_col = c
                 break
@@ -189,8 +189,8 @@ def vav_health_matrix(
                 if rogue:
                     notes.append("full_open_prevalence")
 
-        flow = _col(df, "zone_flow", "zone-airflow")
-        flow_sp = _col(df, "min_flow_sp", "min-flow-sp", "airflow_sp")
+        flow = _col(df, "discharge_air_volume_flow_rate", "discharge_air_volume_flow_rate")
+        flow_sp = _col(df, "discharge_air_volume_flow_rate_minimum", "discharge_air_volume_flow_rate_minimum", "airflow_sp")
         track_pct = None
         track_h = None
         if flow is not None and flow_sp is not None and operating_h > 0:

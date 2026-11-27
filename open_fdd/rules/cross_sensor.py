@@ -12,17 +12,17 @@ from open_fdd.rules.cookbook_catalog import FAN_ON_MIN, _f, norm_cmd
 
 #: (role a, role b): the first role's movement over a matching run is the "changing" test
 COPY_PAIRS = (
-    ("return-air-temp", "discharge-air-temp"),
-    ("mixed-air-temp", "discharge-air-temp"),
-    ("mixed-air-temp", "return-air-temp"),
-    ("zone-air-temp", "discharge-air-temp"),
-    ("zone-air-temp", "vav-discharge-air-temp"),
+    ("return_air_temperature", "discharge_air_temperature"),
+    ("mixed_air_temperature", "discharge_air_temperature"),
+    ("mixed_air_temperature", "return_air_temperature"),
+    ("zone_air_temperature", "discharge_air_temperature"),
+    ("zone_air_temperature", "terminal_unit_discharge_air_temperature"),
 )
 #: (role, round-step parameter, default step, counted only while the fan is on)
 CLIP_ROLES = (
-    ("zone-co2", "co2_round", 100.0, False),
-    ("duct-static-pressure", "static_round", 25.0, True),
-    ("zone-airflow", "flow_round", 50.0, True),
+    ("zone_air_co2", "co2_round", 100.0, False),
+    ("discharge_air_static_pressure", "static_round", 25.0, True),
+    ("discharge_air_volume_flow_rate", "flow_round", 50.0, True),
 )
 _EPS = 1e-6
 
@@ -33,11 +33,12 @@ def _col(d: pd.DataFrame, name: str) -> pd.Series:
 
 def _fan_on(d: pd.DataFrame, use_run_proof: bool) -> pd.Series:
     """fan status, else fan command, else (``use_run_proof``) the run proof, else on; per sample, as the SQL CASE."""
-    status = _col(d, "fan-status")
-    cmd = norm_cmd(d["fan-cmd"]) if "fan-cmd" in d.columns else pd.Series(np.nan, index=d.index)
+    status = _col(d, "supply_fan_operating_status")
+    # A start/stop command is boolean 0/1. Keep that scale; percent roles are not this column.
+    cmd = norm_cmd(d["supply_fan_command"], representation="fraction") if "supply_fan_command" in d.columns else pd.Series(np.nan, index=d.index)
     on = pd.Series(True, index=d.index)
     if use_run_proof:
-        rp = _col(d, "run-proof")
+        rp = _col(d, "operating_status")
         on = on.where(rp.isna(), rp > 0.05)
     on = on.where(cmd.isna(), cmd > FAN_ON_MIN)
     return on.where(status.isna(), status > 0.05).astype(bool)
@@ -46,7 +47,7 @@ def _fan_on(d: pd.DataFrame, use_run_proof: bool) -> pd.Series:
 def xs_mix(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     """MAT outside [min(OAT, RAT) - mix_band, max(OAT, RAT) + mix_band] with the fan on (status, else command)."""
     del poll
-    mat, oat, rat = _col(d, "mixed-air-temp"), _col(d, "outside-air-temp"), _col(d, "return-air-temp")
+    mat, oat, rat = _col(d, "mixed_air_temperature"), _col(d, "outdoor_air_intake_temperature"), _col(d, "return_air_temperature")
     ok = mat.notna() & oat.notna() & rat.notna()
     d.attrs["xs_assessment"] = "assessed" if ok.any() else "no_temperatures"
     band = _f(p, "mix_band", 1.111111)

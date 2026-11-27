@@ -13,25 +13,25 @@
       ],
       "series": [
         {
-          "role": "zone_t",
+          "role": "zone_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "zone_air_temp_sp",
+          "role": "zone_air_temperature_setpoint",
           "use": "overlay",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "cooling_sp",
+          "role": "zone_cooling_air_temperature_setpoint",
           "use": "overlay",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "heating_sp",
+          "role": "zone_heating_air_temperature_setpoint",
           "use": "overlay",
           "required": false,
           "axis": "temp"
@@ -54,7 +54,7 @@
       ],
       "series": [
         {
-          "role": "zone_t",
+          "role": "zone_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
@@ -77,19 +77,19 @@
       ],
       "series": [
         {
-          "role": "damper_pct",
+          "role": "damper_position",
           "use": "signal",
           "required": false,
           "axis": "percent"
         },
         {
-          "role": "damper_cmd",
+          "role": "damper_position_command",
           "use": "signal",
           "required": false,
           "axis": "percent"
         },
         {
-          "role": "reheat_valve_pct",
+          "role": "terminal_unit_heating_valve_position_command",
           "use": "signal",
           "required": false,
           "axis": "percent"
@@ -111,13 +111,13 @@
       ],
       "series": [
         {
-          "role": "sat",
+          "role": "discharge_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "sat_sp",
+          "role": "discharge_air_temperature_setpoint",
           "use": "overlay",
           "required": false,
           "axis": "temp"
@@ -141,7 +141,7 @@
       ],
       "series": [
         {
-          "role": "mat",
+          "role": "mixed_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
@@ -163,7 +163,7 @@
       ],
       "series": [
         {
-          "role": "rat",
+          "role": "return_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
@@ -185,7 +185,7 @@
       ],
       "series": [
         {
-          "role": "oa_damper_pct",
+          "role": "outdoor_air_intake_damper_position_command",
           "use": "primary",
           "required": true,
           "axis": "percent"
@@ -207,7 +207,7 @@
       ],
       "series": [
         {
-          "role": "fan_cmd",
+          "role": "supply_fan_command",
           "use": "primary",
           "required": true,
           "axis": "percent"
@@ -229,13 +229,13 @@
       ],
       "series": [
         {
-          "role": "duct_static",
+          "role": "discharge_air_static_pressure",
           "use": "primary",
           "required": true,
           "axis": "pressure"
         },
         {
-          "role": "duct_static_sp",
+          "role": "discharge_air_static_pressure_setpoint",
           "use": "overlay",
           "required": false,
           "axis": "pressure"
@@ -260,19 +260,19 @@
       ],
       "series": [
         {
-          "role": "duct_static",
+          "role": "discharge_air_static_pressure",
           "use": "primary",
           "required": true,
           "axis": "pressure"
         },
         {
-          "role": "fan_status",
+          "role": "supply_fan_operating_status",
           "use": "gate",
           "required": false,
           "axis": "bool"
         },
         {
-          "role": "fan_cmd",
+          "role": "supply_fan_command",
           "use": "gate",
           "required": false,
           "axis": "percent"
@@ -294,19 +294,19 @@
       ],
       "series": [
         {
-          "role": "sat",
+          "role": "discharge_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
@@ -328,31 +328,31 @@
       ],
       "series": [
         {
-          "role": "clg_valve_pct",
+          "role": "cooling_valve_position_command",
           "use": "primary",
           "required": true,
           "axis": "percent"
         },
         {
-          "role": "sat",
+          "role": "discharge_air_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "sat_sp",
+          "role": "discharge_air_temperature_setpoint",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
@@ -380,31 +380,31 @@
       ],
       "series": [
         {
-          "role": "htg_valve_pct",
+          "role": "heating_valve_position_command",
           "use": "primary",
           "required": true,
           "axis": "percent"
         },
         {
-          "role": "sat",
+          "role": "discharge_air_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "sat_sp",
+          "role": "discharge_air_temperature_setpoint",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
@@ -430,19 +430,19 @@
       "equip_kinds": [],
       "series": [
         {
-          "role": "hw_supply_t",
+          "role": "supply_hot_water_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
@@ -462,19 +462,19 @@
       "equip_kinds": [],
       "series": [
         {
-          "role": "chw_supply_t",
+          "role": "supply_chilled_water_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
@@ -498,25 +498,25 @@
       ],
       "series": [
         {
-          "role": "cw_supply_t",
+          "role": "supply_condenser_water_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "web_wb_t",
+          "role": "weather_service_air_wet_bulb_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
@@ -539,13 +539,13 @@
       ],
       "series": [
         {
-          "role": "chw_supply_t",
+          "role": "supply_chilled_water_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "chw_return_t",
+          "role": "return_chilled_water_temperature",
           "use": "return",
           "required": false,
           "axis": "temp"
@@ -578,13 +578,13 @@
       ],
       "series": [
         {
-          "role": "cw_supply_t",
+          "role": "supply_condenser_water_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "cw_return_t",
+          "role": "return_condenser_water_temperature",
           "use": "return",
           "required": false,
           "axis": "temp"
@@ -613,31 +613,31 @@
       ],
       "series": [
         {
-          "role": "electric_kwh",
+          "role": "electric_energy",
           "use": "signal",
           "required": false,
           "axis": "energy"
         },
         {
-          "role": "kwh",
+          "role": "electric_energy",
           "use": "signal",
           "required": false,
           "axis": "energy"
         },
         {
-          "role": "electric_kw",
+          "role": "electric_power",
           "use": "signal",
           "required": false,
           "axis": "power"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
@@ -677,13 +677,13 @@
           "multiple": true
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
@@ -705,19 +705,19 @@
       ],
       "series": [
         {
-          "role": "fan_status",
+          "role": "supply_fan_operating_status",
           "use": "primary",
           "required": true,
           "axis": "bool"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "fan_cmd",
+          "role": "supply_fan_command",
           "use": "signal",
           "required": false,
           "axis": "percent"
@@ -743,19 +743,19 @@
       ],
       "series": [
         {
-          "role": "fan_cmd",
+          "role": "supply_fan_command",
           "use": "primary",
           "required": true,
           "axis": "percent"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "fan_status",
+          "role": "supply_fan_operating_status",
           "use": "signal",
           "required": false,
           "axis": "bool"
@@ -769,7 +769,7 @@
       "chart": "weekly_runtime",
       "aliases": [],
       "skip_equip_if_bound": [
-        "fan_status"
+        "supply_fan_operating_status"
       ]
     },
     {
@@ -784,13 +784,13 @@
       ],
       "series": [
         {
-          "role": "pump_status",
+          "role": "pump_operating_status",
           "use": "primary",
           "required": true,
           "axis": "bool"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
@@ -815,19 +815,19 @@
       ],
       "series": [
         {
-          "role": "chw_pump_status",
+          "role": "chilled_water_pump_operating_status",
           "use": "primary",
           "required": true,
           "axis": "bool"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "chw_pump_cmd",
+          "role": "chilled_water_pump_command",
           "use": "signal",
           "required": false,
           "axis": "percent"
@@ -850,19 +850,19 @@
       ],
       "series": [
         {
-          "role": "chw_pump_cmd",
+          "role": "chilled_water_pump_command",
           "use": "primary",
           "required": true,
           "axis": "percent"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "chw_pump_status",
+          "role": "chilled_water_pump_operating_status",
           "use": "signal",
           "required": false,
           "axis": "bool"
@@ -874,7 +874,7 @@
       "chart": "weekly_runtime",
       "aliases": [],
       "skip_equip_if_bound": [
-        "chw_pump_status"
+        "chilled_water_pump_operating_status"
       ]
     },
     {
@@ -889,13 +889,13 @@
       ],
       "series": [
         {
-          "role": "cw_pump_cmd",
+          "role": "condenser_water_pump_command",
           "use": "primary",
           "required": true,
           "axis": "percent"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
@@ -915,13 +915,13 @@
       "equip_kinds": [],
       "series": [
         {
-          "role": "compressor_status",
+          "role": "compressor_operating_status",
           "use": "primary",
           "required": true,
           "axis": "bool"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
@@ -944,19 +944,19 @@
       ],
       "series": [
         {
-          "role": "chiller_status",
+          "role": "chiller_operating_status",
           "use": "primary",
           "required": true,
           "axis": "bool"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "chiller_cmd",
+          "role": "chiller_command",
           "use": "signal",
           "required": false,
           "axis": "percent"
@@ -981,19 +981,19 @@
       ],
       "series": [
         {
-          "role": "chiller_cmd",
+          "role": "chiller_command",
           "use": "primary",
           "required": true,
           "axis": "percent"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "chiller_status",
+          "role": "chiller_operating_status",
           "use": "signal",
           "required": false,
           "axis": "bool"
@@ -1005,7 +1005,7 @@
       "chart": "weekly_runtime",
       "aliases": [],
       "skip_equip_if_bound": [
-        "chiller_status"
+        "chiller_operating_status"
       ]
     },
     {
@@ -1020,13 +1020,13 @@
       ],
       "series": [
         {
-          "role": "tower_fan_cmd",
+          "role": "cooling_tower_fan_command",
           "use": "primary",
           "required": true,
           "axis": "percent"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
@@ -1046,19 +1046,19 @@
       "equip_kinds": [],
       "series": [
         {
-          "role": "compressor_status",
+          "role": "compressor_operating_status",
           "use": "primary",
           "required": true,
           "axis": "bool"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
@@ -1078,19 +1078,19 @@
       "equip_kinds": [],
       "series": [
         {
-          "role": "chiller_status",
+          "role": "chiller_operating_status",
           "use": "primary",
           "required": true,
           "axis": "bool"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
@@ -1112,19 +1112,19 @@
       "equip_kinds": [],
       "series": [
         {
-          "role": "chiller_cmd",
+          "role": "chiller_command",
           "use": "primary",
           "required": true,
           "axis": "percent"
         },
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "x",
           "required": false,
           "axis": "temp"
@@ -1146,37 +1146,37 @@
       ],
       "series": [
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "rat",
+          "role": "return_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "mat",
+          "role": "mixed_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "fan_status",
+          "role": "supply_fan_operating_status",
           "use": "primary",
           "required": true,
           "axis": "bool"
         },
         {
-          "role": "sat",
+          "role": "discharge_air_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "oa_damper_pct",
+          "role": "outdoor_air_intake_damper_position_command",
           "use": "signal",
           "required": false,
           "axis": "percent"
@@ -1191,7 +1191,7 @@
       ]
     },
     {
-      "id": "economizer-mat-residual",
+      "id": "economizer-mixed_air_temperature-residual",
       "title": "Economizer: MAT residual (measured - mixing model)",
       "group": "Air handlers",
       "scope": "site",
@@ -1200,37 +1200,37 @@
       ],
       "series": [
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "rat",
+          "role": "return_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "mat",
+          "role": "mixed_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "fan_status",
+          "role": "supply_fan_operating_status",
           "use": "primary",
           "required": true,
           "axis": "bool"
         },
         {
-          "role": "oa_damper_pct",
+          "role": "outdoor_air_intake_damper_position_command",
           "use": "primary",
           "required": true,
           "axis": "percent"
         },
         {
-          "role": "sat",
+          "role": "discharge_air_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
@@ -1258,37 +1258,37 @@
       ],
       "series": [
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "rat",
+          "role": "return_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "mat",
+          "role": "mixed_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "fan_status",
+          "role": "supply_fan_operating_status",
           "use": "primary",
           "required": true,
           "axis": "bool"
         },
         {
-          "role": "sat",
+          "role": "discharge_air_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "oa_damper_pct",
+          "role": "outdoor_air_intake_damper_position_command",
           "use": "signal",
           "required": false,
           "axis": "percent"
@@ -1314,13 +1314,13 @@
       "equip_kinds": [],
       "series": [
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
@@ -1344,13 +1344,13 @@
       "equip_kinds": [],
       "series": [
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
+          "role": "weather_service_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
@@ -1370,91 +1370,91 @@
       "equip_kinds": [],
       "series": [
         {
-          "role": "oa_t",
+          "role": "outdoor_air_intake_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "mat",
+          "role": "mixed_air_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "zone_t",
+          "role": "zone_air_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "rat",
+          "role": "return_air_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "sat",
+          "role": "discharge_air_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "chw_supply_t",
+          "role": "supply_chilled_water_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "chw_return_t",
+          "role": "return_chilled_water_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "hw_supply_t",
+          "role": "supply_hot_water_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "hw_return_t",
+          "role": "return_hot_water_temperature",
           "use": "signal",
           "required": false,
           "axis": "temp"
         },
         {
-          "role": "oa_h",
+          "role": "outdoor_air_intake_relative_humidity",
           "use": "signal",
           "required": false,
           "axis": "percent"
         },
         {
-          "role": "ra_h",
+          "role": "return_air_relative_humidity",
           "use": "signal",
           "required": false,
           "axis": "percent"
         },
         {
-          "role": "zone_rh",
+          "role": "zone_air_relative_humidity",
           "use": "signal",
           "required": false,
           "axis": "percent"
         },
         {
-          "role": "ma_h",
+          "role": "mixed_air_relative_humidity",
           "use": "signal",
           "required": false,
           "axis": "percent"
         },
         {
-          "role": "sa_h",
+          "role": "discharge_air_relative_humidity",
           "use": "signal",
           "required": false,
           "axis": "percent"
         },
         {
-          "role": "duct_static",
+          "role": "discharge_air_static_pressure",
           "use": "signal",
           "required": false,
           "axis": "pressure"
@@ -1482,19 +1482,19 @@
       ],
       "series": [
         {
-          "role": "damper_pct",
+          "role": "damper_position",
           "use": "primary",
           "required": false,
           "axis": "percent"
         },
         {
-          "role": "damper_cmd",
+          "role": "damper_position_command",
           "use": "primary",
           "required": false,
           "axis": "percent"
         },
         {
-          "role": "reheat_valve_pct",
+          "role": "terminal_unit_heating_valve_position_command",
           "use": "primary",
           "required": false,
           "axis": "percent"
@@ -1517,13 +1517,13 @@
       ],
       "series": [
         {
-          "role": "vav_discharge_t",
+          "role": "terminal_unit_discharge_air_temperature",
           "use": "primary",
           "required": true,
           "axis": "temp"
         },
         {
-          "role": "reheat_valve_pct",
+          "role": "terminal_unit_heating_valve_position_command",
           "use": "gate",
           "required": false,
           "axis": "percent"
@@ -1545,13 +1545,13 @@
       ],
       "series": [
         {
-          "role": "fan_status",
+          "role": "supply_fan_operating_status",
           "use": "primary",
           "required": false,
           "axis": "bool"
         },
         {
-          "role": "fan_cmd",
+          "role": "supply_fan_command",
           "use": "primary",
           "required": false,
           "axis": "percent"

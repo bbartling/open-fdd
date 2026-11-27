@@ -19,8 +19,8 @@
 //   next_point_offset | null, points: {uuid: {dis, unit, kind, cls, tags, equip, site, weather, role}},
 //   equips: [{site, id, dis, tags}], source, bucket,
 //   window_sec, from, to, complete, next_from | null, series: {uuid: [[epoch_ms, value], ...]}, samples,
-//   run_proof: [{site, equip, uuid | null, source, tier, via, unit}], run_proof_series: {uuid: [[epoch_ms, value], ...]}}.
-// run_proof (#1635) is the run proof the FDD hook resolves for each returned equipment (own status, own command, or
+//   operating_status: [{site, equip, uuid | null, source, tier, via, unit}], run_proof_series: {uuid: [[epoch_ms, value], ...]}}.
+// operating_status (#1635) is the run proof the FDD hook resolves for each returned equipment (own status, own command, or
 // the feeding equipment's; static/run-proof.js); uuid null = none bound, so client rules gated on it are SKIPPED
 // no_run_proof like the hook and SQL. Proof points that are not on this page come back in run_proof_series, cut on the
 // same timestamp as series.
@@ -279,13 +279,13 @@ function runProofShared() {
  */
 function runProofOf(model, equips) {
   const { resolveRunProof, idOf, catalog } = runProofShared();
-  const own = catalog.run_proof.own;
+  const own = catalog.operating_status.own;
   const pinned = (e, role) => model.points.find((p) => p.uuid && p.equipRef === e.id && (p.siteRef || '') === e.site
     && (((p.rec || {}).attrs || {}).ofddRole) === role);
   return equips.map((e) => {
-    // 1. a point the model binds outright as run_proof (NF attr ofddRole, the client's explicit binding) is the proof
-    const explicit = pinned(e, 'run_proof');
-    if (explicit) return { site: e.site, equip: e.id, uuid: explicit.uuid, source: 'run_proof', tier: 'own', via: 'self', unit: explicit.units || '' };
+    // 1. a point the model binds outright as operating_status (NF attr ofddRole, the client's explicit binding) is the proof
+    const explicit = pinned(e, 'operating_status');
+    if (explicit) return { site: e.site, equip: e.id, uuid: explicit.uuid, source: 'operating_status', tier: 'own', via: 'self', unit: explicit.units || '' };
     // 2. the FDD hook's resolution (own status, own command, then the feeding equipment's), by class / markers
     const rec = model.equips.find((r) => idOf(r) === e.id && (((r.attrs || {}).siteRef) || '') === e.site);
     const proof = rec ? resolveRunProof(rec, model, catalog) : { found: false };
@@ -373,7 +373,7 @@ async function handle({ sdk, args = {}, config: rawConfig = {}, now = () => Date
         uuid_var: uuidVar, points_total: uuids.length, point_offset: a.pointOffset, point_limit: a.pointLimit,
         next_point_offset: a.pointOffset + a.pointLimit < uuids.length ? a.pointOffset + a.pointLimit : null,
         points: Object.fromEntries(page.map((u) => [u, meta(byUuid.get(u))])),
-        equips, run_proof: runProof,
+        equips, operating_status: runProof,
         source, bucket: a.bucket, window_sec: a.windowSec, from: a.from, to: a.to,
       };
       const fixed = bytes(result) + 300 + page.reduce((n,u)=>n+bytes(u)+4,0);

@@ -44,7 +44,7 @@ const FINE_MAX_SAMPLES = 9000;          // per series per request (NF caps at ~1
 const MAX_DAYS = 366;
 const SCRIPTS = ['units.js', 'model.js', 'fdd.js', 'schedule.js', 'occupancy.js', 'charts.js', 'rcx.js', 'rcx-overview.js', 'rcx-presets.js', 'fdd-plots.js', 'energy.js'];
 const READ_POSTS = new Set(['/api/v1/point/query', '/api/v1/auth/token']);
-const COOLING_ROLES = ['compressor_status', 'chiller_status', 'chiller_cmd'];
+const COOLING_ROLES = ['compressor_operating_status', 'chiller_operating_status', 'chiller_command'];
 
 /** A tool failure that is the caller's to fix (bad args, ambiguous equip): returned as { ok: false, error, ... }. */
 class ToolError extends Error {
@@ -214,7 +214,7 @@ async function analyze_ahu_weekly_runtime(sb, args) {
     const seen = new Set(withStatus.map((e) => e.rec.uuid || e.id));
     // an equip with a fan status is counted by it; the command only counts equips that lack one (no equip twice)
     const withCmd = g('rcxBind')(cmd, list, model, g.catalog).filter((e) => !seen.has(e.rec.uuid || e.id));
-    for (const [view, bound, role] of [[status, withStatus, 'fan_status'], [cmd, withCmd, 'fan_cmd']]) {
+    for (const [view, bound, role] of [[status, withStatus, 'supply_fan_operating_status'], [cmd, withCmd, 'supply_fan_command']]) {
       if (!bound.length) continue;
       const { perEq } = await D.weeklyData(ctxFor(g, view, bound, hours, model), bound, role);
       for (const p of perEq) {
@@ -286,7 +286,7 @@ async function analyze_economizer(sb, args) {
     for (const eq of bound) {
       const { summary: s } = await D.econGrid(ctx, eq, true);      // fine grid; the SQL metrics (#1649)
       rows.push({ ...identity(g, eq.rec), n: s.n, n_identifiable: s.nIdent, median_residual_k: round(s.medianResid), mae_k: round(s.maeResid),
-        has_damper: !!ctx.first(eq, 'oa_damper_pct'), min_delta_k: round(M.ECON_DT_MIN_C, 4) });
+        has_damper: !!ctx.first(eq, 'outdoor_air_intake_damper_position_command'), min_delta_k: round(M.ECON_DT_MIN_C, 4) });
     }
   }
   rows.sort((a, b) => a.siteRef.localeCompare(b.siteRef) || a.equipRef.localeCompare(b.equipRef) || String(a.equipUuid).localeCompare(String(b.equipUuid)));

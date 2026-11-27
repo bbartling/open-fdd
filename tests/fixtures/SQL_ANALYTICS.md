@@ -23,8 +23,8 @@ names are preserved API names; their values are SI, not Fahrenheit.
 | --- | --- |
 | runtime-dst-week-gap-percent-command | A 167-hour local DST week, supplied week boundaries and occupied intervals, status priority, a >1-hour unknown gap, percent pump command |
 | cooling-individual-percent-and-heat-pump-mode | Individual devices only, percent compressor command, OR'ed RTU stages, heat-pump compressor gated by cooling mode |
-| economizer-percent-damper-mat-holes | Percent damper feedback and missing MAT samples |
-| economizer-missing-mat | Missing role produces an explicit skipped reason |
+| economizer-percent-damper-mixed_air_temperature-holes | Percent damper feedback and missing MAT samples |
+| economizer-missing-mixed_air_temperature | Missing role produces an explicit skipped reason |
 | web-weather-outage | Bounded backward as-of join leaves outage samples unpaired |
 | web-weather-empty | Zero assessed pairs, null statistics rather than a fabricated zero error |
 

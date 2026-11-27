@@ -34,13 +34,13 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 # Markers every point carries; left out of the spec's tags and of the sort name (model.js GENERIC).
 GENERIC_MARKERS = frozenset({"point", "his", "cur", "writable"})
 # Catalog roles that only weather points fill start with this prefix (fdd.js isWebRole).
-WEB_ROLE_PREFIX = "web_"
+WEB_ROLE_PREFIX = "weather_service_"
 # Rule-id families (rule ids are part of the contract): per-sensor sweeps and economizer rules.
 SWEEP_RULE_PATTERN = r"^SV-(RATE|RANGE|FLATLINE|SPIKE|STALE)$"
 ECON_RULE_PATTERN = r"^ECON-[1-7]$"
 _SWEEP_RULE = re.compile(SWEEP_RULE_PATTERN)
 _ECON_RULE = re.compile(ECON_RULE_PATTERN)
-ECON_EXTRA_ROLE = "oa_damper_pct"
+ECON_EXTRA_ROLE = "outdoor_air_intake_damper_position_command"
 
 NAV_SEPARATOR = " › "
 COLOR_KEYS = 12
@@ -126,18 +126,23 @@ def _equip_kinds(equip_rec: Mapping[str, Any], catalog: Mapping[str, Any]) -> li
     return [kind for kind, ms in catalog["equipment_kinds"].items() if any(has(m) for m in ms)]
 
 
-def _is_web_role(role: str) -> bool:
-    return role.startswith(WEB_ROLE_PREFIX)
+def _is_web_role(role: str, definition: Mapping[str, Any] | None = None) -> bool:
+    if definition and definition.get("binding_scope") == "weather":
+        return True
+    return role.startswith(WEB_ROLE_PREFIX) or role.startswith("web_")
 
 
 def _role_score(p: Mapping[str, Any], role: str, definition: Mapping[str, Any]) -> int:
     """How well point ``p`` fills ``role``: 2 NF class, 1 marker set, 0 not at all (fdd.js roleScore)."""
-    if _is_web_role(role) != _has(p, "weather"):
+    if _is_web_role(role, definition) != _has(p, "weather"):
+        return 0
+    tags = p.get("tags") or []
+    if any(m in tags for m in (definition.get("forbid") or [])):
         return 0
     if p.get("cls") and p["cls"] in definition["classes"]:
         return 2
     markers = definition["markers"]
-    return 1 if markers and all(m in (p.get("tags") or []) for m in markers) else 0
+    return 1 if markers and all(m in tags for m in markers) else 0
 
 
 def _point_order(scored: tuple[int, Mapping[str, Any]]) -> tuple[int, str, str]:
@@ -422,7 +427,7 @@ def build_rule_spec(model: Mapping[str, Any], rule_id: str, equip: Any, window: 
         return _finish("rule", rule_id, None, site, [equip_rec], win, [], [], set(), reason, catalog)
 
     required = list(dict.fromkeys(rule.get("required_roles") or []))
-    resolved = (catalog.get("run_proof") or {}).get("role")      # run_proof is resolved from the model, never plotted as an input
+    resolved = (catalog.get("operating_status") or {}).get("role")      # operating_status is resolved from the model, never plotted as an input
     optional = [r for r in dict.fromkeys(rule.get("optional_roles") or []) if r not in required and r != resolved]
     roles = required + optional
     pool = _equip_pool(equip_rec, model)

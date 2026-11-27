@@ -3,9 +3,9 @@
 -- avg_zone_temp.sql
 SELECT
   equipment_id,
-  AVG(zone_t) AS avg_zone_temp,
-  MIN(zone_t) AS min_zone_temp,
-  MAX(zone_t) AS max_zone_temp
+  AVG(zone_air_temperature) AS avg_zone_temp,
+  MIN(zone_air_temperature) AS min_zone_temp,
+  MAX(zone_air_temperature) AS max_zone_temp
 FROM history
-WHERE zone_t IS NOT NULL
+WHERE zone_air_temperature IS NOT NULL
 GROUP BY equipment_id;

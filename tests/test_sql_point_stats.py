@@ -37,16 +37,16 @@ def _long():
         t = T0 + i * 300_000 + int(rng.integers(-40_000, 40_000))
         hour = ((t - T0) % (24 * H)) / H
         oat = 10 + 8 * math.sin((hour - 9) / 24 * 2 * math.pi) + float(rng.normal(0, 0.4))
-        rows += [("ahu1/oat", "AHU-1", "oa_t", t, oat),
-                 ("ahu2/oat", "AHU-2", "oa_t", t + 7_000, oat + 0.6),
-                 ("ahu1/sat", "AHU-1", "sat", t, None if i % 37 == 0 else 13 + float(rng.normal(0, 0.3))),
-                 ("ahu1/fan", "AHU-1", "fan_cmd", t, 1.0 if 6 <= hour < 18 else 0.0)]
+        rows += [("ahu1/oat", "AHU-1", "outdoor_air_intake_temperature", t, oat),
+                 ("ahu2/oat", "AHU-2", "outdoor_air_intake_temperature", t + 7_000, oat + 0.6),
+                 ("ahu1/discharge_air_temperature", "AHU-1", "discharge_air_temperature", t, None if i % 37 == 0 else 13 + float(rng.normal(0, 0.3))),
+                 ("ahu1/fan", "AHU-1", "supply_fan_command", t, 1.0 if 6 <= hour < 18 else 0.0)]
         if i % 12 == 0:
-            rows += [("ahu1/satsp", "AHU-1", "sat_sp", t, 12.8 + (i % 48) / 48),
-                     ("vav1/zsp", "VAV-1", "zone_air_temp_sp", t, 22.0 if 6 <= hour < 18 else 18.0)]
+            rows += [("ahu1/satsp", "AHU-1", "discharge_air_temperature_setpoint", t, 12.8 + (i % 48) / 48),
+                     ("vav1/zsp", "VAV-1", "zone_air_temperature_setpoint", t, 22.0 if 6 <= hour < 18 else 18.0)]
     last = rows[-1][3]
-    rows += [("ahu1/satsp", "AHU-1", "sat_sp", last + 60_000, 13.1), ("ahu1/satsp", "AHU-1", "sat_sp", last + 60_000, 13.4),
-             ("one/x", "AHU-1", "duct_static", T0 + 5 * H, 250.0)]
+    rows += [("ahu1/satsp", "AHU-1", "discharge_air_temperature_setpoint", last + 60_000, 13.1), ("ahu1/satsp", "AHU-1", "discharge_air_temperature_setpoint", last + 60_000, 13.4),
+             ("one/x", "AHU-1", "discharge_air_static_pressure", T0 + 5 * H, 250.0)]
     return pd.DataFrame(rows, columns=list(ps.LONG_COLUMNS))
 
 
@@ -117,11 +117,11 @@ def test_semantics_pinned():
         _load(conn, "sqlite", long)
         stats = {r["point_key"]: r for r in sps.run_sensor_stats_sql(conn, "sqlite")}
         assert stats["one/x"]["n"] == 1 and stats["one/x"]["stddev_val"] is None      # one sample: no spread
-        assert stats["ahu1/sat"]["n"] == 576 - len(range(0, 576, 37))                  # NULLs are not samples
+        assert stats["ahu1/discharge_air_temperature"]["n"] == 576 - len(range(0, 576, 37))                  # NULLs are not samples
         assert {"ahu1/oat", "ahu2/oat"} <= set(stats)                                   # one role, two rows
         hours = {r["hour_utc"] for r in sps.run_diurnal_sql(conn, "sqlite") if r["point_key"] == "ahu1/fan"}
         assert hours == set(range(24))
-        assert not any(r["role"] == "duct_static" for r in sps.run_diurnal_sql(conn, "sqlite"))  # not a diurnal role
+        assert not any(r["role"] == "discharge_air_static_pressure" for r in sps.run_diurnal_sql(conn, "sqlite"))  # not a diurnal role
         sp = {r["point_key"]: r for r in sps.run_setpoints_sql(conn, "sqlite")}
         assert set(sp) == {"ahu1/satsp", "vav1/zsp"}                                    # setpoint roles only
         assert sp["ahu1/satsp"]["value"] == 13.4                                         # tie: the larger value
@@ -168,22 +168,22 @@ def _long2():
     rows = []
     for i in range(96):
         t = T0 + i * 300_000 + int(rng.integers(-30_000, 30_000))
-        rows += [("z/zt", "VAV-1", "zone_t", t, 22 + (6 if i % 2 else -6) + float(rng.normal(0, 0.2))),
-                 ("a/sat", "AHU-1", "sat", t, 13 + float(rng.normal(0, 0.3))),
-                 ("a/clg", "AHU-1", "clg_valve_pct", t, 0.40 + float(rng.normal(0, 0.02))),     # 0-1, calm
-                 ("a/cmd", "AHU-1", "htg_valve_pct", t, 0.016 if i % 2 else 0.014),             # 1.4 % / 1.6 %
-                 ("a/pct", "AHU-1", "fan_cmd", t, 1.6 if i % 2 else 1.4),                     # out of contract (percent)
-                 ("a/dmp", "AHU-1", "oa_damper_pct", t, 0.2 if i % 2 else 0.6),                # 0-1, hunting
-                 ("a/dsp", "AHU-1", "duct_static", t, 250 + float(rng.normal(0, 15))),
-                 ("a/mat", "AHU-1", "mat", t, 18.0)]                                          # constant
+        rows += [("z/zt", "VAV-1", "zone_air_temperature", t, 22 + (6 if i % 2 else -6) + float(rng.normal(0, 0.2))),
+                 ("a/discharge_air_temperature", "AHU-1", "discharge_air_temperature", t, 13 + float(rng.normal(0, 0.3))),
+                 ("a/clg", "AHU-1", "cooling_valve_position_command", t, 0.40 + float(rng.normal(0, 0.02))),     # 0-1, calm
+                 ("a/cmd", "AHU-1", "heating_valve_position_command", t, 0.016 if i % 2 else 0.014),             # 1.4 % / 1.6 %
+                 ("a/pct", "AHU-1", "supply_fan_command", t, 1.6 if i % 2 else 1.4),                     # out of contract (percent)
+                 ("a/dmp", "AHU-1", "outdoor_air_intake_damper_position_command", t, 0.2 if i % 2 else 0.6),                # 0-1, hunting
+                 ("a/dsp", "AHU-1", "discharge_air_static_pressure", t, 250 + float(rng.normal(0, 15))),
+                 ("a/mixed_air_temperature", "AHU-1", "mixed_air_temperature", t, 18.0)]                                          # constant
         if i < 10:
-            rows.append(("a/rat", "AHU-1", "rat", t, 21 + i * 0.1))                           # short
+            rows.append(("a/return_air_temperature", "AHU-1", "return_air_temperature", t, 21 + i * 0.1))                           # short
     return pd.DataFrame(rows, columns=list(ps.LONG_COLUMNS))
 
 
 def _load2(conn, engine, long):
     _load(conn, engine, long)
-    rows = [("local", "a/oat", "AHU-1", "oa_t")]                                               # bound, no samples
+    rows = [("local", "a/oat", "AHU-1", "outdoor_air_intake_temperature")]                                               # bound, no samples
     if engine == "postgres":
         with conn.cursor() as cur:
             cur.executemany("INSERT INTO fdd.point VALUES (%s, %s, %s, %s)", rows)
@@ -193,12 +193,12 @@ def _load2(conn, engine, long):
 
 def _points2(long):
     pts = long.drop_duplicates("point_key").loc[:, ["point_key", "equipment_id", "role"]]
-    return pd.concat([pts, pd.DataFrame([("a/oat", "AHU-1", "oa_t")], columns=pts.columns)], ignore_index=True)
+    return pd.concat([pts, pd.DataFrame([("a/oat", "AHU-1", "outdoor_air_intake_temperature")], columns=pts.columns)], ignore_index=True)
 
 
 def _check_slice2(conn, engine, long, window=None):
     kw = dict(start_ms=window[0], end_ms=window[1]) if window else {}
-    roles = ["zone_t", "sat", "duct_static"]
+    roles = ["zone_air_temperature", "discharge_air_temperature", "discharge_air_static_pressure"]
     _same(sps.run_role_timeseries_sql(conn, engine, roles, limit=77, **kw),
           ps.role_timeseries(long, roles, limit=77, **kw), ["point_key", "role", "t", "value"], f"{engine} timeseries")
     _same(sps.run_anomaly_coverage_sql(conn, engine, **kw), ps.anomaly_coverage(_points2(long), long, **kw),
@@ -226,10 +226,10 @@ def test_slice2_semantics_pinned():
         _load2(conn, "sqlite", long)
         cov = {r["point_key"]: r for r in sps.run_anomaly_coverage_sql(conn, "sqlite")}
         assert cov["a/oat"]["n"] == 0 and cov["a/oat"]["is_short"] == 1 and cov["a/oat"]["var_val"] is None
-        assert cov["a/mat"]["is_constant"] == 1 and cov["a/rat"]["is_short"] == 1 and cov["a/sat"]["is_short"] == 0
+        assert cov["a/mixed_air_temperature"]["is_constant"] == 1 and cov["a/return_air_temperature"]["is_short"] == 1 and cov["a/discharge_air_temperature"]["is_short"] == 0
         assert "a/clg" not in cov                                                     # not an anomaly role
         pid = {r["point_key"]: r for r in sps.run_pid_hunting_sql(conn, "sqlite")}
-        assert pid["z/zt"]["is_hunting"] == 1 and pid["a/sat"]["is_hunting"] == 0
+        assert pid["z/zt"]["is_hunting"] == 1 and pid["a/discharge_air_temperature"]["is_hunting"] == 0
         assert pid["a/dmp"]["is_hunting"] == 1                                        # 0-1 command: 0.2 / 0.6 swing
         assert pid["a/clg"]["is_hunting"] == 0 and abs(pid["a/clg"]["avg_val"] - 0.40) < 0.01
         # Codex #1760 review: a command near 1.5 % must not be split across two scales and read as hunting.
@@ -245,14 +245,14 @@ def test_slice2_semantics_pinned():
         pct = pid["a/pct"]
         assert pct["avg_val"] == pytest.approx(1.5, abs=1e-12)
         assert pct["var_val"] == pytest.approx(96 * 0.1 ** 2 / 95, rel=1e-9)
-        assert pid["a/dsp"]["is_hunting"] == 0 and "a/rat" not in pid                 # rat is not a PID role
+        assert pid["a/dsp"]["is_hunting"] == 0 and "a/return_air_temperature" not in pid                 # return_air_temperature is not a PID role
         assert list(pid)[0] == "a/dsp"                                                # largest spread first
-        ts = sps.run_role_timeseries_sql(conn, "sqlite", ["zone_t"], limit=5)
+        ts = sps.run_role_timeseries_sql(conn, "sqlite", ["zone_air_temperature"], limit=5)
         assert len(ts) == 5 and ts[0]["t"] >= ts[-1]["t"]                             # newest first, capped
     finally:
         conn.close()
     with pytest.raises(ValueError):
-        sps.render_role_timeseries_sql("sqlite", ["sat"], limit=0)
+        sps.render_role_timeseries_sql("sqlite", ["discharge_air_temperature"], limit=0)
     with pytest.raises(ValueError):
         sps.render_anomaly_coverage_sql("sqlite", window=1)
 
@@ -283,16 +283,16 @@ def _long3():
     """Six days hourly: a cumulative kWh register, a kW load stepping up on day 4, gas, an OAT with a cold snap on
     day 4, a sparse day (< 6 samples) on the gas meter, and a non-meter role."""
     rng = np.random.default_rng(17573)
-    rows, kwh = [], 1000.0
+    rows, electric_energy = [], 1000.0
     for i in range(6 * 24):
         t = T0 + i * H + int(rng.integers(-60_000, 60_000))
         day = i // 24
         kw = (40 if day < 3 else 70) + float(rng.normal(0, 3))
-        kwh += kw
-        rows += [("m/kwh", "SITE", "electric_kwh", t, kwh), ("m/kw", "SITE", "electric_kw", t, kw),
-                 ("w/oat", "SITE", "oa_t", t, (12 if day < 3 else -4) + float(rng.normal(0, 1.0))),
-                 ("a/sat", "AHU-1", "sat", t, 13 + float(rng.normal(0, 0.2))),
-                 ("a/dsp", "AHU-1", "duct_static", t, 250.0)]
+        electric_energy += kw
+        rows += [("m/electric_energy", "SITE", "electric_energy", t, electric_energy), ("m/kw", "SITE", "electric_power", t, kw),
+                 ("w/oat", "SITE", "outdoor_air_intake_temperature", t, (12 if day < 3 else -4) + float(rng.normal(0, 1.0))),
+                 ("a/discharge_air_temperature", "AHU-1", "discharge_air_temperature", t, 13 + float(rng.normal(0, 0.2))),
+                 ("a/dsp", "AHU-1", "discharge_air_static_pressure", t, 250.0)]
         if day != 2 or i % 24 < 4:
             rows.append(("m/gas", "SITE", "gas_therm", t, 3 + day * 0.1 + float(rng.normal(0, 0.05))))
     return pd.DataFrame(rows, columns=list(ps.LONG_COLUMNS))
@@ -327,14 +327,14 @@ def test_slice3_semantics_pinned():
     try:
         _load(conn, "sqlite", long)
         meter = sps.run_meter_daily_sql(conn, "sqlite")
-        assert {r["role"] for r in meter} == {"electric_kwh", "electric_kw", "gas_therm"}   # sat / duct_static out
+        assert {r["role"] for r in meter} == {"electric_energy", "electric_power", "gas_therm"}   # discharge_air_temperature / discharge_air_static_pressure out
         assert meter[0]["day_ms"] == T0 + 5 * 24 * H                                         # newest day first
-        day0 = next(r for r in meter if r["point_key"] == "m/kwh" and r["day_ms"] == T0)
+        day0 = next(r for r in meter if r["point_key"] == "m/electric_energy" and r["day_ms"] == T0)
         assert abs(day0["delta_val"] - 40 * (day0["n"] - 1)) < 60                              # register: (n - 1) x ~40 kWh
         mv = sps.run_mv_change_point_sql(conn, "sqlite")
         hits = {(r["point_key"], r["day_ms"]) for r in mv}
         assert ("m/kw", T0 + 3 * 24 * H) in hits and ("w/oat", T0 + 3 * 24 * H) in hits       # the day-4 steps
-        assert not any(k == "a/sat" for k, _ in hits)                                         # steady: no change
+        assert not any(k == "a/discharge_air_temperature" for k, _ in hits)                                         # steady: no change
         assert not any(k == "m/gas" and d == T0 + 2 * 24 * H for k, d in hits)               # sparse day not counted
     finally:
         conn.close()
@@ -369,9 +369,9 @@ def _long4():
     rows = []
     for i in range(3 * 288):
         t = T0 + i * 300_000 + int(rng.integers(-30_000, 30_000))
-        rows += [("v1/zt", "VAV-1", "zone_t", t, 22 + float(rng.normal(0, 0.4))),             # comfortable
-                 ("v2/zt", "VAV-2", "zone_t", t, 25.5 + float(rng.normal(0, 0.8))),           # hot
-                 ("v3/zt", "VAV-3", "zone_t", t, 21.0), ("a/sat", "AHU-1", "sat", t, 13.0)]
+        rows += [("v1/zt", "VAV-1", "zone_air_temperature", t, 22 + float(rng.normal(0, 0.4))),             # comfortable
+                 ("v2/zt", "VAV-2", "zone_air_temperature", t, 25.5 + float(rng.normal(0, 0.8))),           # hot
+                 ("v3/zt", "VAV-3", "zone_air_temperature", t, 21.0), ("a/discharge_air_temperature", "AHU-1", "discharge_air_temperature", t, 13.0)]
     return pd.DataFrame(rows, columns=list(ps.LONG_COLUMNS))
 
 
@@ -390,7 +390,7 @@ def test_slice4_matches_pandas(engine):
                   ["point_key", "n_occ", "n_in_band", "pct_in_band"], f"{engine} comfort")
         rows = sps.run_zone_comfort_sql(conn, engine, OCC, lo_c=24.0, hi_c=21.0)              # band order does not matter
         assert rows[0]["point_key"] == "v2/zt" and rows[-1]["pct_in_band"] == 100.0           # worst first; 21.0 on the edge
-        assert {r["point_key"] for r in rows} == {"v1/zt", "v2/zt", "v3/zt"}                  # zone_t only
+        assert {r["point_key"] for r in rows} == {"v1/zt", "v2/zt", "v3/zt"}                  # zone_air_temperature only
     finally:
         conn.close()
     with pytest.raises(ValueError):

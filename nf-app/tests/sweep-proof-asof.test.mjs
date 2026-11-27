@@ -13,17 +13,17 @@ const MIN = 60_000;
 const GATED = ["SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-RATE"];
 const near = (a, b) => a != null && Math.abs(a - b) <= 1e-6;
 
-/** One day; proof rows every 5 min at :00/:05 (proof(minute) -> run_proof, undefined = no row); SAT out of range and
+/** One day; proof rows every 5 min at :00/:05 (proof(minute) -> operating_status, undefined = no row); SAT out of range and
  *  stuck, sampled at `offset` seconds past each 5-minute grid point. */
 function input({ proof, offset = 60, days = 1, value = () => 90 }) {
   const history = [], sensorHistory = [];
   for (let m = 0; m < days * 1440; m += 5) {
     const p = proof(m);
-    if (p !== undefined) history.push({ equipment_id: "eq-1", ts: START + m * MIN, run_proof: p });
-    sensorHistory.push({ equipment_id: "eq-1", series_id: "sat-1", sensor_role: "sat", unit: "°C",
+    if (p !== undefined) history.push({ equipment_id: "eq-1", ts: START + m * MIN, operating_status: p });
+    sensorHistory.push({ equipment_id: "eq-1", series_id: "discharge_air_temperature-1", sensor_role: "discharge_air_temperature", unit: "°C",
       ts: START + m * MIN + offset * 1000, value: value(m) });
   }
-  return { historyColumns: [{ name: "run_proof", type: "double" }], history, weather: [], sensorHistory };
+  return { historyColumns: [{ name: "operating_status", type: "double" }], history, weather: [], sensorHistory };
 }
 
 async function run(inp, rules = ["SV-RANGE"]) {
@@ -34,8 +34,8 @@ async function run(inp, rules = ["SV-RANGE"]) {
       await eng.load(inp);
       out[kind] = {};
       for (const r of rules) {
-        const row = (await eng.query(r)).find((x) => x.series_id === "sat-1");
-        const tl = (await eng.timeline(r)).filter((x) => x.series_id === "sat-1" && x.confirmed === 1);
+        const row = (await eng.query(r)).find((x) => x.series_id === "discharge_air_temperature-1");
+        const tl = (await eng.timeline(r)).filter((x) => x.series_id === "discharge_air_temperature-1" && x.confirmed === 1);
         out[kind][r] = { ...row, confirmed_rows: tl.length, timeline_hours: tl.reduce((s, x) => s + x.held_seconds, 0) / 3600 };
       }
     } finally {

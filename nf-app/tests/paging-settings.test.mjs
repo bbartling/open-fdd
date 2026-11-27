@@ -137,7 +137,7 @@ const STEP = 300;
 const NOW = Date.parse("2026-11-09T15:02:00Z");
 const PACK = {
   poll_seconds: STEP,
-  contract: { history: [{ name: "equipment_id", type: "text" }, { name: "timestamp_utc", type: "timestamp" }, { name: "fan_cmd", type: "double" }] },
+  contract: { history: [{ name: "equipment_id", type: "text" }, { name: "timestamp_utc", type: "timestamp" }, { name: "supply_fan_command", type: "double" }] },
   rules: { "FAN-RUNTIME-HOURS": { sql: "-", output_columns: ["equipment_id", "fan_runtime_hours", "total_hours"] } },
 };
 const fanPt = { uuid: "u-FANC", name: "FAN-C", layer: "default", pointType: "POINT",

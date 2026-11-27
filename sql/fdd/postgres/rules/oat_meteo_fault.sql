@@ -1,21 +1,21 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- oat_meteo_fault.sql — BAS OAT vs meteo reference (|Δ| > threshold) + confirm
--- Storage is SI (metric-c-v2): oa_t and the web reference are °C; OAT_ERR is a temperature difference in K.
+-- Storage is SI (metric-c-v2): outdoor_air_intake_temperature and the web reference are °C; OAT_ERR is a temperature difference in K.
 -- Web weather is joined as-of: carry the last web sample forward up to
 -- WEB_ASOF_BOUND_SECONDS (web cadence + margin from registry). Beyond that bound
 -- the local sample is not compared (not-assessed seconds, never a no-fault).
--- Prefer equipment web_oa_t (matches the reference oracle); fall back to weather rows when absent.
+-- Prefer equipment weather_service_air_temperature (matches the reference oracle); fall back to weather rows when absent.
 -- Targeting is registry equipment_kinds (ahu) plus the package stamp applied
 -- after this query. This file does not filter equipment_id by prefix or LIKE.
 WITH web_points AS (
-  SELECT timestamp_utc, web_oa_t AS ref_val
+  SELECT timestamp_utc, weather_service_air_temperature AS ref_val
   FROM weather
-  WHERE web_oa_t IS NOT NULL
+  WHERE weather_service_air_temperature IS NOT NULL
   UNION ALL
-  SELECT timestamp_utc, web_oa_t AS ref_val
+  SELECT timestamp_utc, weather_service_air_temperature AS ref_val
   FROM history
-  WHERE web_oa_t IS NOT NULL
+  WHERE weather_service_air_temperature IS NOT NULL
 ),
 web_dedup AS (
   SELECT timestamp_utc, MAX(ref_val) AS ref_val
@@ -33,11 +33,11 @@ joined AS (
   SELECT
     h.equipment_id,
     h.timestamp_utc,
-    h.oa_t,
+    h.outdoor_air_intake_temperature,
     CAST(wi.ref_ts AS timestamptz) AS ref_ts,
     CAST(wi.ref_val AS double precision) AS ref_oa_t,
     CASE
-      WHEN h.oa_t IS NULL THEN false
+      WHEN h.outdoor_air_intake_temperature IS NULL THEN false
       WHEN wi.ref_val IS NULL THEN false
       WHEN EXTRACT(EPOCH FROM (h.timestamp_utc - wi.ref_ts)) > {{WEB_ASOF_BOUND_SECONDS}}
       THEN false
@@ -55,7 +55,7 @@ base AS (
     assessable,
     CAST(CASE
       WHEN NOT assessable THEN NULL
-      WHEN ABS(oa_t - ref_oa_t) > {{OAT_ERR}} THEN 1
+      WHEN ABS(outdoor_air_intake_temperature - ref_oa_t) > {{OAT_ERR}} THEN 1
       ELSE 0 END AS INT) AS raw_fault
   FROM joined
 ),

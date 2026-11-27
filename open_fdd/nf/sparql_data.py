@@ -68,22 +68,22 @@ def _merge(out: dict, ans: Mapping[str, Any]) -> None:
 
 
 def _merge_run_proof(out: dict, ans: Mapping[str, Any]) -> None:
-    """Carry the hook's resolved run proof (#1635): ``run_proof`` entries per equipment and ``run_proof_series``.
+    """Carry the hook's resolved run proof (#1635): ``operating_status`` entries per equipment and ``run_proof_series``.
 
-    ``run_proof`` is a list of ``{"site", "equip", "uuid" (null = the explicit no-binding marker), "source", "unit"}``.
+    ``operating_status`` is a list of ``{"site", "equip", "uuid" (null = the explicit no-binding marker), "source", "unit"}``.
     Its presence on any page means the hook resolved the proof for every equipment it returned. The same equipment
     must resolve to the same point on every page; a different answer is a :class:`PageError`.
     """
-    entries = ans.get("run_proof")
+    entries = ans.get("operating_status")
     if entries is None:
         return
     if not isinstance(entries, list):
-        raise PageError("sparql-data page: run_proof is not a list")
-    known = out.setdefault("run_proof", [])
+        raise PageError("sparql-data page: operating_status is not a list")
+    known = out.setdefault("operating_status", [])
     by = {(e["site"], e["equip"]): e for e in known}
     for e in entries:
         if not isinstance(e, Mapping) or "site" not in e or "equip" not in e or "uuid" not in e:
-            raise PageError("sparql-data page: a run_proof entry needs site, equip and uuid (null = none bound)")
+            raise PageError("sparql-data page: a operating_status entry needs site, equip and uuid (null = none bound)")
         key = (e["site"], e["equip"])
         if key in by:
             if by[key].get("uuid") != e.get("uuid"):
@@ -548,19 +548,19 @@ def frames(answer: Mapping[str, Any], *, weather: str = "columns", roles: Iterab
 def stamp_run_proof(frames_: Mapping[tuple[str, str], Any], answer: Mapping[str, Any]) -> None:
     """Give client frames the run proof the hook resolved (#1635), so client rules gate like the hook and SQL.
 
-    When the answer carries ``run_proof`` every frame is stamped ``run_proof_resolved``: an equipment whose entry has
+    When the answer carries ``operating_status`` every frame is stamped ``run_proof_resolved``: an equipment whose entry has
     a point gets that point's samples as the ``run-proof`` column (exact timestamp join on the frame's grid, a missing
     sample is not proof; a ``%`` unit is scaled to 0-1); an equipment whose entry is the no-binding marker (``uuid``
     null) or is not listed gets no column, so ``derive_run_proof`` returns no proof and gated rules are SKIPPED
     ``no_run_proof`` instead of falling back to the unit's own status or command columns. ``attrs["run_proof_source"]``
-    records the hook's source (or ``None``). An answer without ``run_proof`` (an older hook) is left unchanged and
+    records the hook's source (or ``None``). An answer without ``operating_status`` (an older hook) is left unchanged and
     marked ``attrs["run_proof_source"] = "client_fallback"``.
     """
     import pandas as pd
 
     from open_fdd.run_proof import spec
 
-    entries = answer.get("run_proof")
+    entries = answer.get("operating_status")
     if entries is None:
         for df in frames_.values():
             df.attrs.setdefault("run_proof_source", "client_fallback")

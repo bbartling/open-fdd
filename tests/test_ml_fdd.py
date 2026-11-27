@@ -37,16 +37,16 @@ def _synthetic_ahu(n: int = 2000, seed: int = 0, sat_bias: float = 0.0, damper_s
     rng = np.random.default_rng(seed)
     idx = pd.date_range("2026-01-05", periods=n, freq="5min", tz="UTC")
     oat = 10 + 12 * np.sin(np.arange(n) / 288 * 2 * np.pi) + rng.normal(0, 0.3, n)
-    rat = 22 + rng.normal(0, 0.2, n)
+    return_air_temperature = 22 + rng.normal(0, 0.2, n)
     damper = np.clip(0.1 + 0.8 * (oat < 15) * (oat > 2), 0.1, 1.0)
     actual = damper if damper_stuck is None else np.full(n, damper_stuck)
-    mat = actual * oat + (1 - actual) * rat + rng.normal(0, 0.1, n)
-    valve = np.clip((mat - 13) / 10, 0, 1)
-    sat = mat - 10 * valve + rng.normal(0, 0.1, n) + sat_bias
+    mixed_air_temperature = actual * oat + (1 - actual) * return_air_temperature + rng.normal(0, 0.1, n)
+    valve = np.clip((mixed_air_temperature - 13) / 10, 0, 1)
+    discharge_air_temperature = mixed_air_temperature - 10 * valve + rng.normal(0, 0.1, n) + sat_bias
     return pd.DataFrame({
-        "discharge-air-temp": sat, "discharge-air-temp-sp": 13.0, "mixed-air-temp": mat, "return-air-temp": rat,
-        "outside-air-temp": oat, "outside-air-damper": damper, "cooling-valve": valve, "fan-cmd": 0.7 + 0.1 * valve,
-        "fan-status": 1.0, "occupied": 1.0,
+        "discharge_air_temperature": discharge_air_temperature, "discharge_air_temperature_setpoint": 13.0, "mixed_air_temperature": mixed_air_temperature, "return_air_temperature": return_air_temperature,
+        "outdoor_air_intake_temperature": oat, "outdoor_air_intake_damper_position_command": damper, "cooling_valve_position_command": valve, "supply_fan_command": 0.7 + 0.1 * valve,
+        "supply_fan_operating_status": 1.0, "occupancy_status": 1.0,
     }, index=idx)
 
 
@@ -59,11 +59,12 @@ def test_fixture_maps_to_si_roles_and_fixes_static_units():
     assert str(normal.index.tz) == "UTC"
     for frame in (normal, fault):
         assert set(r for r, _ in lbnl.SDAHU_ROLE_MAP.values()) <= set(frame.columns)
-        assert frame["duct-static-pressure-sp"].round(0).unique().tolist() == [400.0]  # both units -> Pa
+        assert frame["discharge_air_static_pressure_setpoint"].round(0).unique().tolist() == [400.0]  # both units -> Pa
         on = active_mask(frame)
-        assert 200 < frame.loc[on, "duct-static-pressure"].median() < 500
-        assert 10 < frame.loc[on, "discharge-air-temp"].median() < 16  # 55 °F setpoint -> about 12.9 °C
-    assert fault["cooling-valve"].between(0, 1).all()
+        assert 200 < frame.loc[on, "discharge_air_static_pressure"].median() < 500
+        assert 10 < frame.loc[on, "discharge_air_temperature"].median() < 16  # 55 °F setpoint -> about 12.9 °C
+        assert fault["cooling_valve_position_command"].between(0, 100).all()
+        assert "supply_fan_speed_command" in frame.columns
 
 
 def test_static_to_pa_detects_unit():
@@ -165,8 +166,8 @@ def test_split_weeks_alternates():
 # ---- detectors --------------------------------------------------------------------------------------------------
 
 def test_canonical_roles_and_modes():
-    frame = canonical_roles(pd.DataFrame({"sat": [1.0], "clg_valve_pct": [0.5], "oa_damper_pct": [0.9]}))
-    assert {"discharge-air-temp", "cooling-valve", "outside-air-damper"} <= set(frame.columns)
+    frame = canonical_roles(pd.DataFrame({"discharge_air_temperature": [1.0], "cooling_valve_position_command": [0.5], "outdoor_air_intake_damper_position_command": [0.9]}))
+    assert {"discharge_air_temperature", "cooling_valve_position_command", "outdoor_air_intake_damper_position_command"} <= set(frame.columns)
     assert operating_mode(frame).tolist() == ["econ_mech"]
 
 
@@ -180,7 +181,7 @@ def test_pca_spe_flags_a_biased_sensor_and_explains_it():
     assert flags.mean() > max(0.1, 5 * healthy)
     contrib = det.contributions(faulty)
     assert np.allclose(contrib.dropna().sum(axis=1), 1.0)
-    assert contrib[flags].mean().idxmax() == "discharge-air-temp"
+    assert contrib[flags].mean().idxmax() == "discharge_air_temperature"
 
 
 def test_grey_box_residuals_catch_a_stuck_damper():
@@ -210,7 +211,7 @@ def test_grey_box_refit_drops_the_earlier_baseline():
 
 def test_rolling_adapter_uses_existing_detectors():
     frame = _synthetic_ahu(seed=6)
-    frame.iloc[500, frame.columns.get_loc("return-air-temp")] += 5.0
+    frame.iloc[500, frame.columns.get_loc("return_air_temperature")] += 5.0
     flags = RollingAnomaly(kind="zscore").flags(frame)
     assert bool(flags.iloc[500])
 
@@ -270,7 +271,7 @@ def test_mode_gated_assessment_reasons():
     pytest.importorskip("sklearn")
     det = make_detector("ocsvm").fit(_synthetic_ahu(seed=24))
     frame = _synthetic_ahu(n=300, seed=25)
-    frame.iloc[:10, frame.columns.get_loc("fan-status")] = 0.0
+    frame.iloc[:10, frame.columns.get_loc("supply_fan_operating_status")] = 0.0
     frame.iloc[10:20, frame.columns.get_loc(det.roles[0])] = np.nan
     assessment = det.assessment(frame)
     assert (assessment.iloc[:10] == "inactive").all()
@@ -414,13 +415,13 @@ def test_cli_detect_rejects_a_folder_missing_a_trained_role(tmp_path, capsys):
     train = _device_folder(tmp_path)
     target = tmp_path / "AHU_2"
     target.mkdir()
-    wide = pd.read_csv(train / "history_wide.csv").drop(columns=["mixed_air_temp"])
+    wide = pd.read_csv(train / "history_wide.csv").drop(columns=["mixed_air_temperature"])
     wide.to_csv(target / "history_wide.csv", index=False)
     cmap = json.loads((train / "column_map.json").read_text(encoding="utf-8"))
-    cmap["points"].pop("mixed-air-temp")
+    cmap["points"].pop("mixed_air_temperature")
     (target / "column_map.json").write_text(json.dumps(cmap), encoding="utf-8")
     assert main(["detect", str(target), "--method", "pca", "--train", str(train), "--out", str(tmp_path / "o")]) == 2
-    assert "mixed-air-temp" in capsys.readouterr().err
+    assert "mixed_air_temperature" in capsys.readouterr().err
 
 
 def test_cli_detect_untrained_method_accepts_a_partial_folder(tmp_path):
@@ -429,9 +430,9 @@ def test_cli_detect_untrained_method_accepts_a_partial_folder(tmp_path):
     full = _device_folder(tmp_path)
     part = tmp_path / "AHU_3"
     part.mkdir()
-    pd.read_csv(full / "history_wide.csv").drop(columns=["mixed_air_temp"]).to_csv(part / "history_wide.csv", index=False)
+    pd.read_csv(full / "history_wide.csv").drop(columns=["mixed_air_temperature"]).to_csv(part / "history_wide.csv", index=False)
     cmap = json.loads((full / "column_map.json").read_text(encoding="utf-8"))
-    cmap["points"].pop("mixed-air-temp")
+    cmap["points"].pop("mixed_air_temperature")
     (part / "column_map.json").write_text(json.dumps(cmap), encoding="utf-8")
     assert main(["detect", str(part), "--method", "zscore", "--out", str(tmp_path / "z")]) == 0
 
@@ -494,7 +495,7 @@ def test_cli_detect_rejects_empty_or_unusable_training_selections(tmp_path, caps
         code, _, _ = _detect(tmp_path, str(folder), "--method", "pca", "--train-until", cut)
         assert code == 2 and msg in capsys.readouterr().err, cut
     off = _synthetic_ahu(n=600, seed=30)
-    off.iloc[:300, off.columns.get_loc("fan-status")] = 0.0
+    off.iloc[:300, off.columns.get_loc("supply_fan_operating_status")] = 0.0
     off_folder = _folder_from_frame(tmp_path, "AHU_OFF", off)
     code, _, _ = _detect(tmp_path, str(off_folder), "--method", "pca", "--train-until", str(off.index[300].date()))
     assert code == 2 and "no active rows" in capsys.readouterr().err

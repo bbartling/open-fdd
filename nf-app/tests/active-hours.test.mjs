@@ -19,10 +19,10 @@ const START = Date.UTC(2026, 0, 1);
 function input(proofOn) {
   const history = [];
   for (let minute = 0; minute <= 360; minute += 5) {
-    history.push({ equipment_id: "plant-1", ts: START + minute * 60_000, run_proof: proofOn(minute) ? 1 : 0,
-      pump_status: 1, hw_supply_t: 85, hw_reset_request_sum: 0 });
+    history.push({ equipment_id: "plant-1", ts: START + minute * 60_000, operating_status: proofOn(minute) ? 1 : 0,
+      pump_operating_status: 1, supply_hot_water_temperature: 85, hot_water_reset_request_count: 0 });
   }
-  const cols = ["run_proof", "pump_status", "hw_supply_t", "hw_reset_request_sum"];
+  const cols = ["operating_status", "pump_operating_status", "supply_hot_water_temperature", "hot_water_reset_request_count"];
   return { historyColumns: cols.map((name) => ({ name, type: "double" })), history, weather: [], sensorHistory: [] };
 }
 
@@ -42,7 +42,7 @@ test("every run-proof gated rule outputs active_hours; ungated rules do not", ()
   const catalog = JSON.parse(readFileSync(new URL("../../sql/fdd/tuning_catalog.json", import.meta.url), "utf8")).rules;
   for (const r of catalog) {
     const cols = PACKS.duckdb.rules[r.rule_id].output_columns;
-    const gatedSql = /COALESCE\(run_proof, 0\) <= 0\.05/.test(readFileSync(new URL(`../../sql/fdd/postgres/rules/${r.sql_file}`, import.meta.url), "utf8"));
+    const gatedSql = /COALESCE\(operating_status, 0\) <= 0\.05/.test(readFileSync(new URL(`../../sql/fdd/postgres/rules/${r.sql_file}`, import.meta.url), "utf8"));
     assert.equal(cols.includes("active_hours"), gatedSql, r.rule_id);
   }
 });

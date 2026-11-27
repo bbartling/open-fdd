@@ -196,7 +196,7 @@ def skipped_no_run_proof(
         equipment_type=equipment_type,
         status="SKIPPED_NO_RUN_PROOF",
         applicable=False,
-        missing_roles=["run-proof"],
+        missing_roles=["operating_status"],
         fault_hours=None,
         fault_pct=None,
         metrics={"skip_reason": "no_run_proof"},
@@ -300,7 +300,7 @@ def not_assessed_no_occupancy(
         fault_hours=0.0,
         fault_pct=None,
         notes=(
-            "NOT_ASSESSED_NO_OCCUPANCY — comfort band requires modeled occ_mode "
+            "NOT_ASSESSED_NO_OCCUPANCY — comfort band requires modeled occupancy_status "
             "or a site occupancy schedule."
         ),
         params_fingerprint=params_fingerprint,

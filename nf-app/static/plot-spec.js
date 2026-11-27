@@ -18,10 +18,10 @@
 
   const SPEC_VERSION = 1;
   const GENERIC_MARKERS = ["point", "his", "cur", "writable"];
-  const WEB_ROLE_PREFIX = "web_";
+  const WEB_ROLE_PREFIX = "weather_service_";
   const SWEEP_RULE_PATTERN = /^SV-(RATE|RANGE|FLATLINE|SPIKE|STALE)$/;
   const ECON_RULE_PATTERN = /^ECON-[1-7]$/;
-  const ECON_EXTRA_ROLE = "oa_damper_pct";
+  const ECON_EXTRA_ROLE = "outdoor_air_intake_damper_position_command";
   const NAV_SEPARATOR = " › ";
   const COLOR_KEYS = 12;
   const FALLBACK_TZ = "UTC";
@@ -79,12 +79,14 @@
     return Object.entries(catalog.equipment_kinds).filter(([, ms]) => ms.some((m) => hasKindMarker(markers, m))).map(([k]) => k);
   }
 
-  const isWebRole = (role) => role.startsWith(WEB_ROLE_PREFIX);
+  const isWebRole = (role, def) => role.startsWith(WEB_ROLE_PREFIX) || role.startsWith("web_") || !!(def && def.binding_scope === "weather");
 
   function roleScore(p, role, def) {
-    if (isWebRole(role) !== has(p, "weather")) return 0;
+    if (isWebRole(role, def) !== has(p, "weather")) return 0;
+    const tags = p.tags || [];
+    if ((def.forbid || []).some((m) => tags.includes(m))) return 0;
     if (p.cls && def.classes.includes(p.cls)) return 2;
-    return def.markers.length > 0 && def.markers.every((m) => (p.tags || []).includes(m)) ? 1 : 0;
+    return def.markers.length > 0 && def.markers.every((m) => tags.includes(m)) ? 1 : 0;
   }
 
   const pointOrder = (a, b) => b[0] - a[0] || cmp(String(a[1].name || ""), String(b[1].name || "")) || cmp(String(a[1].uuid || ""), String(b[1].uuid || ""));
@@ -284,7 +286,7 @@
         `rule ${ruleId} does not apply to equip kind ${kinds[0] || "none"}`, catalog);
     }
     const required = [...new Set(rule.required_roles || [])];
-    const resolved = catalog.run_proof && catalog.run_proof.role;   // run_proof is resolved from the model, never plotted as an input
+    const resolved = catalog.operating_status && catalog.operating_status.role;   // operating_status is resolved from the model, never plotted as an input
     const optional = [...new Set(rule.optional_roles || [])].filter((r) => !required.includes(r) && r !== resolved);
     const roles = [...required, ...optional];
     const bound = bindRoles([...roles, ECON_EXTRA_ROLE], equipPool(equipRec, model), catalog);

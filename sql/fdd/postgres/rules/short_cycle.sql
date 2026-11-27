@@ -3,8 +3,8 @@
 -- short_cycle.sql — Boiler / compressor short cycling (#1781): too many starts in the trailing hour, or repeated
 -- on-times shorter than MIN_ON_SECONDS, read from proven run status (never a command).
 --
--- Proof, the first candidate that is ever on (> 0.05), else the first one bound: boiler_status, compressor_status,
--- chiller_status, chiller_amps > MECH_AMPS_MIN, chiller_power > MECH_POWER_KW_MIN. None bound -> assessment
+-- Proof, the first candidate that is ever on (> 0.05), else the first one bound: boiler_operating_status, compressor_operating_status,
+-- chiller_operating_status, chiller_electric_current > MECH_AMPS_MIN, chiller_electric_power > MECH_POWER_KW_MIN. None bound -> assessment
 -- 'no_run_status': fault_hours NULL, covered_hours 0 (never a silent pass).
 --
 -- Duty-aware: a status sample is the on-fraction of its interval (NF resamples a 0/1 status by AVERAGE, so a bucket
@@ -25,11 +25,11 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     EXTRACT(EPOCH FROM timestamp_utc) AS epoch_s,
-    boiler_status AS c1,
-    compressor_status AS c2,
-    chiller_status AS c3,
-    CASE WHEN chiller_amps IS NULL THEN NULL WHEN chiller_amps > {{MECH_AMPS_MIN}} THEN 1.0 ELSE 0.0 END AS c4,
-    CASE WHEN chiller_power IS NULL THEN NULL WHEN chiller_power > {{MECH_POWER_KW_MIN}} THEN 1.0 ELSE 0.0 END AS c5
+    boiler_operating_status AS c1,
+    compressor_operating_status AS c2,
+    chiller_operating_status AS c3,
+    CASE WHEN chiller_electric_current IS NULL THEN NULL WHEN chiller_electric_current > {{MECH_AMPS_MIN}} THEN 1.0 ELSE 0.0 END AS c4,
+    CASE WHEN chiller_electric_power IS NULL THEN NULL WHEN chiller_electric_power > {{MECH_POWER_KW_MIN}} THEN 1.0 ELSE 0.0 END AS c5
   FROM history
 ),
 pick AS (

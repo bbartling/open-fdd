@@ -256,8 +256,8 @@ def _chart_spec_for(c: CandidateDetection, packet: EvidencePacket | None) -> dic
         return {
             "kind": "vav5_damper_flow",
             "equipment_id": c.equipment_id,
-            "damper": spot.get("damper") or spot.get("damper-position"),
-            "airflow": spot.get("zone-airflow") or spot.get("airflow"),
+            "damper_position": spot.get("damper_position") or spot.get("damper-position"),
+            "airflow": spot.get("discharge_air_volume_flow_rate") or spot.get("airflow"),
         }
     if c.rule_id.startswith("VAV-1") or "comfort" in (c.rule_label or "").lower():
         return {"kind": "comfort_rank", "equipment_id": c.equipment_id}

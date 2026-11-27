@@ -68,7 +68,7 @@ def test_core_rows_describe_the_dataset(ds):
     for _site, key, ts, value in samples:
         by_key.setdefault(key, {})[ts] = value
     for row in ds.history[:50]:
-        for column in ("sat", "oa_t", "fan_status"):
+        for column in ("discharge_air_temperature", "outdoor_air_intake_temperature", "supply_fan_operating_status"):
             v = row.get(column)
             assert (by_key.get(f"{row['equipment_id']}/{column}", {}).get(row["ts"])) == v
 

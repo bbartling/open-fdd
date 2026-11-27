@@ -29,7 +29,7 @@ from open_fdd.parity._fdlibm import sin as _sin  # V8's sin, bit for bit (math.s
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 #: Bump when ``generate`` changes its output for any (profile, seed, equips, days). Published hashes are per version.
-GENERATOR_VERSION = 5
+GENERATOR_VERSION = 6
 
 PROFILES = ("basic", "edge")
 EDGE_FEATURES = ("nulls", "planted", "gap", "jitter", "duplicates", "out_of_order")
@@ -37,20 +37,24 @@ SITE_ID = "site-1"
 STEP_SECONDS = 300
 
 # ---- the input contract's scales (mirror of the constants in synthetic_dataset.js) ------------------------------------
-_STATUS = frozenset(["fan_status", "pump_status", "chw_pump_status", "chiller_status", "compressor_status", "boiler_status", "clg_available",
-                     "loop_enabled", "building_ahu_load_satisfied", "building_zone_load_satisfied"])
-_PERCENT = frozenset(["fan_cmd", "damper_cmd", "damper_pct", "oa_damper_pct", "clg_valve_pct", "htg_valve_pct",
-                      "reheat_valve_pct", "chw_pump_cmd", "cw_pump_cmd", "return_fan", "chiller_cmd", "tower_fan_cmd"])
-_HUMIDITY = frozenset(["oa_h", "ra_h", "zone_rh", "ma_h", "sa_h"])
+_STATUS = frozenset(["supply_fan_operating_status", "pump_operating_status", "chilled_water_pump_operating_status", "chiller_operating_status", "compressor_operating_status", "cooling_operating_mode_status",
+                     "operating_mode_status", "air_handling_unit_load_satisfied_status", "zone_load_satisfied_status",
+                     "boiler_operating_status", "operating_status"])
+_BOOLEAN_CMD = frozenset(["supply_fan_command", "chilled_water_pump_command", "condenser_water_pump_command", "return_fan_command", "chiller_command", "cooling_tower_fan_command"])
+_PERCENT = frozenset(["damper_position_command", "damper_position", "outdoor_air_intake_damper_position_command", "cooling_valve_position_command", "heating_valve_position_command",
+                      "terminal_unit_heating_valve_position_command", "supply_fan_speed_command"])
+_HUMIDITY = frozenset(["outdoor_air_intake_relative_humidity", "return_air_relative_humidity", "zone_air_relative_humidity", "mixed_air_relative_humidity", "discharge_air_relative_humidity"])
 
-_SENSOR_UNITS = [("oa_t", "°C"), ("mat", "°C"), ("zone_t", "°C"), ("rat", "°C"), ("sat", "°C"),
-                 ("chw_supply_t", "°C"), ("chw_return_t", "°C"), ("hw_supply_t", "°C"), ("hw_return_t", "°C"),
-                 ("oa_h", "%"), ("ra_h", "%"), ("zone_rh", "%"), ("ma_h", "%"), ("sa_h", "%"), ("duct_static", "Pa")]
-_PLANT_SENSOR_UNITS = [("chw_flow", "L/s"), ("chw_dp", "Pa"), ("cw_supply_t", "°C"), ("cw_return_t", "°C"),
-                       ("chiller_power", "kW")]
+_SENSOR_UNITS = [("outdoor_air_intake_temperature", "°C"), ("mixed_air_temperature", "°C"), ("zone_air_temperature", "°C"), ("return_air_temperature", "°C"), ("discharge_air_temperature", "°C"),
+                 ("supply_chilled_water_temperature", "°C"), ("return_chilled_water_temperature", "°C"), ("supply_hot_water_temperature", "°C"), ("return_hot_water_temperature", "°C"),
+                 ("outdoor_air_intake_relative_humidity", "%"), ("return_air_relative_humidity", "%"), ("zone_air_relative_humidity", "%"), ("mixed_air_relative_humidity", "%"), ("discharge_air_relative_humidity", "%"), ("discharge_air_static_pressure", "Pa")]
+_PLANT_SENSOR_UNITS = [("chilled_water_volume_flow_rate", "L/s"), ("chilled_water_pressure_delta", "Pa"), ("supply_condenser_water_temperature", "°C"), ("return_condenser_water_temperature", "°C"),
+                       ("chiller_electric_power", "kW")]
 
-_SCALE_UNIT = {"si:degC": "°C", "si:Pa": "Pa", "si:L/s": "L/s", "si:kW": "kW", "si:kWh": "kWh", "si:A": "A",
-               "si:ppm": "ppm", "si:count": "count", "percent_rh": "%", "fraction": "fraction", "boolean": "bool"}
+_SCALE_UNIT = {"DEG_C": "°C", "PA": "Pa", "L-PER-SEC": "L/s", "KiloW": "kW", "KiloW-HR": "kWh", "A": "A",
+               "PPM": "ppm", "NUM": "count", "PERCENT_RH": "%", "PERCENT": "%", "boolean": "bool", "enumeration": "text",
+               "si:degC": "°C", "si:Pa": "Pa", "si:L/s": "L/s", "si:kW": "kW", "si:kWh": "kWh", "si:A": "A",
+               "si:ppm": "ppm", "si:count": "count", "percent_rh": "%", "fraction": "fraction"}
 
 
 def _load(name: str) -> Any:
@@ -64,8 +68,8 @@ def history_columns() -> list[dict]:
 
 def role_map() -> dict[str, str]:
     """SQL history column -> Haystack role the pandas rules read (``role_map.json`` plus the weather roles)."""
-    return {**_load("role_map.json"), "web_oa_t": "web-outside-air-temp", "web_oa_dp": "web-outside-air-dewpoint",
-            "web_wb_t": "web-outside-air-wetbulb"}
+    return {**_load("role_map.json"), "weather_service_air_temperature": "weather_service_air_temperature", "weather_service_air_dew_point_temperature": "weather_service_air_dew_point_temperature",
+            "weather_service_air_wet_bulb_temperature": "weather_service_air_wet_bulb_temperature"}
 
 
 # ---- the signal model (a line-by-line port of synthetic_dataset.js) -------------------------------------------------
@@ -105,141 +109,153 @@ class _Signals:
         return v
 
     def signal(self, col, e, i, h, occ, step):
-        if col == "run_proof":
+        if col == "operating_status":
             # the resolved run proof (#1608): every fourth unit (index 3 mod 4) has NO proof bound (NULL: gated rules are
             # SKIPPED no_run_proof); index 2 mod 4 is fed by unit 0 (its proof is that unit's fan status, like a VAV fed by
             # an AHU); every other unit proves itself by its own fan status
             if e % 4 == 3:
                 return None
-            return self.signal("fan_status", 0 if e % 4 == 2 else e, i, h, occ, step)
+            return self.signal("supply_fan_operating_status", 0 if e % 4 == 2 else e, i, h, occ, step)
         v = self.base(col, e, i, h, occ, step)
         if e != 1 or v is None:
             return v
         d = i % 288
         if 100 <= d < 180:
-            if col == "fan_cmd":
+            if col == "supply_fan_command":
                 return 1
-            if col == "mat":
+            if col == "supply_fan_speed_command":
+                return 100
+            if col == "mixed_air_temperature":
                 return v - 8.333333333333
-            if col == "htg_valve_pct":
-                return 1
-            if col == "sat":
+            if col == "heating_valve_position_command":
+                return 100
+            if col == "discharge_air_temperature":
                 return v - 6.666666666667
-            if col == "chw_return_t":
-                return self.base("chw_supply_t", e, i, h, occ, step) + 0.555555555556
-            if col in ("chw_pump_status", "pump_status", "chw_pump_cmd"):
+            if col == "return_chilled_water_temperature":
+                return self.base("supply_chilled_water_temperature", e, i, h, occ, step) + 0.555555555556
+            if col in ("chilled_water_pump_operating_status", "pump_operating_status", "chilled_water_pump_command"):
                 return 1
-            if col == "duct_static":
+            if col == "discharge_air_static_pressure":
                 return 124.42
         if 200 <= d < 260:
-            if col in ("oa_damper_pct", "damper_pct", "damper_cmd"):
+            if col in ("outdoor_air_intake_damper_position_command", "damper_position", "damper_position_command"):
                 return 0
-            if col == "mat":
-                return self.base("oa_t", e, i, h, occ, step) + 0.111111111111
-            if col == "fan_cmd":
-                return 0.8
-            if col == "sat":
+            if col == "mixed_air_temperature":
+                return self.base("outdoor_air_intake_temperature", e, i, h, occ, step) + 0.111111111111
+            if col == "supply_fan_command":
+                return 1
+            if col == "supply_fan_speed_command":
+                return 80
+            if col == "discharge_air_temperature":
                 return 21.111111111111
-            if col == "sat_sp":
+            if col == "discharge_air_temperature_setpoint":
                 return 12.777777777778
         return v
 
     def base(self, col, e, i, h, occ, step):
         v = self.percent(col, e, i, h, occ, step)
-        return v / 100 if v is not None and col in _PERCENT else v
+        if v is None:
+            return None
+        if col in _BOOLEAN_CMD:
+            return 1 if v >= 50 else 0
+        return v
 
     def percent(self, col, e, i, h, occ, step):  # noqa: C901 - one flat table, like the JS switch
         sick = e == 1
         seed = self._seed(col)
         w = _wave
         oa = 8.888888888889 + 13.333333333333 * w(h, 24, -2.2) + 1.111111111111 * w(i, 17)
-        if col == "oa_t": return oa
-        if col == "web_oa_t": return None if e == 0 else oa + (5 if 120 < i % 288 < 200 else 0.222222222222)
-        if col == "web_oa_dp": return None if e == 0 else oa - 6.666666666667
-        if col == "web_wb_t": return oa - 2.777777777778
-        if col == "oa_h": return 55 + 30 * w(h, 24, 1)
-        if col == "rat": return 22.222222222222 + 0.444444444444 * w(i, 40)
-        if col == "zone_t":
+        if col == "outdoor_air_intake_temperature": return oa
+        if col == "weather_service_air_temperature": return None if e == 0 else oa + (5 if 120 < i % 288 < 200 else 0.222222222222)
+        if col == "weather_service_air_dew_point_temperature": return None if e == 0 else oa - 6.666666666667
+        if col == "weather_service_air_wet_bulb_temperature": return oa - 2.777777777778
+        if col == "outdoor_air_intake_relative_humidity": return 55 + 30 * w(h, 24, 1)
+        if col == "return_air_temperature": return 22.222222222222 + 0.444444444444 * w(i, 40)
+        if col == "zone_air_temperature":
             if sick:
                 return 22.222222222222 + 3.888888888889 * w(i, 150) + (0 if occ else -3.333333333333)
             return 22.222222222222 + 0.833333333333 * w(i, 60)
-        if col == "zone_air_temp_sp": return 22.222222222222 if occ else 18.888888888889
-        if col == "cooling_sp": return 23.888888888889
-        if col == "heating_sp": return 20.555555555556
-        if col == "mat":
+        if col == "zone_air_temperature_setpoint": return 22.222222222222 if occ else 18.888888888889
+        if col == "zone_cooling_air_temperature_setpoint": return 23.888888888889
+        if col == "zone_heating_air_temperature_setpoint": return 20.555555555556
+        if col == "mixed_air_temperature":
             return (0.3 * oa + 0.7 * (22.222222222222 + 0.444444444444 * w(i, 40))
                     + (3.333333333333 * _square(i, 90, 0.3) if sick else 0))
-        if col == "sat":
+        if col == "discharge_air_temperature":
             if sick:
                 return 12.777777777778 + 5.555555555556 * w(i, 70) + 2.222222222222 * w(i, 7)
             return 12.777777777778 + 0.666666666667 * w(i, 50)
-        if col == "sat_sp": return 12.777777777778 if occ else 15.555555555556
-        if col == "ahu_sat": return 12.777777777778 + 0.555555555556 * w(i, 55)
-        if col == "preheat_leave_t": return 10 + 2.777777777778 * w(i, 90)
-        if col == "fan_cmd":
+        if col == "discharge_air_temperature_setpoint": return 12.777777777778 if occ else 15.555555555556
+        if col == "air_handling_unit_discharge_air_temperature": return 12.777777777778 + 0.555555555556 * w(i, 55)
+        if col == "preheat_heating_coil_outlet_air_temperature": return 10 + 2.777777777778 * w(i, 90)
+        if col == "supply_fan_command":
             if not occ: return 0
             return 80 if sick else 65 + 20 * w(i, 120)
-        if col == "fan_status":
+        if col == "supply_fan_speed_command":
+            if not occ: return 0
+            return 80 if sick else 65 + 20 * w(i, 120)
+        if col == "occupancy_status":
+            return 1 if occ else 0
+        if col == "supply_fan_operating_status":
             d = i % 288
             if not occ:
                 return 1 if sick and 40 < d < 70 else 0
             return 0 if sick and 130 < d < 190 else 1
-        if col == "damper_cmd":
+        if col == "damper_position_command":
             if not occ: return 0
             return 10 if sick else 20 + 70 * abs(w(i, 180))
-        if col == "damper_pct":
+        if col == "damper_position":
             if not occ: return 0
             return 10 if sick else 20 + 68 * abs(w(i, 180))
-        if col == "oa_damper_pct":
+        if col == "outdoor_air_intake_damper_position_command":
             if not occ: return 0
             return 10 if sick else 15 + 80 * abs(w(i, 200))
-        if col == "duct_static":
+        if col == "discharge_air_static_pressure":
             return 149.304 + 49.768 * w(i, 30) if sick else 373.26 + 24.884 * w(i, 45)
-        if col == "duct_static_sp": return 373.26
-        if col == "static_reset_request": return _js_round(3 * abs(w(i, 160)))
-        if col == "clg_valve_pct":
+        if col == "discharge_air_static_pressure_setpoint": return 373.26
+        if col == "discharge_air_static_pressure_reset_request_count": return _js_round(3 * abs(w(i, 160)))
+        if col == "cooling_valve_position_command":
             if sick: return 30 + 60 * abs(w(i, 110))
             return 40 * abs(w(i, 220)) if occ else 0
-        if col == "htg_valve_pct":
+        if col == "heating_valve_position_command":
             if occ: return 30 * max(0, w(i, 260, 3))
             return 25 if sick else 0
-        if col == "reheat_valve_pct":
+        if col == "terminal_unit_heating_valve_position_command":
             return 70 * _square(i, 96, 0.5) if sick else 20 * max(0, w(i, 150))
-        if col == "vav_discharge_t": return 14.444444444444 + 6.666666666667 * _square(i, 80, 0.35)
-        if col == "vav_inlet_t": return 12.777777777778 + 1.111111111111 * w(i, 70)
-        if col == "vav_total_flow": return 424.7523 + 188.7788 * w(i, 100)
-        if col == "zone_flow":
+        if col == "terminal_unit_discharge_air_temperature": return 14.444444444444 + 6.666666666667 * _square(i, 80, 0.35)
+        if col == "terminal_unit_inlet_air_temperature": return 12.777777777778 + 1.111111111111 * w(i, 70)
+        if col == "terminal_unit_discharge_air_total_volume_flow_rate": return 424.7523 + 188.7788 * w(i, 100)
+        if col == "discharge_air_volume_flow_rate":
             return 56.63364 + 14.15841 * w(i, 90) if sick else 117.98675 + 37.75576 * w(i, 130)
-        if col == "min_flow_sp": return 70.79205
-        if col == "zone_co2": return 600 + 400 * abs(w(i, 140)) + (150 if occ else 0)
-        if col == "cooling_coil_entering_temp": return 15.555555555556 + 1.666666666667 * w(i, 50)
-        if col == "cooling_coil_leaving_temp":
+        if col == "discharge_air_volume_flow_rate_minimum": return 70.79205
+        if col == "zone_air_co2": return 600 + 400 * abs(w(i, 140)) + (150 if occ else 0)
+        if col == "cooling_coil_inlet_air_temperature": return 15.555555555556 + 1.666666666667 * w(i, 50)
+        if col == "cooling_coil_outlet_air_temperature":
             return 12.777777777778 + 1.111111111111 * w(i, 50) + (2.222222222222 if sick else 0)
-        if col == "heating_coil_entering_temp": return 12.777777777778 + 1.666666666667 * w(i, 66)
-        if col == "heating_coil_leaving_temp": return 23.888888888889 + 2.222222222222 * w(i, 66)
-        if col == "chw_supply_t": return 6.666666666667 + 1.111111111111 * w(i, 95)
-        if col == "chw_return_t": return 11.111111111111 + 1.666666666667 * w(i, 95, 0.4)
-        if col == "chw_supply_sp": return 6.666666666667
-        if col == "chw_dp": return 68947.57 + 20684.271 * w(i, 85)
-        if col == "chw_dp_sp": return 75842.327
-        if col == "chw_flow": return 18.92706 + 7.570824 * w(i, 120)
-        if col == "chw_reset_request_sum": return _js_round(4 * abs(w(i, 210)))
-        if col == "hw_supply_t": return 65.555555555556 + 6.666666666667 * w(i, 130)
-        if col == "hw_return_t": return 54.444444444444 + 4.444444444444 * w(i, 130, 0.3)
-        if col == "hw_reset_request_sum": return _js_round(3 * abs(w(i, 190)))
-        if col == "cw_supply_t": return None if e == 0 else 26.666666666667 + 2.222222222222 * w(i, 100)
-        if col == "electric_kw": return 40 + 15 * w(i, 288, 0.5)
-        if col == "kwh": return (40 + 15 * w(i, 288, 0.5)) * step / 3600
-        if col == "electric_kwh": return None
-        if col in ("chiller_amps", "chiller_current"): return 80 + 30 * w(i, 100)
-        if col == "chiller_power": return 100 + 35 * w(i, 100)
-        if col == "ra_h": return 45 + 5 * w(i, 80)
-        if col == "zone_rh": return 48 + 8 * w(i, 120)
-        if col == "ma_h": return 50 + 5 * w(i, 90)
-        if col == "sa_h": return 70 + 5 * w(i, 60)
+        if col == "heating_coil_inlet_air_temperature": return 12.777777777778 + 1.666666666667 * w(i, 66)
+        if col == "heating_coil_outlet_air_temperature": return 23.888888888889 + 2.222222222222 * w(i, 66)
+        if col == "supply_chilled_water_temperature": return 6.666666666667 + 1.111111111111 * w(i, 95)
+        if col == "return_chilled_water_temperature": return 11.111111111111 + 1.666666666667 * w(i, 95, 0.4)
+        if col == "supply_chilled_water_temperature_setpoint": return 6.666666666667
+        if col == "chilled_water_pressure_delta": return 68947.57 + 20684.271 * w(i, 85)
+        if col == "chilled_water_pressure_delta_setpoint": return 75842.327
+        if col == "chilled_water_volume_flow_rate": return 18.92706 + 7.570824 * w(i, 120)
+        if col == "chilled_water_reset_request_count": return _js_round(4 * abs(w(i, 210)))
+        if col == "supply_hot_water_temperature": return 65.555555555556 + 6.666666666667 * w(i, 130)
+        if col == "return_hot_water_temperature": return 54.444444444444 + 4.444444444444 * w(i, 130, 0.3)
+        if col == "hot_water_reset_request_count": return _js_round(3 * abs(w(i, 190)))
+        if col == "supply_condenser_water_temperature": return None if e == 0 else 26.666666666667 + 2.222222222222 * w(i, 100)
+        if col == "electric_power": return 40 + 15 * w(i, 288, 0.5)
+        if col == "electric_energy": return (40 + 15 * w(i, 288, 0.5)) * step / 3600
+        if col in ("chiller_electric_current", "chiller_electric_current"): return 80 + 30 * w(i, 100)
+        if col == "chiller_electric_power": return 100 + 35 * w(i, 100)
+        if col == "return_air_relative_humidity": return 45 + 5 * w(i, 80)
+        if col == "zone_air_relative_humidity": return 48 + 8 * w(i, 120)
+        if col == "mixed_air_relative_humidity": return 50 + 5 * w(i, 90)
+        if col == "discharge_air_relative_humidity": return 70 + 5 * w(i, 60)
         if col in _STATUS:
             return _square(i + (seed % 50), 60 + (seed % 90), 0.5 + (0.2 if sick else 0)) * (1 if occ else 0.0)
-        if col in _PERCENT: return 50 + 45 * w(i, 60 + (seed % 120), seed)
+        if col in _PERCENT or col in _BOOLEAN_CMD: return 50 + 45 * w(i, 60 + (seed % 120), seed)
         if col in _HUMIDITY: return 50 + 15 * w(i, 90 + (seed % 50), seed)
         return 50 + 20 * w(i, 97 + (seed % 60), seed % 7)
 
@@ -361,7 +377,7 @@ class Dataset:
         SI dataset, the native unit for ``to_imperial(ds)`` (so ``to_imperial(ds).to_core_rows()`` seeds a store that
         keeps native units and converts at read time); ``si_unit`` is always the SI unit of the role.
         ``samples`` = long ``(site_id, point_key, ts_ms_utc, value)`` for every non-null cell, in point then row order.
-        Text columns (``occ_mode``) are stored as numbers (a number as is, ``Occupied`` 1, anything else 0): the
+        Text columns (``occupancy_status``) are stored as numbers (a number as is, ``Occupied`` 1, anything else 0): the
         core's ``fdd.input_sample.value`` is numeric.
         """
         scales = _load("role_scales.json")["roles"]
@@ -516,8 +532,8 @@ def generate(seed: int = 0, equips: int = 2, days: int = 3, profile: str = "basi
                     v = sig.signal(n, e, i, h, occ, step_seconds)
                     row[n] = None if v is None else _js_round(v * 1e6) / 1e6
             if e == 0 and i % 97 == 5:
-                row["sat"] = None
-                row["mat"] = None
+                row["discharge_air_temperature"] = None
+                row["mixed_air_temperature"] = None
             rows.append(row)
         per_equip.append(rows)
 
@@ -538,7 +554,7 @@ def generate(seed: int = 0, equips: int = 2, days: int = 3, profile: str = "basi
     for i in range(0, steps, 4):  # every 20 min at 5 min history
         ts, h, _ = clock(i)
         oa = 8.888888888889 + 13.333333333333 * _wave(h, 24, -2.2)
-        weather.append({"ts": ts, "oa_t": oa, "web_oa_t": oa + 0.333333333333, "web_oa_dp": oa - 6.111111111111})
+        weather.append({"ts": ts, "outdoor_air_intake_temperature": oa, "weather_service_air_temperature": oa + 0.333333333333, "weather_service_air_dew_point_temperature": oa - 6.111111111111})
 
     sensor_units = list(_SENSOR_UNITS) + (list(_PLANT_SENSOR_UNITS) if plant_sensors else [])
     authorized, series, equipment = [], [], []
@@ -549,14 +565,14 @@ def generate(seed: int = 0, equips: int = 2, days: int = 3, profile: str = "basi
         for role, unit in sensor_units:
             series.append({"equipment_id": eid, "series_id": f"series-{eid}-{role}", "role": role, "unit": unit})
         if duplicate_role:
-            series.append({"equipment_id": eid, "series_id": f"series-{eid}-sat-duplicate", "role": "sat", "unit": "°C"})
+            series.append({"equipment_id": eid, "series_id": f"series-{eid}-discharge_air_temperature-duplicate", "role": "discharge_air_temperature", "unit": "°C"})
     if duplicate_role:  # duplicate role: excluded by the rule
-        authorized.append({"site_id": SITE_ID, "equipment_id": ids[0], "role": "sat", "unit": "°C"})
+        authorized.append({"site_id": SITE_ID, "equipment_id": ids[0], "role": "discharge_air_temperature", "unit": "°C"})
 
-    utility_monthly = [{"billing_period": "2026-01", "kwh": 5000.0}, {"billing_period": "2026-02", "kwh": 100.0}]
+    utility_monthly = [{"billing_period": "2026-01", "electric_energy": 5000.0}, {"billing_period": "2026-02", "electric_energy": 100.0}]
     utility_interval = []
     for i in range(0, steps, 3):
-        utility_interval.append({"ts": t0 + i * step_seconds * 1000, "kwh": 3.3 + 1.2 * _wave(i, 288)})
+        utility_interval.append({"ts": t0 + i * step_seconds * 1000, "electric_energy": 3.3 + 1.2 * _wave(i, 288)})
 
     units = {a["role"]: a["unit"] for a in authorized}
     model = _build_model(ids, cols, rmap, "America/Chicago" if edge else "UTC")
@@ -583,18 +599,18 @@ def _normalize(ds: Dataset) -> Dataset:
             if k not in ("equipment_id", "ts"):
                 row[k] = fix(v)
     for r in ds.weather:
-        for k in ("oa_t", "web_oa_t", "web_oa_dp"):
+        for k in ("outdoor_air_intake_temperature", "weather_service_air_temperature", "weather_service_air_dew_point_temperature"):
             r[k] = fix(r[k])
     for r in ds.utility_interval:
-        r["kwh"] = fix(r["kwh"])
+        r["electric_energy"] = fix(r["electric_energy"])
     for r in ds.utility_monthly:
-        r["kwh"] = fix(r["kwh"])
+        r["electric_energy"] = fix(r["electric_energy"])
     return ds
 
 
 # ---- the edge profile -----------------------------------------------------------------------------------------------
 
-_NULL_COLS = ("mat", "rat", "zone_t", "oa_h", "duct_static")
+_NULL_COLS = ("mixed_air_temperature", "return_air_temperature", "zone_air_temperature", "outdoor_air_intake_relative_humidity", "discharge_air_static_pressure")
 
 
 def _apply_edge(per_equip, ids, steps, step_seconds, seed, feats):
@@ -617,17 +633,17 @@ def _apply_edge(per_equip, ids, steps, step_seconds, seed, feats):
         if steps >= 120 and "planted" in feats:
             start = int(steps * 0.15) + e % 3
             length = 48
-            hold = next((rows[i]["sat"] for i in range(start, start + length) if rows[i]["sat"] is not None), None)
+            hold = next((rows[i]["discharge_air_temperature"] for i in range(start, start + length) if rows[i]["discharge_air_temperature"] is not None), None)
             if hold is not None:
                 for i in range(start, start + length):
-                    rows[i]["sat"] = hold
-                faults.append({"id": f"flatline-{ids[e]}", "equipment_id": ids[e], "column": "sat", "kind": "flatline",
+                    rows[i]["discharge_air_temperature"] = hold
+                faults.append({"id": f"flatline-{ids[e]}", "equipment_id": ids[e], "column": "discharge_air_temperature", "kind": "flatline",
                                "value": hold, "start_ms": rows[start]["ts"], "end_ms": rows[start + length - 1]["ts"] + step_ms})
             start = int(steps * 0.65) + e % 3
             length = 24
             for i in range(start, start + length):
-                rows[i]["zone_t"] = 80.0
-            faults.append({"id": f"out-of-range-{ids[e]}", "equipment_id": ids[e], "column": "zone_t", "kind": "out_of_range",
+                rows[i]["zone_air_temperature"] = 80.0
+            faults.append({"id": f"out-of-range-{ids[e]}", "equipment_id": ids[e], "column": "zone_air_temperature", "kind": "out_of_range",
                            "value": 80.0, "start_ms": rows[start]["ts"], "end_ms": rows[start + length - 1]["ts"] + step_ms})
         # 3. a 3 h hole (longer than 2 h) on every even unit
         if e % 2 == 0 and steps >= 288 and "gap" in feats:

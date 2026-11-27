@@ -27,7 +27,7 @@ const F_COLS = ["equipment_id", "fault_hours", "covered_hours", "fault_pct"];
 const PACK = {
   poll_seconds: STEP,
   contract: { history: [{ name: "equipment_id", type: "text" }, { name: "timestamp_utc", type: "timestamp" },
-    { name: "fan_cmd", type: "double" }, { name: "fan_status", type: "double" }, { name: "oa_t", type: "double" }] },
+    { name: "supply_fan_command", type: "double" }, { name: "supply_fan_operating_status", type: "double" }, { name: "outdoor_air_intake_temperature", type: "double" }] },
   rules: {
     "CMD-1": { sql: "-", output_columns: F_COLS },
     "FAN-RUNTIME-HOURS": { sql: "-", output_columns: ["equipment_id", "fan_runtime_hours", "total_hours"] },
@@ -140,16 +140,16 @@ test("missing roles: stale 'required roles missing', ok:false", async () => {
 });
 
 test("unusable units: stale 'unit unusable' naming the role, ok:false", async () => {
-  // fan_cmd (a 0-1 fraction) with no unit cannot be told from 0-100; fan_status with a temperature unit is not a 0/1 status
-  const http = fakeHttp({ points: [FANC({ unit: "" }), FANS({ unit: "°F" }), OAT] });
+  // a boolean command whose unit is a temperature is not 0/1; supply_fan_operating_status with a temperature unit is not a 0/1 status
+  const http = fakeHttp({ points: [FANC({ unit: "°F" }), FANS({ unit: "°F" }), OAT] });
   const r = run(http, engine({ rows: 288 }));
   const s = await r.summary;
   assert.equal(s.status.stale, 2);
-  assert.ok(staleReasons(http).every((x) => /^unit unusable \(role (fan_cmd|fan_status)/.test(x)), staleReasons(http).join("|"));
+  assert.ok(staleReasons(http).every((x) => /^unit unusable \(role (supply_fan_command|supply_fan_operating_status)/.test(x)), staleReasons(http).join("|"));
   assert.equal(s.skipped[0].kind, "unit-unusable");
   assert.match(s.failure, /no fresh results/);
   assert.deepEqual(s.stale_reasons, { "unit unusable": 2 });
-  await assert.rejects(run(fakeHttp({ points: [FANC({ unit: "" }), FANS({ unit: "°F" }), OAT] }), engine({ rows: 288 })).hook(), /unit-unusable x1/);
+  await assert.rejects(run(fakeHttp({ points: [FANC({ unit: "°F" }), FANS({ unit: "°F" }), OAT] }), engine({ rows: 288 })).hook(), /unit-unusable x1/);
 });
 
 test("not a failure: dry run, nothing eligible, or at least one equip freshly assessed", async () => {

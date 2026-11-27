@@ -1,6 +1,6 @@
 """Write tests/fixtures/sched247_cases.json: the SCHED-247 proof/completeness scenarios of #1670.
 
-One equipment per scenario; rows carry epoch-ms ``ts`` and the SQL proof columns (``fan_status``, ``fan_cmd``).
+One equipment per scenario; rows carry epoch-ms ``ts`` and the SQL proof columns (``supply_fan_operating_status``, ``supply_fan_command``).
 Expected values are SI hours. Regenerate with ``python tests/fixtures/make_sched247_cases.py``; the cases are
 deterministic (no RNG).
 """
@@ -23,7 +23,7 @@ def rows(ts: list[int], status=None, cmd=None) -> list[dict]:
     for i, t in enumerate(ts):
         s = status(i, t) if callable(status) else status
         c = cmd(i, t) if callable(cmd) else cmd
-        out.append({"ts": t, "fan_status": s, "fan_cmd": c})
+        out.append({"ts": t, "supply_fan_operating_status": s, "supply_fan_command": c})
     return out
 
 
@@ -75,10 +75,10 @@ CASES = [
      {"assessment": "assessed", "proven_on_hours": 23.0, "proven_off_hours": 1.0, "fault_hours": 23.0 - 55 / 60}),
     ("mostly_on_below_threshold", rows(grid(DAY), status=lambda i, t: 0.0 if i < 24 else 1.0),
      {"assessment": "assessed", "proven_on_hours": 22.0, "proven_off_hours": 2.0, "fault_hours": 0.0}),
-    # run threshold: > 0.05 (sql/fdd/run_proof.json); exactly 0.05 is OFF
-    ("command_at_threshold_is_off", rows(grid(DAY), cmd=0.05),
+    # boolean start/stop: on when > 0.5; exactly 0.5 is OFF
+    ("command_at_threshold_is_off", rows(grid(DAY), cmd=0.5),
      {"assessment": "assessed", "proven_on_hours": 0.0, "proven_off_hours": 24.0, "fault_hours": 0.0}),
-    ("command_above_threshold_is_on", rows(grid(DAY), cmd=0.0500001),
+    ("command_above_threshold_is_on", rows(grid(DAY), cmd=0.500001),
      {"assessment": "assessed", "proven_on_hours": 24.0, "fault_hours": 24.0 - 55 / 60}),
 ]
 
@@ -86,7 +86,7 @@ CASES = [
 def main() -> None:
     doc = {
         "_doc": __doc__.strip(),
-        "params": {"ALWAYS_ON_PCT": 0.95, "CONFIRM_SECONDS": 3600, "MAX_GAP_HOURS": 1.0},
+        "params": {"ALWAYS_ON_PCT": 95.0, "CONFIRM_SECONDS": 3600, "MAX_GAP_HOURS": 1.0},
         "tolerance_hours": 1e-6,
         "cases": [{"equipment_id": name, "rows": r, "expected": exp} for name, r, exp in CASES],
     }

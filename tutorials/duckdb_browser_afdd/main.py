@@ -9,7 +9,7 @@ con.execute((ROOT / "schema.sql").read_text(encoding="utf-8"))
 
 # Seed the database once (one row per sensor per 5 minutes).
 for ahu in ("AHU-1", "AHU-2"):
-    for role in ("sat", "cooling_enabled"):
+    for role in ("discharge_air_temperature", "cooling_enabled"):
         con.execute("INSERT INTO fdd.point VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
                     [f"{ahu}/{role}", ahu, role])
 
@@ -17,7 +17,7 @@ if con.execute("SELECT COUNT(*) FROM nf.data").fetchone()[0] == 0:
     path = str(ROOT / "week_history.csv")
     con.execute("""
         INSERT INTO nf.data
-        SELECT equipment_id || '/sat', timestamp::TIMESTAMPTZ, sat
+        SELECT equipment_id || '/discharge_air_temperature', timestamp::TIMESTAMPTZ, discharge_air_temperature
         FROM read_csv_auto(?, header=true)
         UNION ALL
         SELECT equipment_id || '/cooling_enabled', timestamp::TIMESTAMPTZ,

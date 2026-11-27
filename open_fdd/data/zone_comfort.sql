@@ -3,7 +3,7 @@
 -- Rendered by open_fdd.analytics.sql_point_stats.render_zone_comfort_sql: {occupied} an inline table of occupied
 -- intervals (start_ms, end_ms; half-open, UTC epoch ms) from the site's occupancy calendar, {lo} / {hi} the band (degC).
 --
--- Same rows as open_fdd.analytics.point_stats.zone_comfort: per zone_t point, n_occ (samples inside any occupied
+-- Same rows as open_fdd.analytics.point_stats.zone_comfort: per zone_air_temperature point, n_occ (samples inside any occupied
 -- interval; overlapping intervals count a sample once), n_in_band (lo <= value <= hi) and pct_in_band. Points with
 -- no occupied samples are not listed. Worst comfort first (lowest pct), then point_key.
 WITH occupied AS (
@@ -13,7 +13,7 @@ src AS (
   SELECT s.point_key, p.equipment_id, p.role, {ts_ms} AS t, CAST(s.value AS DOUBLE PRECISION) AS value
   FROM fdd.input_sample s
   JOIN fdd.point p ON p.site_id = s.site_id AND p.point_key = s.point_key
-  WHERE s.site_id = {site_id}{point_filter} AND p.role = 'zone_t'
+  WHERE s.site_id = {site_id}{point_filter} AND p.role = 'zone_air_temperature'
 ),
 occ AS (
   SELECT point_key, equipment_id, role, value

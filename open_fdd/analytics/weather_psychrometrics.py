@@ -72,51 +72,51 @@ def enrich_weather_frame(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
 
     # Dry bulb → wx_oa_t
-    if "web-outside-air-temp" not in out.columns:
+    if "weather_service_air_temperature" not in out.columns:
         for c in (
-            "web_oa_t",
+            "weather_service_air_temperature",
             "web_oa_temp",
             "web_outside_air_temp",
             "outside_air_temp_f",
             "temperature_2m",
             "temp_f",
             "dry_bulb_f",
-            "outside-air-temp",
+            "outdoor_air_intake_temperature",
             "oat",
         ):
             if c in out.columns and out[c].notna().any():
-                out = out.rename(columns={c: "web-outside-air-temp"})
+                out = out.rename(columns={c: "weather_service_air_temperature"})
                 break
-        if "web-outside-air-temp" not in out.columns:
+        if "weather_service_air_temperature" not in out.columns:
             for c in out.columns:
                 cl = c.lower()
                 if "temp" in cl and "dew" not in cl and "wet" not in cl:
-                    out = out.rename(columns={c: "web-outside-air-temp"})
+                    out = out.rename(columns={c: "weather_service_air_temperature"})
                     break
 
     # RH → wx_oa_rh
-    if "web-outside-air-humidity" not in out.columns:
+    if "weather_service_air_relative_humidity" not in out.columns:
         for c in ("relative_humidity_2m", "rh", "humidity", "outside_air_humidity", "oa_rh"):
             if c in out.columns and out[c].notna().any():
-                out = out.rename(columns={c: "web-outside-air-humidity"})
+                out = out.rename(columns={c: "weather_service_air_relative_humidity"})
                 break
 
     # Dewpoint column aliases
-    if "web-outside-air-dewpoint" not in out.columns:
+    if "weather_service_air_dew_point_temperature" not in out.columns:
         for c in ("dewpoint_2m", "dew_point_f", "dewpoint_f", "oa_dewpoint", "dp_f"):
             if c in out.columns and out[c].notna().any():
-                out = out.rename(columns={c: "web-outside-air-dewpoint"})
+                out = out.rename(columns={c: "weather_service_air_dew_point_temperature"})
                 break
 
     # Derive dewpoint from DB + RH when missing
-    if "web-outside-air-dewpoint" not in out.columns or out["web-outside-air-dewpoint"].notna().sum() == 0:
-        if "web-outside-air-temp" in out.columns and "web-outside-air-humidity" in out.columns:
-            out["web-outside-air-dewpoint"] = dewpoint_c_from_db_rh(out["web-outside-air-temp"], out["web-outside-air-humidity"])
+    if "weather_service_air_dew_point_temperature" not in out.columns or out["weather_service_air_dew_point_temperature"].notna().sum() == 0:
+        if "weather_service_air_temperature" in out.columns and "weather_service_air_relative_humidity" in out.columns:
+            out["weather_service_air_dew_point_temperature"] = dewpoint_c_from_db_rh(out["weather_service_air_temperature"], out["weather_service_air_relative_humidity"])
 
     # Wet bulb
-    if "web-outside-air-wetbulb" not in out.columns or out["web-outside-air-wetbulb"].notna().sum() == 0:
-        if "web-outside-air-temp" in out.columns and "web-outside-air-humidity" in out.columns:
-            out["web-outside-air-wetbulb"] = wetbulb_c_stull(out["web-outside-air-temp"], out["web-outside-air-humidity"])
+    if "weather_service_air_wet_bulb_temperature" not in out.columns or out["weather_service_air_wet_bulb_temperature"].notna().sum() == 0:
+        if "weather_service_air_temperature" in out.columns and "weather_service_air_relative_humidity" in out.columns:
+            out["weather_service_air_wet_bulb_temperature"] = wetbulb_c_stull(out["weather_service_air_temperature"], out["weather_service_air_relative_humidity"])
 
     return out
 
@@ -133,7 +133,7 @@ def prefer_web_oat(
 
         series, _src = resolve_effective_oat(df, weather)
         return series
-    order = ("outside-air-temp", "web-outside-air-temp", "bas-outside-air-temp", "oa_t_effective")
+    order = ("outdoor_air_intake_temperature", "weather_service_air_temperature", "bas-outside-air-temp", "oa_t_effective")
     for col in order:
         if col in df.columns and df[col].notna().any():
             return pd.to_numeric(df[col], errors="coerce")

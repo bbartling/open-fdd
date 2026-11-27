@@ -2,10 +2,10 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- fc7_sat_low_heating.sql — FC7 SAT low while heating at full + confirm
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
@@ -13,25 +13,25 @@ WITH rp AS (
 -- fan-restart holdoff and active-coverage floor (as pandas: the operational gate is not the run-proof gate).
 h AS (
   SELECT
-    run_proof,
+    operating_status,
     equipment_id,
     timestamp_utc,
-    sat,
-    sat_sp,
+    discharge_air_temperature,
+    discharge_air_temperature_setpoint,
     COALESCE(
       CASE
-        WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
-        WHEN fan_cmd IS NULL THEN 0.0
-        ELSE fan_cmd
+        WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1.0 ELSE 0.0 END
+        WHEN supply_fan_command IS NULL THEN 0.0
+        ELSE supply_fan_command
       END,
       0.0
     ) AS fan,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on,
-    COALESCE(htg_valve_pct, 0.0) AS htg_valve_pct
+    COALESCE(heating_valve_position_command, 0.0) AS heating_valve_position_command
   FROM history
 ),
 base AS (
@@ -39,12 +39,12 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
-      WHEN sat IS NOT NULL AND sat_sp IS NOT NULL AND fan > {{FAN_ON_MIN}}
-       AND sat < sat_sp - {{EPS_SAT}} AND htg_valve_pct >= {{HTG_FULL_MIN}}
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
+      WHEN discharge_air_temperature IS NOT NULL AND discharge_air_temperature_setpoint IS NOT NULL AND fan > 0.5
+       AND discharge_air_temperature < discharge_air_temperature_setpoint - {{EPS_SAT}} AND heating_valve_position_command >= {{HTG_FULL_MIN}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM h
 ),
 elapsed_hold AS (

@@ -35,7 +35,7 @@ const rcxUi = { ahuOn: null };
  *   group: "Air handlers",                    section heading on the RCx tab
  *   title: "Economizer: OAT − MAT",           card title
  *   kinds: ["ahu"],                           equipment kinds (fdd-catalog equipment_kinds); [] = any
- *   roles: { required: ["oa_t", "mat"], optional: ["rat"] },     anyOf: [..] = at least one of these roles must bind (e.g. fan status OR command)
+ *   roles: { required: ["outdoor_air_intake_temperature", "mixed_air_temperature"], optional: ["return_air_temperature"] },     anyOf: [..] = at least one of these roles must bind (e.g. fan status OR command)
  *   scope: "equip" | "site",                  equip: one card per bound equip; site: one card, all bound equips
  *   minEquips: 1,                             site views: how many bound equips it needs
  *   hours: 168,                               default history span (the tab's range picker overrides)
@@ -270,8 +270,8 @@ function rcxContext(view, equips, hours, model, catalog, range = null, siteTz = 
   const feeds = () => rcxAirFeeds(model, site, catalog);
   const feedingAhu = (eq) => feeds().get(eq.id) || null;
   const fanOf = (ahu) => {
-    const bound = bindRoles(["fan_status", "fan_cmd"], equipPool(ahu.rec, model), catalog);
-    const role = bound.fan_status.length ? "fan_status" : bound.fan_cmd.length ? "fan_cmd" : null;
+    const bound = bindRoles(["supply_fan_operating_status", "supply_fan_command"], equipPool(ahu.rec, model), catalog);
+    const role = bound.supply_fan_operating_status.length ? "supply_fan_operating_status" : bound.supply_fan_command.length ? "supply_fan_command" : null;
     return role ? { role, p: bound[role][0] } : null;
   };
   const maskCache = extra.maskCache || new Map();    // AHU fan point + window -> pending mask (VAVs share their AHU; the tab shares it across cards)
@@ -298,7 +298,7 @@ function rcxContext(view, equips, hours, model, catalog, range = null, siteTz = 
     dispSystem: () => (rcxUnits() ? rcxUnits().displaySystem() : "si"),
     dispSeries: rcxDispSeries,
     unit: (p) => rcxDisp(0, rcxSiUnit(p)).unit,
-    // weather switched off (app option `weather`: false) -> its points are stale leftovers: RCx falls back to the equip oa_t
+    // weather switched off (app option `weather`: false) -> its points are stale leftovers: RCx falls back to the equip outdoor_air_intake_temperature
     weather: typeof weatherDisabled === "function" && weatherDisabled() ? [] : model.points.filter((p) => has(p, "weather") && has(p, "point") && p.siteRef === site),
   };
 }

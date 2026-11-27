@@ -49,10 +49,10 @@ def _series():
 
 
 def _core(web, bas_by_eq):
-    points = [{"site_id": "local", "point_key": "web", "equipment_id": None, "role": "web_oa_t"}]
+    points = [{"site_id": "local", "point_key": "web", "equipment_id": None, "role": "weather_service_air_temperature"}]
     samples = [("local", "web", int(t), float(v)) for t, v in zip(_ms(web.index), web.to_numpy())]
     for eq, s in bas_by_eq.items():
-        points.append({"site_id": "local", "point_key": f"{eq}/oat", "equipment_id": eq, "role": "oa_t"})
+        points.append({"site_id": "local", "point_key": f"{eq}/oat", "equipment_id": eq, "role": "outdoor_air_intake_temperature"})
         samples += [("local", f"{eq}/oat", int(t), float(v)) for t, v in zip(_ms(s.index), s.to_numpy())]
     return points, samples
 

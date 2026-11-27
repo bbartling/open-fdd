@@ -63,11 +63,23 @@ def _rule_id(value: str, *, optional: bool = False) -> str:
 
 
 def _norm_role(role: str) -> str | None:
-    """Open-FDD role name, accepting the snake_case spelling some role maps use (``zone_air_temp``)."""
-    role = role.strip()
-    if ROLE_RE.match(role):
-        return role
-    kebab = role.lower().replace("_", "-")
+    """Canonical role name. A catalog name or legacy_keys alias is kept as the canonical snake name.
+
+    Any other snake spelling is still accepted as the hyphen form the bundle used before roles 1.1.0
+    (``zone_air_temp`` -> ``zone-air-temp``).
+    """
+    raw = role.strip()
+    from open_fdd.role_vocab import legacy_to_role, load_roles
+
+    canon = {item["role"] for item in load_roles()["roles"]}
+    legacy = legacy_to_role()
+    if raw in canon or raw in legacy:
+        return legacy.get(raw, raw)
+    if ROLE_RE.match(raw) and "_" not in raw:
+        return raw
+    kebab = raw.lower().replace("_", "-")
+    if kebab in canon or kebab in legacy:
+        return legacy.get(kebab, kebab)
     return kebab if ROLE_RE.match(kebab) else None
 
 

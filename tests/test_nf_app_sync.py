@@ -493,8 +493,8 @@ def test_report_run_replaces_non_cp1252_event_and_ok_false_text(monkeypatch):
 
 
 @pytest.mark.parametrize(("result", "event", "warn"), [
-    ({"roles_skipped_by_unit": {"zone_flow": 1}}, "unrelated", True),
-    ({}, "roles skipped by unit: 1 (zone_flow 1)", True),
+    ({"roles_skipped_by_unit": {"discharge_air_volume_flow_rate": 1}}, "unrelated", True),
+    ({}, "roles skipped by unit: 1 (discharge_air_volume_flow_rate 1)", True),
     ({"roles_skipped_by_unit": {}}, "roles skipped by unit: 0", False),
 ])
 def test_doctor_warns_only_when_latest_fdd_run_skipped_units(monkeypatch, tmp_path, capsys, result, event, warn):
@@ -513,7 +513,7 @@ def test_doctor_warns_only_when_latest_fdd_run_skipped_units(monkeypatch, tmp_pa
     manifest = {"application": {"id": "open-fdd"}, "_dir": tmp_path, "hooks": [hook]}
     assert sync.cmd_doctor(console, manifest) == 0
     output = capsys.readouterr().out
-    assert ("[WARN] fdd units: roles skipped by unit: 1 (zone_flow 1)" in output) is warn
+    assert ("[WARN] fdd units: roles skipped by unit: 1 (discharge_air_volume_flow_rate 1)" in output) is warn
 
 
 @pytest.mark.parametrize(("options", "disabled"), [

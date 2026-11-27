@@ -173,14 +173,14 @@ def _write_bundle(root, *, labels=LABELS, history=True, point_name=False):
             w.writeheader()
             w.writerows(rows)
     if history:
-        role = "AHU1.SA-T" if point_name else "discharge-air-temp"
+        role = "AHU1.SA-T" if point_name else "discharge_air_temperature"
         with open(root / "history_long.csv", "w", newline="") as fh:
             w = csv.writer(fh)
             w.writerow(["ts", "equipment_id", "role", "value"])
             for eq in ("AHU-F", "AHU-N"):
                 for h in range(5):
                     w.writerow([f"2026-01-01T{h:02d}:30:00Z", eq, role, 13.0])
-    (root / "role_map.json").write_text(json.dumps({"AHU-F": {"kind": "ahu", "roles": ["discharge-air-temp"]}}))
+    (root / "role_map.json").write_text(json.dumps({"AHU-F": {"kind": "ahu", "roles": ["discharge_air_temperature"]}}))
 
 
 def test_bundle_check_run_and_template(tmp_path, capsys):
@@ -225,7 +225,7 @@ def test_export_bundle_privacy_checksums_and_unalias(tmp_path, capsys):
     results = write("results.csv", [dict(r, site_id="SECRET-SITE") for r in RESULTS])
     hist = write("hist.csv", [{"ts": f"2026-01-0{d}T{h:02d}:00:00Z", "equipment_id": "AHU-F", "point": p, "value": 1}
                               for d in (1, 3) for h in range(24) for p in ("Bldg7.AHU-F.SAT", "Bldg7.AHU-F.Secret")])
-    pmap = write("points.csv", [{"point": "Bldg7.AHU-F.SAT", "role": "discharge-air-temp"}])
+    pmap = write("points.csv", [{"point": "Bldg7.AHU-F.SAT", "role": "discharge_air_temperature"}])
     bdir, priv = tmp_path / "bundle", tmp_path / "private"
     rc = main(["export", "--results", str(results), "--history", str(hist), "--point-map", str(pmap),
                "--out", str(bdir), "--private-dir", str(priv), "--shift-days", "364", "--window-hours", "2"])
@@ -235,7 +235,7 @@ def test_export_bundle_privacy_checksums_and_unalias(tmp_path, capsys):
         assert secret not in blob
     hist_rows = list(csv.DictReader((bdir / "history_long.csv").read_text().splitlines()))
     # FAULT windows on AHU-F are 02:00-04:00 -> +/-2 h = 00:00-06:00 on Jan 1 only, one mapped point
-    assert len(hist_rows) == 7 and {r["role"] for r in hist_rows} == {"discharge-air-temp"}
+    assert len(hist_rows) == 7 and {r["role"] for r in hist_rows} == {"discharge_air_temperature"}
     assert hist_rows[0]["ts"].startswith("2026-12-31T00:00")  # shifted 364 days
     rep = bundle.check(bdir)
     assert rep["ok"], rep

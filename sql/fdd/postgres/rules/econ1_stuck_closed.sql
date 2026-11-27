@@ -1,37 +1,37 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- econ1_stuck_closed.sql — ECON-1 economizer stuck closed
--- CAST DOUBLE. fan_cmd and oa_damper_pct are fractions 0-1 (input_contract.sql), no magnitude guess.
+-- CAST DOUBLE. supply_fan_command and outdoor_air_intake_damper_position_command are fractions 0-1 (input_contract.sql), no magnitude guess.
 -- Pandas _fan is fan-cmd first, then fan-status (> 0.5).
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
 base AS (
   SELECT
-    run_proof,
+    operating_status,
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN CASE
-        WHEN fan_cmd IS NOT NULL THEN CASE
-          WHEN CAST(fan_cmd AS DOUBLE PRECISION) > 0.01 THEN 1
+        WHEN supply_fan_command IS NOT NULL THEN CASE
+          WHEN CAST(supply_fan_command AS DOUBLE PRECISION) > 0.01 THEN 1
           ELSE 0
         END
-        WHEN fan_status IS NOT NULL THEN CASE WHEN CAST(fan_status AS DOUBLE PRECISION) > 0.5 THEN 1 ELSE 0 END
+        WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN CAST(supply_fan_operating_status AS DOUBLE PRECISION) > 0.5 THEN 1 ELSE 0 END
         ELSE 0
       END = 0 THEN 0
-      WHEN oa_damper_pct IS NOT NULL AND oa_t IS NOT NULL
-       AND CAST(oa_damper_pct AS DOUBLE PRECISION) < {{ECON1_DAMPER_MAX}}
-       AND CAST(oa_t AS DOUBLE PRECISION) > {{ECON1_OAT_MIN}}
+      WHEN outdoor_air_intake_damper_position_command IS NOT NULL AND outdoor_air_intake_temperature IS NOT NULL
+       AND CAST(outdoor_air_intake_damper_position_command AS DOUBLE PRECISION) < {{ECON1_DAMPER_MAX}}
+       AND CAST(outdoor_air_intake_temperature AS DOUBLE PRECISION) > {{ECON1_OAT_MIN}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM history
 ),
 elapsed_hold AS (

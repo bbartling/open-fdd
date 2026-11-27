@@ -21,8 +21,8 @@ test("statuses: fault, pass, skipped (no run proof, missing inputs, meter data),
   assert.equal(skip.status, "skipped");
   assert.match(skip.reason, /^no run proof/);
   assert.equal(skip.faultHours, null, "a skip has no hours (unknown, not zero)");
-  const missing = of(row("D", { runnable: false, missing: ["duct_static"] }), null);
-  assert.deepEqual([missing.status, missing.reason], ["skipped", "missing inputs: duct_static"]);
+  const missing = of(row("D", { runnable: false, missing: ["discharge_air_static_pressure"] }), null);
+  assert.deepEqual([missing.status, missing.reason], ["skipped", "missing inputs: discharge_air_static_pressure"]);
   assert.match(of(row("E", { runnable: false, pointInputs: false }), null).reason, /meter data/);
   assert.equal(of(row("F"), result(null, { fddStatus: "stale" })).status, "insufficient");
   assert.match(of(row("F"), result(null, { fddStatus: "stale" })).reason, /stale/);
