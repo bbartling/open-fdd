@@ -7,16 +7,16 @@ has_children: true
 # Lite vs Full
 
 Open-FDD ships two NF apps from one shared source. Pick the edition from the host, not from the building. Both read the same Haystack
-model in NF ([data model](modeling.html)); they differ in whether a rule engine runs on the box.
+model in NF ([data model](modeling.html)). Lite runs the rule pack on DuckDB. Full can also run it in Timescale.
 
 | | **Lite** | **Full** |
 |---|---|---|
 | NF app id | `open-fdd-lite` | `open-fdd` |
 | Source | [`lite/`](https://github.com/bbartling/open-fdd/tree/master/lite) | [`nf-app/`](https://github.com/bbartling/open-fdd/tree/master/nf-app) |
 | Host | 1 GB, Raspberry Pi class | 2 GB or more; 4 GB or more is comfortable |
-| FDD engine | none | DuckDB build (Node `@duckdb/node-api` 2.0.1-r.1, Parquet on disk) or Timescale build |
+| FDD engine | DuckDB, hourly | DuckDB build (Node `@duckdb/node-api` 2.0.1-r.1, Parquet on disk) or Timescale build |
 | Includes | dashboard, charts, points, NF BACnet server view, CSV export, RDF export, weather hook, `rdf` hook | Lite plus the FDD tab and the Overview RCx dashboard, fault points, SQL rules, SPARQL and `sparql-data` hooks |
-| Scheduled hooks | `weather` every 20 min, `rdf` on request | `fdd` hourly, `weather` every 20 min, `sparql`, `sparql-data`, `rdf` on request |
+| Scheduled hooks | `fdd` hourly, `weather` every 20 min, `rdf` on request | `fdd` hourly, `weather` every 20 min, `sparql`, `sparql-data`, `rdf` on request |
 | History it sees | NF's own, about 7 days | NF's, or long-range history from Timescale |
 | Weather BACnet mirror | on by default | off by default |
 
@@ -24,7 +24,7 @@ model in NF ([data model](modeling.html)); they differ in whether a rule engine 
 
 - the host has about 1 GB of RAM (NF alone uses most of it);
 - you only need live values, a week of trends, the model as Turtle and the BACnet server view;
-- FDD runs elsewhere and you want a light local dashboard.
+- you want the hourly DuckDB rule run, without the Full screens.
 
 ## Use Full when
 

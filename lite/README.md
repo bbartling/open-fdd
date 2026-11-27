@@ -2,7 +2,8 @@
 
 The small-box edition of Open-FDD for Normal Framework (NF). A tag-driven dashboard, charts,
 a view of NF's BACnet server, RDF export and an Open-Meteo weather hook mirrored to NF's BACnet
-server. **No FDD engine, no npm dependencies.** Built for 1 GB machines such as a Raspberry Pi 3.
+server. The hourly `fdd` hook runs the SQL pack on Node DuckDB (`@duckdb/node-api` 2.0.1-r.1).
+`nf_app_sync.py` installs that one dependency. No sql.js and no PGlite. Built for 1 GB machines such as a Raspberry Pi 3.
 
 NF app id `open-fdd-lite` (NF derives the id from the name "Open-FDD Lite": lower case,
 non-alphanumerics become "-"). It was previously the "Bench Viz" bench app.
@@ -74,8 +75,8 @@ they are harmless. The BACnet scope names are the ones from the NF scope list; c
 |---|---|---|
 | App id | `open-fdd-lite` | `open-fdd` |
 | Target | 1 GB boxes (Raspberry Pi 3) | machines with real resources |
-| FDD hook and rule engines | no | yes (SQL engines, RCx library, rule packs) |
-| Hook dependencies | none (Node built-ins) | sql.js, PGlite (`package.json`) |
+| FDD hook and rule engines | hourly Node DuckDB | DuckDB or Timescale, plus the RCx library |
+| Hook dependencies | `@duckdb/node-api` 2.0.1-r.1 | DuckDB build: `@duckdb/node-api`; Timescale build: `pg` |
 | Pages | dashboard, charts, points, BACnet server, model + RDF, tree | the same, plus FDD, RCx, energy, fault plots |
 | Weather hook | variables + BACnet mirror (av.N configurable) | the same (one shared hook) |
 | ECharts | UMD build, classic scripts, 6.1.0 | ES module build |

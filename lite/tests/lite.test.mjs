@@ -116,15 +116,24 @@ test("manifest: the app id is the slug of the name (NF derives the id from the n
   assert.equal(id, appSlug(name));
 });
 
-test("manifest: no FDD hook, no npm dependencies", () => {
-  assert.deepEqual(manifest.hooks.map((h) => h.id), ["open-meteo-weather", "rdf"]);
-  // the rdf hook (5.0.19) only serves the model Turtle: on request, no SPARQL engine and no FDD on the small box
-  assert.equal(manifest.hooks[1].mode, "MODE_ON_REQUEST");
+test("manifest: hourly DuckDB FDD hook, and the install dependency is Node DuckDB only", () => {
+  assert.deepEqual(manifest.hooks.map((h) => h.id), ["open-meteo-weather", "fdd", "rdf"]);
+  const fdd = manifest.hooks.find((h) => h.id === "fdd");
+  assert.equal(fdd.mode, "MODE_SCHEDULED");
+  assert.equal(fdd.config.engine, "duckdb");
+  assert.match(fdd.schedule.rrule, /FREQ=HOURLY/);
+  assert.equal(fdd.entryPoint, "/hooks/fdd.js");
+  assert.ok(manifest.files["/hooks/fdd.js"]);
+  assert.ok(manifest.files["/rules/pack-postgres.json"]);
+  assert.equal(manifest.hooks.find((h) => h.id === "rdf").mode, "MODE_ON_REQUEST");
   assert.ok(!/oxigraph|sql\.js|pglite/i.test(read("hooks/rdf.js")), "the Lite rdf hook carries no query engine");
   assert.ok(!/require\((?!['"](fs|path|vm|crypto|\.\/lib\/(paging|start-hook-args)\.js)['"]\))/.test(read("hooks/rdf.js")), "rdf hook: node built-ins and ./lib/{paging,start-hook-args}.js only");
-  assert.ok(!existsSync(path.join(root, "package.json")));
-  // node built-ins plus the dependency-free shared libs (shared/paging.js, shared/hooks/settings.js; scripts/nf/sync_shared.py)
-  assert.ok(!/require\((?!['"](https|http|node:|\.\/lib\/(paging|settings)\.js)['"]\))/.test(read("hooks/open_meteo_weather.js")), "hook may only require node built-ins and ./lib/{paging,settings}.js");
+  const pkg = JSON.parse(read("package.json"));
+  assert.deepEqual(pkg.dependencies, { "@duckdb/node-api": "2.0.1-r.1" });
+  assert.equal(pkg.devDependencies, undefined);
+  const shipped = JSON.stringify(manifest.files);
+  assert.ok(!/sql\.js|pglite|sql-wasm|pack-sqlite|duckdb-wasm/i.test(shipped));
+  assert.ok(!/require\((?!['"](https|http|node:|\.\/lib\/(paging|settings)\.js)['"]\))/.test(read("hooks/open_meteo_weather.js")), "weather hook may only require node built-ins and ./lib/{paging,settings}.js");
 });
 
 test("manifest: the weather hook config defaults to av.1-3 and matches the code", () => {

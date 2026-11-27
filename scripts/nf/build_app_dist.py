@@ -224,6 +224,17 @@ def problems(edition: str, tree: Path, files: list[str], recipe: str | None = No
         version = json.loads((tree / "static" / "version.json").read_text(encoding="utf-8"))
         if version.get("engineLabel") != label or version.get("engineLibraryVersion") != PINS[recipe][1]:
             bad.append(f"version.json engine fields are { {k: version.get(k) for k in ('engineLabel', 'engineLibraryVersion')} }")
+    else:
+        deps = json.loads((tree / "package.json").read_text(encoding="utf-8")).get("dependencies") or {}
+        if deps != RECIPE_DEPS["duckdb"]:
+            bad.append(f"Lite install dependencies {deps} are not @duckdb/node-api only")
+        if any(name in deps for name in ("sql.js", "@electric-sql/pglite", "pg")):
+            bad.append("Lite install pulls a retired or Timescale dependency")
+        names = "\n".join(files)
+        if "hooks/fdd.js" not in names:
+            bad.append("Lite tree has no FDD hook")
+        if re.search(r"sql-wasm|pack-sqlite|duckdb-wasm|pglite", names, re.I):
+            bad.append("Lite tree ships a SQLite, PGlite, or WASM engine file")
     return bad
 
 

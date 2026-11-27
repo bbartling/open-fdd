@@ -7,21 +7,20 @@ nav_order: 1
 # Lite or full?
 
 Pick the edition from the host, not from the building. Both read the same Haystack model in NF and need the same
-tagging ([Haystack tagging](haystack-tagging.html)); they differ in whether a rule engine runs on the box.
+tagging ([Haystack tagging](haystack-tagging.html)). Lite runs the rules on DuckDB. Full can also run them in Timescale.
 
 | | **Lite** ([`lite/`](https://github.com/bbartling/open-fdd/tree/master/lite)) | **Full** ([`nf-app/`](https://github.com/bbartling/open-fdd/tree/master/nf-app)) |
 |---|---|---|
 | NF app id | `open-fdd-lite` | `open-fdd` |
 | Host | 1 GB boxes, Raspberry Pi class | 2 GB or more; 4 GB or more is comfortable |
-| FDD engine | **none** (no rules run) | DuckDB build (Node `@duckdb/node-api` 2.0.1-r.1, Parquet on disk) or Timescale build |
+| FDD engine | DuckDB, hourly (`@duckdb/node-api` 2.0.1-r.1) | DuckDB build (Node `@duckdb/node-api` 2.0.1-r.1, Parquet on disk) or Timescale build |
 | What you get | dashboard, charts, points, view of NF's BACnet server, RDF export, weather hook | everything in Lite plus the FDD tab, the Overview RCx dashboard and occupancy calendar, fault points, SPARQL |
 | History it can see | NF's own history: **about 7 days** kept in NF's Redis time series (resampled by NF) | the same window from NF, Parquet on disk (default retention 90 days), or long-range history from TimescaleDB |
-| Hook dependencies | none (Node built-ins) | DuckDB build: `@duckdb/node-api`; Timescale build: `pg` |
+| Hook dependencies | `@duckdb/node-api` only | DuckDB build: `@duckdb/node-api`; Timescale build: `pg` |
 
 ## Choose Lite when
 
-- the host is a Raspberry Pi 3 or any box with about 1 GB of RAM. NF itself already uses most of it (its many service
-  processes sit around 400 to 450 MB), so there is no room for a rule engine;
+- the host is a Raspberry Pi 3 or any box with about 1 GB of RAM. The DuckDB hook is the engine that fits: one package, no sql.js and no PGlite;
 - you only need to look: live values, a week of trends, the model as Turtle, the BACnet server view;
 - you run FDD somewhere else (a PC or server reading NF's API) and want only a light local dashboard.
 

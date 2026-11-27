@@ -26,7 +26,8 @@ cannot disagree about binding or units. NF caches static files for 5 minutes.
   Parquet on disk) or Timescale. There is no DuckDB-WASM and no Python DuckDB runtime. `engine: "auto"` uses
   Timescale on the Timescale build or when that option is set, otherwise DuckDB. If `@duckdb/node-api` cannot load,
   the run fails. A config that names `sqlite` or `pglite` fails. The header badge is `DuckDB build` or `Timescale build`.
-- **Lite** (`lite/`, app id `open-fdd-lite`): no FDD engine and no npm dependencies; Overview, Charts, Points, BACnet
+- **Lite** (`lite/`, app id `open-fdd-lite`): the same hourly `fdd` hook as Full, on server-side Node DuckDB only
+  (`@duckdb/node-api` `2.0.1-r.1`, no sql.js, no PGlite, no WASM engine). Overview, Charts, Points, BACnet
   Server, Model and RDF; `weather` hook with an optional BACnet mirror. For 1 GB boxes.
 
 ## Data flow
