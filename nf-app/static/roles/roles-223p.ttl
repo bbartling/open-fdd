@@ -8,7 +8,7 @@
 @prefix unit: <http://qudt.org/vocab/unit/> .
 @prefix quantitykind: <http://qudt.org/vocab/quantitykind/> .
 @prefix ext: <urn:openfdd:ext#> .
-@prefix g36: <urn:openfdd:g36#> .
+@prefix g36: <http://data.ashrae.org/standard223/1.0/extensions/g36#> .
 @prefix ofdd: <urn:openfdd:role#> .
 
 <urn:openfdd:roles/1.1.0-draft.1> a owl:Ontology ;

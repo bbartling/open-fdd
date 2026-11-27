@@ -180,6 +180,8 @@ detector's own error.
 Offline and read-only; NF is optional (#1569).
 
 ```bash
+# Shifty and the 223P closure: pip install "open-fdd[ontology-align]"
+# pySHACL without that closure: pip install "open-fdd[ontology-shacl]"
 open-fdd-ontology-audit --example --out ./r                         # synthetic sheet + two-sensor AHU graph
 open-fdd-ontology-audit req.xlsx --refresh --out ./r                # pinned Brick / 223P / Haystack, sha256-checked
 open-fdd-ontology-audit req.xlsx --graph building.ttl --shacl --engine shifty --out ./r

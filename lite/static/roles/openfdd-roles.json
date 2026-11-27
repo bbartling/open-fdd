@@ -1,5 +1,4 @@
 {
- "$schema": "./openfdd-roles.schema.json",
  "vocabulary": "openfdd-roles",
  "version": "1.1.0-draft.1",
  "openfdd_release": "5.0.22",
@@ -4212,7 +4211,8 @@
     ],
     "equip_forbid": [
      "coolingTower",
-     "boiler"
+     "boiler",
+     "chiller"
     ],
     "binding_scope": "own",
     "conformance": "standard",

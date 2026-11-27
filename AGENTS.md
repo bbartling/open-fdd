@@ -60,7 +60,7 @@ The GitHub Pages site is five short sections, rules first. `scripts/check_pages.
 
 | # | Section | Holds |
 |---|---|---|
-| 1 | **Rules** | SQL and pandas cookbooks, using SQL rules outside Open-FDD, parity and the parity harness, writing SQL rules |
+| 1 | **Rules** | SQL and pandas cookbooks, using SQL rules outside Open-FDD, parity and the parity harness, [testing and parity](docs/testing-parity.md), writing SQL rules |
 | 2 | **Data model** | Haystack roles bind points to rule inputs; SI units; RDF and SPARQL |
 | 3 | **Lite vs Full** | The two NF app editions, charts and export |
 | 4 | **Normal Framework** | Short install and usage notes that link to the official NF docs; API reference |
@@ -83,6 +83,8 @@ The GitHub Pages site is five short sections, rules first. `scripts/check_pages.
 ## Tests to run before a PR
 
 CI and the hook typecheck use Node 22. Do not move the app to another major.
+
+FDD parity is SQL == pandas == the SPARQL client (`parity.yml`, nightly `parity-stress.yml`). RDF parity is rdflib against `nf-app/hooks/sparql.js` (`rdf-parity.yml`). OntoEnv and Shifty run in Python CI (`ontology-223p.yml`); the plugin does not resolve `owl:imports` or run SHACL. Pins and schedules: [docs/testing-parity.md](docs/testing-parity.md).
 
 ```bash
 node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs

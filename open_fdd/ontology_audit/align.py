@@ -32,12 +32,18 @@ def validate_model(path: Path, *, cross_check: bool = False) -> dict:
     The closure comes from the sha256 cache. A missing file is downloaded once;
     OntoEnv itself stays offline.
     """
-    from open_fdd.ontology_audit.closure import cached_223p_ttl, cached_closure_dir, copy_223p_closure
+    from open_fdd.ontology_audit.closure import (
+        cached_223p_ttl, cached_closure_dir, copy_223p_closure, unknown_model_imports,
+    )
     from open_fdd.ontology_audit.shacl import validate_shacl, violation_count
     from open_fdd.ontology_audit.sources import parse_rdf
 
+    model = parse_rdf(path)
+    unknown = unknown_model_imports(model)
+    if unknown:
+        raise ValueError("model owl:imports is not the pinned 223P root: " + ", ".join(unknown))
     closure, names = copy_223p_closure(cached_223p_ttl(), cached_closure_dir())
-    report = validate_shacl(parse_rdf(path), engine="shifty", closure=closure, cross_check=cross_check)
+    report = validate_shacl(model, engine="shifty", closure=closure, cross_check=cross_check)
     report["model"] = str(path)
     report["closure"] = names
     report["violation_count"] = violation_count(report)

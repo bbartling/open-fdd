@@ -39,6 +39,23 @@ def imported_pins() -> list[dict]:
     return [item for item in closure_pins() if item["iri"] != S223_ROOT]
 
 
+def unknown_model_imports(graph) -> list[str]:
+    """``owl:imports`` on the model that are not the pinned 223P root.
+
+    The closure passed to Shifty is that root. An import of anything else is
+    not resolved, including when the network is off.
+    """
+    from rdflib.namespace import OWL, RDF
+
+    found = set()
+    for subject in graph.subjects(RDF.type, OWL.Ontology):
+        for obj in graph.objects(subject, OWL.imports):
+            iri = str(obj)
+            if iri != S223_ROOT:
+                found.add(iri)
+    return sorted(found)
+
+
 def cache_dir() -> Path:
     env = os.environ.get("OPENFDD_223P_CACHE", "").strip()
     return Path(env) if env else Path.home() / ".cache" / "open-fdd" / "223p"
@@ -180,7 +197,7 @@ def materialize_223p_closure(dest: Path, shapes_path: Path | None = None) -> lis
     try:
         from ontoenv import OntoEnv
     except ImportError as exc:
-        raise RuntimeError('OntoEnv needed: pip install "open-fdd[ontology-align]"') from exc
+        raise ValueError('OntoEnv needed: pip install "open-fdd[ontology-align]"') from exc
     with OntoEnv(temporary=True, offline=True, strict=True) as env:
         _add_local_ontology(env, str(shapes_path))
         for path in _ontology_files(dest):
@@ -205,11 +222,14 @@ def copy_223p_closure(shapes_path: Path | None = None, ontology_dir: Path | None
     if ontology_dir is not None:
         files_to_add.extend(_ontology_files(Path(ontology_dir)))
     else:
-        files_to_add.extend(_ontology_files(cached_closure_dir()))
+        for item in imported_pins():
+            source = cache_dir() / item["filename"]
+            _read_pinned_rdf(source, item["sha256"])
+            files_to_add.append(source)
     try:
         from ontoenv import OntoEnv
     except ImportError as exc:
-        raise RuntimeError('OntoEnv needed: pip install "open-fdd[ontology-align]"') from exc
+        raise ValueError('OntoEnv needed: pip install "open-fdd[ontology-align]"') from exc
     with OntoEnv(temporary=True, offline=True, strict=True) as env:
         for path in files_to_add:
             _add_local_ontology(env, str(path))

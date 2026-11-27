@@ -1,5 +1,7 @@
-# Fixture: a model whose only 223P content is owl:imports. CI resolves that import
-# from the cached closure and runs Shifty. It declares no equipment.
+# Fixture: a model whose only 223P content is owl:imports. CI checks that this
+# import is the pinned 223P root, then validates the model against that cached
+# closure passed in as the shapes graph. The closure is not chosen by reading
+# this statement. The model declares no equipment.
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 

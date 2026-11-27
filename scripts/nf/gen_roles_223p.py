@@ -80,7 +80,7 @@ def render_ttl(vocab: dict) -> str:
         "@prefix unit: <http://qudt.org/vocab/unit/> .",
         "@prefix quantitykind: <http://qudt.org/vocab/quantitykind/> .",
         "@prefix ext: <urn:openfdd:ext#> .",
-        "@prefix g36: <urn:openfdd:g36#> .",
+        "@prefix g36: <http://data.ashrae.org/standard223/1.0/extensions/g36#> .",
         "@prefix ofdd: <urn:openfdd:role#> .",
         "",
         f"<urn:openfdd:roles/{vocab['version']}> a owl:Ontology ;",
@@ -185,15 +185,21 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _box_vocab(vocab_text: str) -> str:
+    """The box copy drops ``$schema``. That relative file is not in the app."""
+    return "".join(line for line in vocab_text.splitlines(keepends=True) if '"$schema"' not in line)
+
+
 def vendor_files(vocab_text: str, ttl: str, binding: str) -> dict[str, str]:
+    shipped = _box_vocab(vocab_text)
     digest = "\n".join([
-        f"{_sha256(vocab_text)}  openfdd-roles.json",
+        f"{_sha256(shipped)}  openfdd-roles.json",
         f"{_sha256(binding)}  role-binding.json",
         f"{_sha256(ttl)}  roles-223p.ttl",
         "",
     ])
     return {
-        "openfdd-roles.json": vocab_text,
+        "openfdd-roles.json": shipped,
         "role-binding.json": binding,
         "roles-223p.ttl": ttl,
         "roles.sha256": digest,
@@ -235,12 +241,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     stale = []
     for path, text in outputs(built).items():
-        current = path.read_text(encoding="utf-8") if path.is_file() else None
-        if current != text:
+        payload = text.encode("utf-8")
+        current = path.read_bytes() if path.is_file() else None
+        if current != payload:
             stale.append(path)
             if not args.check:
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(text, encoding="utf-8")
+                path.write_bytes(payload)
     if args.check and stale:
         print("gen_roles_223p: stale files:", file=sys.stderr)
         for path in stale:

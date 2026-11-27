@@ -26,6 +26,9 @@ class QueryAnswer:
 def _term_text(term: Any) -> str | None:
     if term is None:
         return None
+    # BlankNode.value is the identifier without the "_:" the Full hook writes.
+    if type(term).__name__ == "BlankNode":
+        return str(term)
     value = getattr(term, "value", None)
     return str(value) if value is not None else str(term)
 

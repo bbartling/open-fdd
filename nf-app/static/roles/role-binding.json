@@ -1966,7 +1966,8 @@
         "equip_markers": [],
         "equip_forbid": [
           "coolingTower",
-          "boiler"
+          "boiler",
+          "chiller"
         ],
         "binding_scope": "own"
       }

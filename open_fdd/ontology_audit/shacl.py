@@ -1,8 +1,9 @@
 """SHACL validation of a building graph or a 223P role file.
 
-The default engine is Shifty (``pyshifty==0.6.0``). The call states the library
-defaults: SHACL-AF rules on (``infer=True``), ``graph_mode="union"``,
-``on_unsupported="error"``, and ``minimum_severity="Violation"``.
+The default engine is Shifty (``pyshifty==0.6.0``). ``infer=True``,
+``graph_mode="union"`` and ``on_unsupported="error"`` are that library's
+defaults. ``minimum_severity="Violation"`` is this project's CI threshold:
+Shifty 0.6.0 itself defaults to ``"info"``, which would fail a Warning-only report.
 
 pySHACL (``pyshacl==0.40.2``) is the optional cross-check and the engine for the
 Haystack export shapes when ``engine="pyshacl"``. ``advanced=True`` is SHACL-AF;
@@ -18,7 +19,8 @@ from __future__ import annotations
 from importlib.resources import files
 from typing import Any
 
-# Same knobs as shifty.validate's defaults, named so a caller can see them.
+# infer, graph_mode and on_unsupported match shifty.validate. minimum_severity
+# is the project threshold (the library default is "info").
 SHIFTY_SETTINGS = {
     "minimum_severity": "Violation",
     "graph_mode": "union",
@@ -73,6 +75,25 @@ def _result_rows(results) -> list[dict[str, str]]:
     return found
 
 
+def _data_with_subclass_axioms(data, shapes):
+    """Copy ``rdfs:subClassOf`` from the shapes graph onto the data graph.
+
+    pySHACL with ``inference="none"`` still applies ``sh:class``, and that check
+    looks in the data graph. The axioms are the closure's stated hierarchy, not
+    an OWL or RDFS entailment.
+    """
+    from rdflib import Graph, RDFS
+
+    axioms = list(shapes.triples((None, RDFS.subClassOf, None)))
+    if not axioms:
+        return data
+    out = Graph()
+    out += data
+    for triple in axioms:
+        out.add(triple)
+    return out
+
+
 def _pyshacl(data, shapes) -> dict[str, Any]:
     if not pyshacl_available():
         return {"available": False, "conforms": None, "violations": [], "engine": "pyshacl",
@@ -80,7 +101,8 @@ def _pyshacl(data, shapes) -> dict[str, Any]:
                 **PYSHACL_SETTINGS}
     from pyshacl import validate
 
-    conforms, results, _text = validate(data, shacl_graph=shapes, **PYSHACL_SETTINGS)
+    conforms, results, _text = validate(
+        _data_with_subclass_axioms(data, shapes), shacl_graph=shapes, **PYSHACL_SETTINGS)
     if not hasattr(results, "subjects"):
         raise ValueError(f"SHACL validation failed to run: {results}")
     return {"available": True, "conforms": bool(conforms), "violations": _result_rows(results),
@@ -101,27 +123,53 @@ def _shifty(data, shapes) -> dict[str, Any]:
             "detail": "", "engine": "shifty", "report_text": str(text)[:20000], **SHIFTY_SETTINGS}
 
 
+def _shapes_for(closure, shapes):
+    """Closure alone, local shapes alone, or both when the caller passed a file and a closure."""
+    from rdflib import Graph
+
+    if closure is None:
+        return normalize_ready(shapes)
+    if shapes is None:
+        return closure
+    combined = Graph()
+    combined += closure
+    combined += normalize_ready(shapes)
+    return combined
+
+
+def normalize_ready(shapes):
+    from open_fdd.ontology_audit.doctor import normalize_graph
+
+    return normalize_graph(_shapes_graph(shapes))
+
+
 def validate_shacl(graph, shapes=None, *, engine: str = "shifty", closure=None,
                    cross_check: bool = False) -> dict[str, Any]:
     """Validate ``graph``. ``closure`` is the shapes graph when the model imports 223P.
 
+    A shapes graph passed together with ``closure`` is added to that closure.
     Haystack IRIs are normalized first. ``engine`` is ``shifty`` (default) or
     ``pyshacl``. There is no silent fallback from one engine to the other.
+    A cross-check that raises is recorded and does not replace the primary verdict.
     """
     if engine not in ("shifty", "pyshacl"):
         raise ValueError("engine must be 'shifty' or 'pyshacl'")
     from open_fdd.ontology_audit.doctor import normalize_graph
 
     data = normalize_graph(graph)
-    shapes_graph = closure if closure is not None else _shapes_graph(shapes)
-    if closure is None:
-        shapes_graph = normalize_graph(shapes_graph)
+    shapes_graph = _shapes_for(closure, shapes)
     info = _shifty(data, shapes_graph) if engine == "shifty" else _pyshacl(data, shapes_graph)
     info["closure_loaded"] = closure is not None
-    if cross_check and engine == "shifty":
-        info["cross_check"] = _pyshacl(data, shapes_graph)
-    elif cross_check:
-        info["cross_check"] = _shifty(data, shapes_graph)
+    if cross_check:
+        other = _pyshacl if engine == "shifty" else _shifty
+        other_name = "pyshacl" if engine == "shifty" else "shifty"
+        try:
+            info["cross_check"] = other(data, shapes_graph)
+        except (OSError, ValueError, RuntimeError) as exc:
+            info["cross_check"] = {
+                "available": False, "conforms": None, "violations": [],
+                "engine": other_name, "detail": str(exc),
+            }
     return info
 
 

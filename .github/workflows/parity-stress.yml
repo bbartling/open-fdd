@@ -111,3 +111,7 @@ jobs:
           SIZE: ${{ matrix.size }}
           PROFILE: ${{ matrix.profile }}
         run: python tests/parity/stress.py --engines pglite,postgres,duckdb --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE"
+
+  rdf-parity:
+    name: RDF parity
+    uses: ./.github/workflows/rdf-parity.yml

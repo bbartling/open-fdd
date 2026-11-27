@@ -39,11 +39,12 @@ for s in typed:
         problems.append(f"no label: {s}")
 linked = {o for s, p, o in g if p in REF} | {s for s, p, o in g if p in REF}
 points = []
+site_preds = [p for p in REF if str(p).endswith("siteRef")]
 for s in typed:
     kinds = {_local(str(t)) for t in g.objects(s, RDF.type)}
     if "point" in kinds:
         points.append(s)
-    if kinds & {"point", "equip", "device"} and not any(g.objects(s, p) for p in REF if str(p).endswith("siteRef")):
+    if kinds & {"point", "equip", "device"} and not any(o for p in site_preds for o in g.objects(s, p)):
         problems.append(f"no siteRef: {s}")
     if kinds & {"site", "equip", "device", "point", "weatherStation"} and s not in linked:
         problems.append(f"disconnected entity: {s}")
