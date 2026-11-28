@@ -72,7 +72,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="fc3"></a>[FC3](sql-cookbook.html#fc3) | match | match; differs only on edge data: Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows). |
 | <a id="fc4"></a>[FC4](sql-cookbook.html#fc4) | match |  |
 | <a id="fc5"></a>[FC5](sql-cookbook.html#fc5) | match | match; differs only on edge data: Edge profile only: after a data gap pandas re-applies its 600 s startup delay; the SQL has no startup holdoff (#1646). Basic datasets match. |
-| <a id="fc6"></a>[FC6](sql-cookbook.html#fc6) | match |  |
+| <a id="fc6"></a>[FC6](sql-cookbook.html#fc6) | match | match; differs only on edge data: Edge profile only. Basic datasets match: fan-on is supply_fan_operating_status, else the start/stop command. On edge, pandas applies its 600 s fan-running startup holdoff across jittered timestamps and the data gap; SQL's mode-delay window does not drop that same interval, so SQL fault hours are about 0.16 h higher. |
 | <a id="fc7"></a>[FC7](sql-cookbook.html#fc7) | match |  |
 | <a id="fc8"></a>[FC8](sql-cookbook.html#fc8) | match | match; differs only on edge data: Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas. |
 | <a id="fc9"></a>[FC9](sql-cookbook.html#fc9) | match | match; differs only on edge data: Same cause as FC8: the series begins with the fan already running; pandas holds off 600 s from the first sample, SQL does not (verified by trimming the start). |
@@ -141,6 +141,7 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | [FC14](#fc14) | all | 62.5 h &plusmn; 0.01 | 292.917 h &plusmn; 0.01 |
 | [FC3](#fc3) | edge | - | - |
 | [FC5](#fc5) | edge | - | - |
+| [FC6](#fc6) | edge | - | - |
 | [FC8](#fc8) | edge | - | - |
 | [FC9](#fc9) | edge | - | - |
 | [FCU-VALVE-PASS-CLG](#fcu-valve-pass-clg) | edge | - | - |

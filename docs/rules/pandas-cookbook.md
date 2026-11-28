@@ -1026,7 +1026,7 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#fc6)
+**Parity** [match](parity.html#fc6), except on edge data
 
 
 ### FC7 {#fc7}

@@ -138,6 +138,11 @@
    "reason": "Edge profile only: after a data gap pandas re-applies its 600 s startup delay; the SQL has no startup holdoff (#1646). Basic datasets match."
   },
   {
+   "rule": "FC6",
+   "scope": "edge",
+   "reason": "Edge profile only. Basic datasets match: fan-on is supply_fan_operating_status, else the start/stop command. On edge, pandas applies its 600 s fan-running startup holdoff across jittered timestamps and the data gap; SQL's mode-delay window does not drop that same interval, so SQL fault hours are about 0.16 h higher."
+  },
+  {
    "rule": "FC8",
    "scope": "edge",
    "reason": "Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas."
