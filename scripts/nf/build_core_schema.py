@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the copies and the catalog of the shared Open-FDD core schema.
 
-The one source is sql/fdd/schema/core.sql (tables fdd.point, fdd.rule_result, fdd.rule_config). This script
+The one source is sql/fdd/schema/core.sql (tables fdd.point, fdd.rule_result, fdd.rule_config, fdd.schema_meta). This script
 
   * copies it byte for byte to nf-app/timescale/core.sql (installed by the NF app) and open_fdd/data/core.sql
     (shipped in the wheel, so a downstream test compares its vendored copy against the installed package), and
@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wrote {dst.relative_to(ROOT).as_posix()}")
     if args.check or not pglite_available():
         stored = json.loads(lf(CATALOG.read_bytes())) if CATALOG.is_file() else {}
-        if stored.get("core_sql_sha256") != sha256_of(data) or set(stored.get("tables") or {}) != {"fdd.point", "fdd.rule_config", "fdd.rule_result"}:
+        if stored.get("core_sql_sha256") != sha256_of(data) or set(stored.get("tables") or {}) != {"fdd.point", "fdd.rule_config", "fdd.rule_result", "fdd.schema_meta"}:
             stale.append(CATALOG.relative_to(ROOT).as_posix())
         elif pglite_available():
             catalog = render_catalog().encode("utf-8")
