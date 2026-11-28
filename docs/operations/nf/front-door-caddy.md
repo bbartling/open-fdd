@@ -35,8 +35,8 @@ LAN browser / scripts --https:443--> Caddy --http--> NF Envoy 127.0.0.1:<port>
 ## Steps, in a safe order
 
 1. Back up NF's compose file and `.env` (`cp -p docker-compose.yml docker-compose.yml.bak-<timestamp>`).
-2. Prepare Caddy as in the `deploy/nf-caddy` README (`LAN_IP`, `NF_UPSTREAM`, `NF_PORT`, `APP_ID`, an `auth.caddy`
-   hash, optional certificate). If Caddy listens on a port NF does not use (HTTPS on 443), start it now and test it
+2. Prepare Caddy as in the `deploy/nf-caddy` README (`LAN_IP`, optional `TS_IP`, `NF_UPSTREAM`, `NF_PORT`, `APP_ID`, an `auth.caddy`
+   hash, optional certificate). Leave `TS_IP` empty to bind only `LAN_IP`. Do not edit the Caddyfile per site. If Caddy listens on a port NF does not use (HTTPS on 443), start it now and test it
    before closing NF. If Caddy takes NF's own LAN port (plain HTTP on 8090), it cannot start until NF stops
    listening there, so do step 3 first and start Caddy right after.
 3. Add `ENVOY_BIND_ADDRESS=127.0.0.1` to NF's environment and recreate NF (`docker compose up -d nf`). Expect a
@@ -60,17 +60,18 @@ read the page actually needs, not to open the console.
 Replace `<nf-host>` and the credentials; add `--cacert <cert>` when using the self-signed HTTPS variant.
 
 ```bash
-H=http://<nf-host>:8090      # or https://<nf-host> ; the port that serves routes, not the :80 redirect
+H=http://<nf-host>:8090      # plain HTTP: the port that serves routes. On HTTPS use https://<nf-host>
 curl -s -D - -o /dev/null $H/api/v1/apps/static/open-fdd/ | grep -i -E 'HTTP/|WWW-Authenticate'   # 200, no challenge
 curl -s -D - -o /dev/null $H/api/v1/sites | grep -i -E 'HTTP/|WWW-Authenticate'                   # 200, no challenge
-curl -s -D - -o /dev/null $H/ | grep -i -E 'HTTP/|WWW-Authenticate'                               # 401 Basic realm="restricted"
+curl -s -D - -o /dev/null $H/index.html | grep -i -E 'HTTP/|WWW-Authenticate'                    # 401 Basic realm="restricted"
 curl -s -o /dev/null -w '%{http_code}\n' -X POST $H/api/v1/bacnet/local                            # 401 (write stays locked)
 curl -s -D - -o /dev/null $H/api/v1/apps | grep -i -E 'HTTP/|WWW-Authenticate'                    # 403, no challenge
 curl -s -o /dev/null -w '%{http_code}\n' -u admin:<password> $H/api/v1/apps                       # 200 (with login)
+curl -s -o /dev/null -w '%{http_code}\n' https://<nf-host>/                                       # 302 to the dashboard (HTTPS profile)
 curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://<nf-host>:8090/                              # refused if NF no longer listens on the LAN
 ```
 
-Cancelling the 401 on `/` returns the front door's refusal, not the console. The same `routes.caddy` is what Lite uses; set `APP_ID=open-fdd-lite` so `:80` redirects to the Lite dashboard.
+Cancelling the 401 on `/index.html` returns the front door's refusal, not the console. On the HTTPS profile, bare `/` redirects to the dashboard the same way plain-HTTP `:80` does. The same `routes.caddy` is what Lite uses; set `APP_ID=open-fdd-lite` so that redirect opens the Lite dashboard.
 
 - Run an app hook once (NF console, or `manage_hooks run` with the hook uuid in the NF MCP): it should succeed,
   because hooks use loopback.
@@ -99,8 +100,8 @@ rejected me", "Login recovery" and "Open pages and NF auth".
 - The self-signed certificate needs the Subject Alternative Names clients use (IP and host names), and the
   `CA:TRUE` and `keyCertSign` extensions in the README command so Windows accepts it as a trusted root.
 - The open routes also cover `/favicon.ico`; without it every page load logs a 401.
-- Caddy's `bind {$LAN_IP}` keeps it off loopback, so NF's own port stays free for the tunnel and hooks. If the
-  host's IP changes, update `LAN_IP` and restart.
+- Caddy binds `{$LAN_IP}` and, when set, `{$TS_IP}`. An empty `TS_IP` binds only `LAN_IP`. Either way it stays off
+  loopback, so NF's own port stays free for the tunnel and hooks. If an address changes, update `.env` and restart.
 - The live-values route is open and uses `flush_interval -1`; Envoy ends a quiet stream with a 504 after about
   15 seconds, which Caddy turns into 204 so browsers log no red errors.
 - If the password is lost, write a new bcrypt hash into `auth.caddy` and restart Caddy; NF itself has no login
