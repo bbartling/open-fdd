@@ -11,6 +11,7 @@ a copy is missing, hand-edited or stale. Edit shared/..., run this script, commi
     shared/hooks/site-timezone.js           -> nf-app/hooks/lib/site-timezone.js   (the fdd / analytics hooks' site time zone, same order as the UI)
     shared/hooks/start-hook-args.js         -> {nf-app,lite}/hooks/lib/start-hook-args.js   (NF StartHook string-map args)
     shared/hooks/rdf.js                     -> {nf-app,lite}/hooks/rdf.js   (the model as Turtle, paged; the Lite SPARQL client path)
+    shared/zone-band.js                     -> nf-app/hooks/lib/zone-band.js, nf-app/static/zone-band.js   (the occupied zone temperature range slider's band, 5.0.22; Full only)
     shared/role-limits.js                   -> nf-app/hooks/lib/role-limits.js, nf-app/static/role-limits.js   (sweep role-limit overrides, #1589; Full only)
     shared/hooks/open_meteo_weather.js      -> nf-app/hooks/weather.js, lite/hooks/open_meteo_weather.js   (edition constant substituted: 'full' / 'lite')
     shared/static/<file>                    -> {nf-app,lite}/static/<file>
@@ -49,6 +50,7 @@ SHARED: dict[str, list[str]] = {
     "shared/static/sparql.js": [f"{app}/static/sparql.js" for app in BOTH],
     "shared/role-limits.js": ["nf-app/hooks/lib/role-limits.js", "nf-app/static/role-limits.js"],
     "shared/rule-tuning.js": ["nf-app/hooks/lib/rule-tuning.js", "nf-app/static/rule-tuning.js"],
+    "shared/zone-band.js": ["nf-app/hooks/lib/zone-band.js", "nf-app/static/zone-band.js"],
     "shared/hooks/open_meteo_weather.js": ["nf-app/hooks/weather.js", "lite/hooks/open_meteo_weather.js"],
     "shared/types/shapes.d.ts": [f"{app}/types/shapes.d.ts" for app in BOTH],
 }

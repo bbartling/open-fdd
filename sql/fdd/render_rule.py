@@ -16,6 +16,13 @@ sweep_catalog = importlib.util.module_from_spec(_spec)
 sys.modules.setdefault("_sensor_sweep_catalog", sweep_catalog)
 _spec.loader.exec_module(sweep_catalog)
 
+# The occupied zone temperature range (5.0.22): validated by the same module the pandas runner and the analytics use
+# (open_fdd/analytics/zone_band.py; JS twin shared/zone-band.js). Loaded by path for the same reason as above.
+_zspec = importlib.util.spec_from_file_location("_zone_band", REPO_ROOT / "open_fdd" / "analytics" / "zone_band.py")
+zone_band_lib = importlib.util.module_from_spec(_zspec)
+sys.modules.setdefault("_zone_band", zone_band_lib)
+_zspec.loader.exec_module(zone_band_lib)
+
 _RANGE_SCALE = {"absolute_temperature": "{{RANGE_SCALE_TEMPERATURE}}", "relative_humidity": "{{RANGE_SCALE_HUMIDITY}}",
                 "air_pressure": "{{RANGE_SCALE_PRESSURE}}"}
 _SPIKE_SCALE = {"absolute_temperature": "{{SPIKE_SCALE_TEMPERATURE}}", "relative_humidity": "{{SPIKE_SCALE_HUMIDITY}}",
@@ -93,8 +100,8 @@ def sentinel(key):
 def _format_value(value):
     return str(int(value)) if float(value).is_integer() else repr(float(value))
 
-def render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, role_limits=None):
-    return _render(rule_id, poll_seconds, overrides, parameter_controls, role_limits)[0]
+def render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, role_limits=None, zone_band=None):
+    return _render(rule_id, poll_seconds, overrides, parameter_controls, role_limits, zone_band=zone_band)[0]
 
 def render_template(rule_id, poll_seconds=300, overrides=None, parameter_controls=None):
     """{sql, fragment, sql_roles, values} for a sweep rule: sql has the role-limit fragment as sentinel(fragment);
@@ -125,7 +132,7 @@ def fill_template(template_sql, rule_id, values, sql_roles, role_limits):
         return values[match[1]]
     return template_sql.replace(sentinel(key), _PLACEHOLDER.sub(replace, text))
 
-def _render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, role_limits=None, sentinels=False):
+def _render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, role_limits=None, sentinels=False, zone_band=None):
     rules = json.loads((ROOT / 'tuning_catalog.json').read_text())['rules']
     rule = next((r for r in rules if r['rule_id'] == rule_id or rule_id in r.get('aliases',[])), None)
     if rule is None:
@@ -162,6 +169,12 @@ def _render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, 
         chosen[key] = value
         if not d['effect_in_sql']:
             print(f'WARNING: {rule_id}.{key} has no effect in this SQL; see catalog.',file=sys.stderr)
+    # 5.0.22: the site's occupied zone temperature range ({lo_c, hi_c} degC) feeds the comfort pairs (VAV-1 zone_t_lo/hi,
+    # SCHED-1 comfort_low/high) under any explicit override. An unusable band is ignored (the shipped default stays).
+    if zone_band is not None:
+        band = zone_band_lib.resolve_band(zone_band)
+        if band['source'] == 'saved':
+            chosen = zone_band_lib.apply_to_params(chosen, band, explicit=overrides.keys())
     for key,d in controls.items():
         if key != 'confirm_min':
             values[d['sql_placeholder']] = chosen[key]
@@ -229,8 +242,9 @@ if __name__ == '__main__':
     p.add_argument('rule_id')
     p.add_argument('--poll-seconds',type=float,default=300)
     p.add_argument('--params',default='{}',help='JSON tuner overrides')
+    p.add_argument('--zone-band',default=None,help='JSON {"lo_c":..,"hi_c":..} occupied zone temperature range (degC)')
     args = p.parse_args()
     try:
-        print(render(args.rule_id,args.poll_seconds,json.loads(args.params)))
+        print(render(args.rule_id,args.poll_seconds,json.loads(args.params),zone_band=json.loads(args.zone_band) if args.zone_band else None))
     except (ValueError,TypeError) as exc:
         p.error(str(exc))

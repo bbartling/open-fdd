@@ -38,6 +38,20 @@
   // ---- pure math ----------------------------------------------------------------------
   /** Default comfort band [lo, hi] in degC (70-75 F). */
   const defaultBand = () => [COMFORT_LO_C, COMFORT_HI_C];
+  /**
+   * The comfort band [lo, hi] in degC for a zone with no setpoints: the occupied zone temperature range saved with the
+   * site's occupancy calendar (5.0.22, shared/zone-band.js; globalThis.ofddOccCalendars[siteRef].zone_band), else the
+   * 70-75 F default. A band that does not validate (NaN, inverted, ...) falls back to the default, never to a bad edge.
+   */
+  function siteBand(eq) {
+    const ZB = globalThis.ofddZoneBand;
+    const ref = eq && eq.rec && eq.rec.attrs && eq.rec.attrs.siteRef;
+    const all = globalThis.ofddOccCalendars;
+    const cal = all && ref != null ? (all instanceof Map ? all.get(ref) : all[ref]) : null;
+    if (!ZB || !cal || cal.zone_band == null) return defaultBand();
+    const b = ZB.resolveBand(cal.zone_band);
+    return [b.lo_c, b.hi_c];
+  }
   /** Half-width of the band around a single zone setpoint, in delta degC (2.5 delta F). */
   const spHalfWidth = () => COMFORT_SP_HALF_C;
 
@@ -624,7 +638,7 @@
   // ---- the 18 presets -------------------------------------------------------------------
   /** Per-sample comfort band (degC) for zone_air_temperature series `arr`: heating..cooling sp, else sp +/- 1.3889 delta C, else 21.111-23.889 C. */
   function bandsFor(arr, data, step, w) {
-    const [dl, dh] = defaultBand(), half = spHalfWidth();       // degC; data is SI
+    const [dl, dh] = siteBand(w.eq), half = spHalfWidth();       // degC; data is SI (the saved site band, else 70-75 F)
     const sp = w.sp ? bucketMap(data.get(w.sp.uuid) || [], step) : null;
     const cl = w.c && w.h ? bucketMap(data.get(w.c.uuid) || [], step) : null;
     const ht = w.c && w.h ? bucketMap(data.get(w.h.uuid) || [], step) : null;
@@ -636,6 +650,13 @@
       else { lo.push(dl); hi.push(dh); }
     }
     return { lo, hi };
+  }
+
+  /** The fallback band of the equips' sites as text in the display units, e.g. "21–24 °C" (saved site range, else 70-75 F). */
+  function bandNote(ctx, want) {
+    const bands = new Map(want.map((w) => { const [l, h] = siteBand(w.eq); return [`${l}|${h}`, [l, h]]; }));
+    const d = (c) => round(ctx.disp(c, TEMP).value, 0);
+    return [...bands.values()].map(([l, h]) => `${d(l)}–${d(h)} ${ctx.dispUnit(TEMP)}`).join(" / ");
   }
 
   // Zones. Fleet analytics (pies, rankings, the all-zones band) draw only in the all-devices view.
@@ -663,7 +684,7 @@
       ], { title: "All zones — samples by comfort" }), "rcx_zone_comfort_donut");
       const n = tot.inBand + tot.below + tot.above;
       if (n) ctx.kpi({ id: "zones-in-band", label: "Zones in comfort band", value: `${round((tot.inBand / n) * 100, 0)} %`, sub: `${rows.length} zones${ctx.ahuOn ? " · while AHU on" : ""}`, order: 10, tone: tot.inBand / n < 0.8 ? "warn" : "ok" });
-      return okA ? `${rows.length} zone(s) · band = setpoint ±${round(ctx.dispDelta(COMFORT_SP_HALF_C, TEMP).value, 1)} ${ctx.dispDelta(0, TEMP).unit}, heating..cooling sp, else ${round(ctx.disp(COMFORT_LO_C, TEMP).value, 0)}–${round(ctx.disp(COMFORT_HI_C, TEMP).value, 0)} ${ctx.dispUnit(TEMP)}${filt.note()}` : noData("zone temperature");
+      return okA ? `${rows.length} zone(s) · band = setpoint ±${round(ctx.dispDelta(COMFORT_SP_HALF_C, TEMP).value, 1)} ${ctx.dispDelta(0, TEMP).unit}, heating..cooling sp, else ${bandNote(ctx, want)}${filt.note()}` : noData("zone temperature");
     },
   });
 
@@ -878,7 +899,7 @@
   });
 
   globalThis.rcxPresetMath = {
-    DEGREE_DAY_BASE_C, COMFORT_LO_C, COMFORT_HI_C, COMFORT_SP_HALF_C, defaultBand, spHalfWidth, comfortStats, rankComfort, resetFit, pairSeries, bucketMap,
+    DEGREE_DAY_BASE_C, COMFORT_LO_C, COMFORT_HI_C, COMFORT_SP_HALF_C, defaultBand, siteBand, spHalfWidth, comfortStats, rankComfort, resetFit, pairSeries, bucketMap,
     vavHealthStats, vavVerdict, stuckStats, stuckVerdict, rogueVavRows, vavVerdictLabel, zoneBand, pickRogueZones, ahuFilter,
     ROGUE: { OPEN_PCT: ROGUE_OPEN_PCT, CLOSED_PCT: ROGUE_CLOSED_PCT, SHARE: ROGUE_SHARE, MIN_SAMPLES: ROGUE_MIN_SAMPLES },
     ZONE_BAND: { P_LO: ZONE_P_LO, P_HI: ZONE_P_HI, MIN_ZONES: ZONE_BAND_MIN_ZONES, ROGUE_TOP: ZONE_ROGUE_TOP, ROGUE_MIN_SHARE: ZONE_ROGUE_MIN_SHARE, ROGUE_MIN_EXCESS_C: ZONE_ROGUE_MIN_EXCESS_C },

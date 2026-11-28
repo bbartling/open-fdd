@@ -24,7 +24,7 @@ The DuckDB install shows Overview, Charts, Backend server, and Model/RDF. The Ti
 
 | Tab | Shows | Charts |
 |---|---|---|
-| Overview | Site summary. Sensor and process points for one equipment: live cards, status chips, I/O table, point table, history. Fault and timeline points stay on Fault detection. The Timescale install also shows the weekly occupancy editor and the retro-commissioning panels below. | History is a time-series line (step for Bool). Retro-commissioning types are in the next table. |
+| Overview | Site summary. Sensor and process points for one equipment: live cards, status chips, I/O table, point table, history. Fault and timeline points stay on Fault detection. The Timescale install also shows the weekly occupancy editor with its occupied zone temperature range slider and the retro-commissioning panels below. | History is a time-series line (step for Bool). Retro-commissioning types are in the next table. |
 | Charts | One catalog chart at a time. | See the catalog table. |
 | Analytics | Timescale install. Scatter, air-handler timeseries, VAV plots and energy. History loads when the tab opens. | See the catalog table. |
 | Fault detection | Timescale install. Fault / pass / skipped / insufficient chips, one open rule (SI thresholds, inputs, tune drawer), and a More section (fault heat map, fault charts, rule-input table). | Open rule: time-series lines, red shade for a confirmed fault, grey shade for equipment off, 0/1 fault lane. Heat map of fault hours. |
@@ -89,3 +89,23 @@ Registered with `rcxView` in `nf-app/static/`. A panel is omitted when the model
 | `fdd-sensor-fault` | Sensor with the most sweep faults | heatmap | Fault detection |
 
 kWh twins of the meter views use the same id with `-kwh`. Backends and export limits are on [DuckDB vs Timescale](editions.html).
+
+## Occupied zone temperature range
+
+The Overview shows a two-handle slider beside the weekly occupancy calendar. It sets the temperature band the site's occupied zones should hold.
+
+| | |
+|---|---|
+| Limits | 65-80 F (18.333-26.667 C). Values are clamped; never negative. |
+| Default | 70-75 F (21.111-23.889 C), used when nothing valid is saved. |
+| Minimum gap | 2 F (1.111 K). The handles stop that far apart, and the server enforces the same gap. |
+| Units | Stored in degC. Shown in the unit system of the SI/imperial button; imperial is display only and never stored. |
+| Saved where | In the site's occupancy calendar document (`OCC-CALENDAR`, field `zone_band: {lo_c, hi_c}`), so it is per site, revisioned, and rolled back or reset with the calendar. The save needs the Timescale store, like the rest of the calendar. |
+| Rejected | A saved or posted band that is missing, non-numeric, NaN or inverted (low above high) is refused and nothing is stored. An unusable stored band reads as the 70-75 F default. |
+
+What it changes, on both the DuckDB and Timescale engines:
+
+- Zone comfort analytics: the `{lo}` / `{hi}` of `sql/analytics/zone_comfort.sql` and the comfort band on the zone comfort charts (a zone's own setpoint band still wins on the chart).
+- Zone comfort FDD rules: VAV-1 `ZONE_T_LO` / `ZONE_T_HI` and SCHED-1 `comfort_low` / `comfort_high`. A run records the band it used in the result's `parameters.zone_band` (the values applied, any rule value left alone, and the calendar revision).
+
+Precedence, lowest to highest: shipped default (70-75 F) < the site's saved band < site rule tuning < equipment rule tuning. An explicit per-rule tuning value always wins over the band; if only one end of a pair is tuned, the band supplies the other end only while the gap stays at least 2 F.

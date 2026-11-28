@@ -17,6 +17,8 @@
   const RULE_ID = "OCC-CALENDAR";
   const DEFAULT_TZ = "America/Chicago";
   const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+  /** shared/zone-band.js: the browser global, else the CommonJS copy next to this file (the hooks). */
+  const zoneBandLib = () => root.ofddZoneBand || (typeof require !== "undefined" ? require("./zone-band.js") : null);
 
   /** "HH:MM" -> minutes after midnight; null when not a valid 24 h time. */
   function minutesOf(text) {
@@ -36,7 +38,8 @@
   /**
    * A stored / posted calendar -> the canonical document. Missing days or fields take the defaults (like the Python
    * from_dict); a bad time or zone is an error (never silently replaced), so a Save cannot store garbage.
-   * @param {any} raw @param {{ tz?: string }} [opts]
+   * zone_band (5.0.22, degC): read leniently (an unusable band is dropped = the default), strictly when opts.strict (a save).
+   * @param {any} raw @param {{ tz?: string, strict?: boolean }} [opts]
    */
   function normalizeCalendar(raw, opts = {}) {
     const def = defaultCalendar(opts.tz);
@@ -70,8 +73,19 @@
         throw new Error(`${d} ${r.start}-${r.end} runs into ${next} ${n.start}-${n.end}: end ${d} by ${n.start} or move ${next}'s start`);
       }
     });
-    return { timezone: tz, days };
+    const out = { timezone: tz, days };
+    // 5.0.22: the site's occupied zone temperature range rides in the same document (degC, shared/zone-band.js).
+    // Reading (default) drops an unusable band, so the site falls back to the 70-75 F default; a save (strict) rejects it.
+    if (raw.zone_band != null) {
+      const ZB = zoneBandLib();
+      if (opts.strict) out.zone_band = ZB.validateBand(raw.zone_band);
+      else { const b = ZB.resolveBand(raw.zone_band); if (b.source === "saved") out.zone_band = { lo_c: b.lo_c, hi_c: b.hi_c }; }
+    }
+    return out;
   }
+
+  /** The calendar's zone band as { lo_c, hi_c, source: "saved" | "default" } (the 70-75 F default when none is saved). */
+  function zoneBandOf(cal) { return zoneBandLib().resolveBand(cal && cal.zone_band); }
 
   /** Occupied hours of one day row (0 when unoccupied); end <= start wraps past midnight. */
   function dayHours(row) {
@@ -121,11 +135,11 @@
   function normalizeCalendarOverride(doc) {
     if (!doc || typeof doc !== "object" || Array.isArray(doc)) throw new Error("overrides must be { version: 1, calendar: {...} }");
     if (doc.version !== 1) throw new Error("overrides.version must be 1");
-    return { version: 1, calendar: normalizeCalendar(doc.calendar) };
+    return { version: 1, calendar: normalizeCalendar(doc.calendar, { strict: true }) };
   }
 
   const api = { DAYS, DAY_LABELS, RULE_ID, DEFAULT_TZ, minutesOf, defaultCalendar, normalizeCalendar, dayHours, occupiedHoursPerWeek,
-    calendarSchedule, normalizeCalendarOverride };
+    calendarSchedule, normalizeCalendarOverride, zoneBandOf };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.ofddOccupancy = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
