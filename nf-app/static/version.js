@@ -28,6 +28,50 @@
       + (v.deployed ? `, deployed ${v.deployed}` : "");
     h1.insertAdjacentElement("afterend", a);
   }
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
-  else mount();
+  function showEngineError(text) {
+    const err = document.getElementById("err");
+    if (!document.getElementById("engineBuild") || !text || !err) return;
+    err.textContent = text;
+    err.classList.add("show");
+  }
+  function errorFromRun(run) {
+    const blobs = [];
+    const results = (run && run.results) || {};
+    for (const g of Object.values(results)) {
+      if (!g || typeof g !== "object") continue;
+      if (g.result) blobs.push(g.result);
+      for (const e of g.events || []) if (e && e.message) blobs.push(e.message);
+    }
+    for (const b of blobs) {
+      if (b && typeof b === "object" && b.engine_error) return String(b.engine_error);
+      if (typeof b === "string") {
+        try { const j = JSON.parse(b); if (j && j.engine_error) return String(j.engine_error); } catch (e) { /* log line is not JSON */ }
+        if (b.startsWith("DuckDB engine failed to load:")) return b;
+      }
+    }
+    return "";
+  }
+  async function engineHealth() {
+    if (!document.getElementById("engineBuild") || typeof api !== "function") return;
+    const app = (location.pathname.match(/\/apps\/static\/([^/]+)/) || [])[1] || "open-fdd";
+    try {
+      const started = await api(`/api/v1/apps/${app}/hooks/schema`, {});
+      if (started && started.engine_error) { showEngineError(started.engine_error); return; }
+      const pid = started && started.pid;
+      if (!pid) return;
+      const deadline = Date.now() + 20000;
+      while (Date.now() < deadline) {
+        const runs = await api(`/api/v1/apps/${app}/hooks/schema/runs?page_size=5&include_results=true`);
+        const hit = ((runs && runs.runs) || []).find((r) => String(r.pid) === String(pid));
+        const msg = hit && errorFromRun(hit);
+        if (msg) { showEngineError(msg); return; }
+        const state = String((hit && (hit.state || hit.status)) || "");
+        if (hit && /SUCCESS|FAIL|ERROR|CANCEL/.test(state)) return;
+        await new Promise((ok) => setTimeout(ok, 400));
+      }
+    } catch (e) { /* the badge still names the build */ }
+  }
+  function start() { mount(); engineHealth(); }
+  if (document.readyState === "complete") start();
+  else document.addEventListener("DOMContentLoaded", start);
 })();

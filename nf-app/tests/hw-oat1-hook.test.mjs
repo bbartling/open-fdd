@@ -56,7 +56,7 @@ async function run(points, config = {}) {
     async query(id) { seen.queries.push(id); return [{ equipment_id: "BLR-1", fault_hours: 23.5, covered_hours: 24, fault_pct: 97.9, assessment: "assessed" }]; },
     async close() {},
   });
-  const summary = await hook.runFdd({ sdk: { http: http(points), logEvent: (m) => logs.push(m) }, config: { engine: "sqlite", ...config }, pack: PACK, createEngine: engine, now: NOW });
+  const summary = await hook.runFdd({ sdk: { http: http(points), logEvent: (m) => logs.push(m) }, config: { engine: "duckdb", ...config }, pack: PACK, createEngine: engine, now: NOW });
   return { summary, seen, logs };
 }
 const vals = (rows, name) => [...new Set((rows || []).map((r) => r[name]).filter((x) => x != null))];
@@ -88,7 +88,7 @@ test("no weather point but a local outside-air sensor: it fills web_oa_t (the lo
   assert.ok(web.length === 1 && near(web[0], 10), `web_oa_t is the local sensor (50 degF): ${web}`);
 });
 
-// ---- the real pack on the SQLite engine: what the FDD tab draws ------------------------------------------------------
+// ---- the real pack on the DuckDB engine: what the FDD tab draws -------------------------------------------------------
 function recordingHttp(points) {
   const base = http(points);
   const writes = { points: [], data: [] };
@@ -105,7 +105,7 @@ function recordingHttp(points) {
 async function realRun(points) {
   const h = recordingHttp(points);
   const logs = [];
-  const summary = await hook.runFdd({ sdk: { http: h, logEvent: (m) => logs.push(m) }, config: { engine: "sqlite" }, now: NOW });
+  const summary = await hook.runFdd({ sdk: { http: h, logEvent: (m) => logs.push(m) }, config: { engine: "duckdb" }, now: NOW });
   const rec = (marker) => h.writes.points.find((r) => r.layer === "model" && new RegExp(marker).test(r.attrs.markers) && r.attrs.ruleRef === "HW-OAT-1");
   const timeline = rec("fault_timeline");
   const lane = timeline ? h.writes.data.filter((d) => d.uuid === timeline.uuid).flatMap((d) => d.values) : [];

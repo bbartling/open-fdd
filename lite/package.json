@@ -1,0 +1,10 @@
+{
+  "name": "open-fdd-lite",
+  "version": "5.0.21",
+  "private": true,
+  "description": "Open-FDD Lite: server-side Node DuckDB for the hourly FDD hook. No sql.js and no PGlite.",
+  "license": "MIT",
+  "dependencies": {
+    "@duckdb/node-api": "2.0.1-r.1"
+  }
+}

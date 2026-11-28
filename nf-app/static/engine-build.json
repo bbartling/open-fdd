@@ -1,0 +1,6 @@
+{
+  "id": "duckdb",
+  "label": "DuckDB build",
+  "library": "@duckdb/node-api",
+  "libraryVersion": "2.0.1-r.1"
+}

@@ -78,7 +78,7 @@ const engine = ({ kind = "sqlite", rows, newest = NEWEST } = {}) => async () => 
 const run = (http, createEngine, config = {}) => {
   const logs = [];
   const sdk = { http, logEvent: (m) => logs.push(m) };
-  return { logs, summary: hook.runFdd({ sdk, config, pack: PACK, createEngine, now: NOW }), hook: () => hook({ sdk, config, pack: PACK, createEngine, now: NOW }) };
+  return { logs, summary: hook.runFdd({ sdk, config, pack: PACK, createEngine, now: NOW, hasDuckdb: () => true }), hook: () => hook({ sdk, config, pack: PACK, createEngine, now: NOW, hasDuckdb: () => true }) };
 };
 const staleReasons = (http) => [...new Set(http.writes.points.filter((r) => r.layer === "model" && r.attrs.fddStatus === "stale").map((r) => r.attrs.fddReason))];
 
@@ -93,7 +93,7 @@ test("normal run stays ok: results written, no failure, report in the log", asyn
   assert.equal(s.source_freshness.newest_sample, "2026-11-09T14:55:00.000Z", "newest bucket the engine saw");
   const out = await run(fakeHttp({ points: [FANC(), FANS(), OAT] }), engine({ rows: 288 })).hook();
   assert.equal(out.failure, null, "the hook returns the summary, it does not throw");
-  assert.ok(r.logs.some((l) => /^open-fdd run: engine sqlite, data window .* \(24 h\); newest input sample in the sqlite source \d{4}-/.test(l)), r.logs.join("\n"));
+  assert.ok(r.logs.some((l) => /^open-fdd run: engine duckdb, data window .* \(24 h\); newest input sample in the duckdb source \d{4}-/.test(l)), r.logs.join("\n"));
   assert.ok(r.logs.some((l) => /open-fdd counts: eligible 1, evaluated 1, written 2, skipped 0, stale 0/.test(l)));
 });
 
@@ -119,7 +119,7 @@ test("empty timescale history: stale 'no input data in window (newest sample at 
   assert.ok(r.logs.some((l) => /skipped by reason: no-data x1; stale by reason: no input data in window x2/.test(l)), r.logs.join("\n"));
 });
 
-test("sqlite engine, source without data in the window: same reason, newest sample from NF's latest value", async () => {
+test("source without data in the window: same reason, newest sample from NF's latest value", async () => {
   const latest = { ts: "2026-11-08T18:55:00Z", double: 1 };
   const http = fakeHttp({ points: [FANC({}), FANS(), OAT].map((p) => ({ ...p, latestValue: latest })), noHistory: true });
   const s = await run(http, engine({ rows: 0 })).summary;
@@ -213,10 +213,10 @@ test("history hook: empty result is ok with a reason and the newest source times
 test("#1673: bound sweep sensors with no sample in the window are SV-STALE, not a silent no-data skip", async () => {
   const { readFileSync } = await import("node:fs");
   const { createEngine } = require("../hooks/lib/engines.js");
-  const litePack = JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8"));
+  const pgPack = JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8"));
   const http = fakeHttp({ points: [FANC(), FANS(), OAT], noHistory: true });
   const logs = [];
-  const s = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: {}, pack: litePack, createEngine, now: NOW });
+  const s = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: {}, pack: pgPack, createEngine, now: NOW });
   assert.ok(logs.some((l) => /only SV-STALE runs/.test(l)), logs.join("\n"));
   assert.equal(s.skipped.filter((x) => x.kind === "no-data").length, 0, "the equipment is assessed for missing data");
   const stale = http.writes.points.filter((r) => r.layer === "model" && r.attrs.ruleRef === "SV-STALE");

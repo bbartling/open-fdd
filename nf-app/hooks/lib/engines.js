@@ -290,7 +290,7 @@ async function createPglite(pack, opts = {}) {
     ({ PGlite } = await import("@electric-sql/pglite"));
   } catch (e) {
     if (e && (e.code === "ERR_MODULE_NOT_FOUND" || /Cannot find (package|module)/.test(String(e.message)))) {
-      throw new Error('pglite not installed: install the app dependencies (nf_app_sync.py install, or PATCH /api/v1/apps/<app-id>/dependencies then restart), or set the hook config engine to "sqlite"');
+      throw new Error("pglite is not installed. It is a parity-test engine only (nf-app devDependency), not a runtime engine. Use duckdb or timescale.");
     }
     throw e;
   }
@@ -436,25 +436,24 @@ async function createTimescale(pack, opts = {}) {
 // ---------------------------------------------------------------- duckdb (#1645: native DuckDB, warm in-memory instance)
 
 /**
- * Native DuckDB (@duckdb/node-api, pinned in package.json optionalDependencies) runs the Postgres pack as written; the
+ * Native DuckDB (@duckdb/node-api, pinned in package.json dependencies) runs the Postgres pack as written; the
  * fdd.* helpers are the SQL macros of pack.duckdb_helpers_sql (sql/fdd/duckdb/duckdb_helpers.sql).
  *
- * Lifetime: ONE in-memory DuckDB instance per hook process, created on first use and kept warm between runs (no
- * re-initialisation, macros installed once). Each createEngine() opens its own connection and loads the inputs into
- * TEMP tables of that connection, so overlapping runs never see each other's rows; close() disconnects, which drops
- * them. releaseDuckDb() closes the instance itself (tests, shutdown). Incremental append and Parquet history are later
- * slices of #1645: today every run reloads its window, as the other in-process engines do.
+ * Lifetime: ONE DuckDB instance per hook process, created on first use and kept warm between runs (no
+ * re-initialisation, macros installed once). Each createEngine() opens its own connection. With config.parquetDir
+ * (the fdd hook always sets it) history is Parquet on disk and rules read TEMP views over that window
+ * (hooks/lib/duckdb-parquet.js). Without parquetDir the connection loads the window into its own TEMP tables, which
+ * is the isolated checker the parity tests use. close() disconnects. releaseDuckDb() closes the instance.
  *
- * Offline and disk-free by construction (DUCKDB_SAFETY): extension autoinstall and autoload are OFF, so DuckDB never
- * downloads anything (an edge box may have no internet); everything the pack needs (core functions, ICU time zones,
- * Parquet, JSON) is statically linked in the 2.0.1 build. TimeZone is set with SET GLOBAL after creation: passing it as
- * a create option makes DuckDB try to autoinstall ICU from the network first. temp_directory is '' (DuckDB's default for
- * an in-memory database is '.tmp' with up to 90 % of the free disk), so nothing is ever spilled to the SD card.
+ * Offline: extension autoinstall and autoload are OFF, so DuckDB never downloads anything. ICU, Parquet and JSON are
+ * statically linked in the 2.0.1 build. TimeZone is SET GLOBAL after creation: passing it as a create option makes
+ * DuckDB try to autoinstall ICU from the network first. Without parquetDir, temp_directory is '' so the checker does
+ * not spill. With parquetDir, spill goes only to <parquetDir>/tmp and is capped (max_temp_directory_size, default 1GB).
  *
  * Memory (1 GB edges): the instance is capped by DuckDB's memory_limit (default DUCKDB_DEFAULTS.memoryLimit) and
  * threads. With spilling off, a query over the cap fails with an out-of-memory error (the rule is reported as a rule
- * error). If the instance cannot be created at all, createEngine throws and the run fails loudly (no silent engine
- * swap; only a package that does not load falls back, see fdd.js pickEngine). Settings: app options duckdbMemoryLimit
+ * error). If the instance cannot be created, or @duckdb/node-api does not load, the run fails. pickEngine does not
+ * switch engines. Settings: app options duckdbMemoryLimit
  * ("256MB") and duckdbThreads (2), passed here as opts.config { memoryLimit, threads }; env OPENFDD_DUCKDB_MEMORY_LIMIT /
  * OPENFDD_DUCKDB_THREADS when unset.
  * The settings of the first engine of a process win until releaseDuckDb().
@@ -480,7 +479,15 @@ function duckDbOptions(cfg = {}) {
     if (!DUCKDB_EXTRA_KEYS.includes(k)) throw new Error(`duckdb setting ${JSON.stringify(k)} is not allowed`);
     extra[k] = String(v);
   }
-  return { memory_limit: mem.replace(/\s+/g, ""), threads: String(threads), ...extra, ...DUCKDB_SAFETY };
+  /** @type {Record<string, string>} */
+  const options = { memory_limit: mem.replace(/\s+/g, ""), threads: String(threads), ...extra, ...DUCKDB_SAFETY };
+  if (cfg.tempDirectory) {
+    const cap = String(cfg.maxTempDirectory || "1GB").replace(/\s+/g, "");
+    if (!/^\d+(\.\d+)?(KB|MB|GB|KiB|MiB|GiB)$/i.test(cap)) throw new Error(`duckdb maxTempDirectory ${JSON.stringify(cap)}: use e.g. "1GB"`);
+    options.temp_directory = String(cfg.tempDirectory);
+    options.max_temp_directory_size = cap;
+  }
+  return options;
 }
 
 async function loadDuckDbApi() {
@@ -550,9 +557,15 @@ const duckRows = (reader) => reader.getRowObjectsJS().map((r) => {
 });
 
 async function createDuckDb(pack, opts = {}) {
-  const state = await warmDuckDb(pack, opts.config);
+  const cfg = { ...(opts.config || {}) };
+  if (cfg.parquetDir) {
+    fs.mkdirSync(path.join(String(cfg.parquetDir), "tmp"), { recursive: true });
+    cfg.tempDirectory = path.join(String(cfg.parquetDir), "tmp");
+  }
+  const state = await warmDuckDb(pack, cfg);
   const { api } = state;
   const conn = await state.instance.connect();
+  const parquet = cfg.parquetDir ? require("./duckdb-parquet") : null;
   let loaded = false;
   let closed = false;
   const runSql = async (ruleId, sql, which) => {
@@ -564,7 +577,7 @@ async function createDuckDb(pack, opts = {}) {
     if (!rule) throw new Error(`unknown rule ${ruleId}`);
     return sql ? { ...rule, ...sql } : rule;
   };
-  // Saved tuning (#1589/#1636, #1798): same reader as sqlite and pglite. The hook passes rendered SQL into query().
+  // Saved tuning (#1589/#1636, #1798): savedTuning() reads fdd.rule_config when a Timescale store is configured.
   return {
     kind: "duckdb",
     ...savedTuning(opts),
@@ -579,6 +592,13 @@ async function createDuckDb(pack, opts = {}) {
     /** DuckDB version string of the warm instance (e.g. "v2.0.1"). */
     async version() { return (await conn.runAndReadAll("SELECT version() AS v")).getRowObjectsJS()[0].v; },
     async load(input) {
+      if (parquet) {
+        const n = await parquet.loadWindow(conn, api, pack, input, cfg, {
+          tableColumns, quoteId, cellValue, TABLE_INPUT_KEY, DUCK_TYPE,
+        });
+        loaded = true;
+        return n;
+      }
       const cols = tableColumns(pack, input);
       for (const [table, spec] of Object.entries(cols)) {
         await conn.run(`CREATE OR REPLACE TEMP TABLE ${table} (${spec.map((c) => `${quoteId(c.name)} ${DUCK_TYPE[c.type]}`).join(", ")})`);
@@ -608,7 +628,16 @@ async function createDuckDb(pack, opts = {}) {
       if (!rule || !rule.timeline_sql) return [];
       return runSql(ruleId, rule.timeline_sql, "timeline");
     },
-    /** Disconnects (drops this run's TEMP tables); the warm instance stays for the next run. */
+    /** Raw point ids already stored under parquetDir. Absent when this connection has no Parquet directory. */
+    ...(parquet ? {
+      coverage(ids) { return parquet.coverage(cfg.parquetDir, ids); },
+      async windowHistory(equipmentId) {
+        if (!loaded) return [];
+        return parquet.windowHistory(conn, equipmentId, duckRows);
+      },
+      explain(sql) { return parquet.explain(conn, sql); },
+    } : {}),
+    /** Disconnects (drops this run's TEMP views); the warm instance stays for the next run. */
     async close() { if (!closed) { closed = true; conn.closeSync(); } },
   };
 }
@@ -621,7 +650,7 @@ async function createEngine({ kind, pack, ...opts }) {
   if (kind === "pglite") return createPglite(pack, opts);
   if (kind === "timescale") return createTimescale(pack, opts);
   if (kind === "duckdb") return createDuckDb(pack, opts);
-  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite", "pglite", "duckdb" or "timescale")`);
+  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (runtime engines are "duckdb" and "timescale"; "sqlite" and "pglite" are parity-test engines)`);
 }
 
 module.exports = { createEngine, HELPERS, loadSqlJs, releaseDuckDb, duckDbOptions, DUCKDB_DEFAULTS, DUCKDB_SAFETY };

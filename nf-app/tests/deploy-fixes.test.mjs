@@ -110,17 +110,15 @@ test("history: no config.timescale but args that ask for a query still fails", a
 
 const bigBox = { async get() { return { data: { resources: [{ memory: { totalBytes: String(16 * 1024 ** 3) } }] } }; } };
 
-test("engine auto: pglite on a big box when installed, sqlite fallback (with a note) when not", async () => {
-  assert.deepEqual(await fdd.pickEngine(bigBox, "auto", undefined, () => true), { kind: "pglite", note: "" });
-  const fb = await fdd.pickEngine(bigBox, undefined, undefined, () => false);
-  assert.equal(fb.kind, "sqlite");
-  assert.match(fb.note, /pglite is not installed/);
+test("engine auto is duckdb; a missing package does not fall back", async () => {
+  assert.deepEqual(await fdd.pickEngine(bigBox, "auto", undefined, () => true), { kind: "duckdb", note: "" });
+  await assert.rejects(() => fdd.pickEngine(bigBox, undefined, undefined, () => false), /DuckDB engine failed to load/);
 });
 
-test("engine: an explicitly configured engine is never swapped", async () => {
-  assert.deepEqual(await fdd.pickEngine(bigBox, "pglite", undefined, () => false), { kind: "pglite", note: "" });
-  assert.deepEqual(await fdd.pickEngine(bigBox, "sqlite", undefined, () => true), { kind: "sqlite", note: "" });
-  assert.equal((await fdd.pickEngine(bigBox, "auto", { host: "h" }, () => false)).kind, "timescale");
+test("engine: timescale is explicit; sqlite and pglite are refused", async () => {
+  await assert.rejects(() => fdd.pickEngine(bigBox, "pglite", undefined, () => false), /engine "pglite" was removed/);
+  await assert.rejects(() => fdd.pickEngine(bigBox, "sqlite", undefined, () => true), /engine "sqlite" was removed/);
+  assert.equal((await fdd.pickEngine(bigBox, "auto", { host: "h" }, () => true)).kind, "timescale");
 });
 
 test("history: normalizeArgs coerces StartHook string-map uuids and windowHours", async () => {

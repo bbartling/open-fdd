@@ -3,7 +3,7 @@
   "application": {
     "id": "open-fdd-lite",
     "name": "Open-FDD Lite",
-    "description": "Open-FDD Lite: the small-box edition for Normal Framework. Tag-driven dashboard, charts, BACnet server view, RDF export and an Open-Meteo weather hook mirrored to NF's BACnet server. No FDD engine. Source of truth: open-fdd lite/",
+    "description": "Open-FDD Lite: the small-box edition for Normal Framework. Tag-driven dashboard, charts, BACnet server view, RDF export, an Open-Meteo weather hook, and an hourly FDD hook on server-side Node DuckDB. Source of truth: open-fdd lite/",
     "runtime": "RUNTIME_NODE_JS",
     "auth": {
       "apiKey": {
@@ -44,7 +44,23 @@
     "/static/tree.html": "static/tree.html",
     "/static/tree.js": "static/tree.js",
     "/static/vendor/echarts.min.js": "static/vendor/echarts.min.js",
-    "/static/version.js": "static/version.js"
+    "/static/version.js": "static/version.js",
+    "/package.json": "package.json",
+    "/hooks/fdd.js": "../nf-app/hooks/fdd.js",
+    "/hooks/lib/engines.js": "../nf-app/hooks/lib/engines.js",
+    "/hooks/lib/duckdb-parquet.js": "../nf-app/hooks/lib/duckdb-parquet.js",
+    "/hooks/lib/engine-build.js": "../nf-app/hooks/lib/engine-build.js",
+    "/hooks/lib/role-limits.js": "../nf-app/hooks/lib/role-limits.js",
+    "/hooks/lib/rule-tuning.js": "../nf-app/hooks/lib/rule-tuning.js",
+    "/hooks/lib/site-timezone.js": "../nf-app/hooks/lib/site-timezone.js",
+    "/static/units.js": "../nf-app/static/units.js",
+    "/static/fdd.js": "../nf-app/static/fdd.js",
+    "/static/run-proof.js": "../nf-app/static/run-proof.js",
+    "/static/schedule.js": "../nf-app/static/schedule.js",
+    "/static/occupancy.js": "../nf-app/static/occupancy.js",
+    "/static/fdd-catalog.json": "../nf-app/static/fdd-catalog.json",
+    "/static/engine-build.json": "../nf-app/static/engine-build.json",
+    "/rules/pack-postgres.json": "../nf-app/rules/pack-postgres.json"
   },
   "hooks": [
     {
@@ -96,6 +112,23 @@
       },
       "mode": "MODE_SCHEDULED",
       "invokeTimeout": "190s"
+    },
+    {
+      "id": "fdd",
+      "name": "fdd",
+      "entryPoint": "/hooks/fdd.js",
+      "points": {
+        "noPoints": true
+      },
+      "config": {
+        "engine": "duckdb",
+        "windowHours": 24
+      },
+      "schedule": {
+        "rrule": "DTSTART:20261101T000700Z\nRRULE:FREQ=HOURLY;INTERVAL=1"
+      },
+      "mode": "MODE_SCHEDULED",
+      "invokeTimeout": "300s"
     },
     {
       "id": "rdf",

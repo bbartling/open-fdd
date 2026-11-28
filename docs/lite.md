@@ -6,7 +6,8 @@ nav_order: 3
 # Open-FDD Lite
 
 The small-box edition (formerly "Bench Viz"): a tag-driven dashboard, charts, a view of NF's BACnet server,
-RDF export and a weather hook. **No FDD engine and no npm dependencies.** Built for 1 GB machines such as a
+RDF export, a weather hook and an hourly FDD hook. The hook runs the rule pack on Node DuckDB
+(`@duckdb/node-api` 2.0.1-r.1). The Lite install pulls that package only: no sql.js and no PGlite. Built for 1 GB machines such as a
 Raspberry Pi 3. NF app id `open-fdd-lite`; source in
 [`lite/`](https://github.com/bbartling/open-fdd/tree/master/lite).
 
@@ -49,8 +50,8 @@ Never pass an existing point uuid to `POST /api/v1/bacnet/local`: it overwrites 
 | | Lite | Full |
 |---|---|---|
 | Target | 1 GB boxes | machines with real resources |
-| FDD hook and rules | no | yes |
-| Hook dependencies | none (Node built-ins) | sql.js, PGlite |
+| FDD hook and rules | yes, Node DuckDB, hourly | yes |
+| Hook dependencies | `@duckdb/node-api` 2.0.1-r.1 | DuckDB build: `@duckdb/node-api` 2.0.1-r.1; Timescale build: `pg` |
 | ECharts build | UMD, classic scripts | ES module |
 
 Which hosts get which edition, in more detail: [Lite or full](operations/nf/lite-vs-full.html). The Caddy front door

@@ -8,7 +8,9 @@
  * app in the NF console, or PATCH /api/v1/apps/<id> with updateMask ["options"] + ["configuration"]). The hook
  * runtime hands the option values to the hook as `ctx.config`, one flat map of scalars:
  *
- *   engine       string  "auto" | "sqlite" | "pglite" | "timescale"
+ *   engine       string  "auto" | "duckdb" | "timescale"
+ *                        auto: Timescale on the Timescale build or when that option is set, otherwise Node DuckDB.
+ *                        sqlite and pglite were removed. Naming either fails the run. A DuckDB load failure is an error.
  *   windowHours  number  (a string such as "24" is accepted)
  *   timescale    string  (secret) the connection as JSON {"host","port","database","user","password"} or a postgres:// URL
  *   latitude     number  weather: site latitude when neither NF Sites nor the model has one
@@ -29,7 +31,7 @@
 
 /** Options whose value is an object/array in the code but arrives as a JSON string in NF options. */
 const JSON_OPTIONS = ['timescale', 'history', 'bacnet', 'equips'];
-const NUMBER_OPTIONS = ['windowHours', 'latitude', 'longitude', 'writeRetryMs'];
+const NUMBER_OPTIONS = ['windowHours', 'latitude', 'longitude', 'writeRetryMs', 'parquetRetentionDays', 'duckdbThreads'];
 const BOOLEAN_OPTIONS = ['dryRun', 'bacnetMirror', 'bacnet_mirror', 'weather', 'weatherEnabled', 'assumeSingleFeeder'];
 
 /** NF typed values, e.g. { string: "x" } / { signed: 24 } / { boolean: true } (as GetApplications shows an option). */

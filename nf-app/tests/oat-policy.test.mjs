@@ -64,7 +64,7 @@ async function run(points, config = {}) {
     async query(id) { seen.queries.push(id); return [{ equipment_id: "AHU-1", fault_hours: 0, covered_hours: 24, fault_pct: 0 }]; },
     async close() {},
   });
-  const summary = await hook.runFdd({ sdk: { http: http(points), logEvent: (m) => logs.push(m) }, config: { engine: "sqlite", ...config }, pack: PACK, createEngine: engine, now: NOW });
+  const summary = await hook.runFdd({ sdk: { http: http(points), logEvent: (m) => logs.push(m) }, config: { engine: "duckdb", ...config }, pack: PACK, createEngine: engine, now: NOW });
   return { summary, seen, logs };
 }
 const col = (seen, name) => [...new Set((seen.input.history || []).map((r) => r[name]).filter((x) => x != null))];

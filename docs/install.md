@@ -64,7 +64,7 @@ reads and is not a deployment route.
 
 ## Timescale option and schema preflight
 
-Full can use SQLite, PGlite, or TimescaleDB, and an opt-in native DuckDB engine on trial (app option `engine` `duckdb`). Lite does not use Timescale. For Timescale, configure the app option
+The DuckDB build is Node `@duckdb/node-api` 2.0.1-r.1. Timescale is the other build. `sqlite` and `pglite` are rejected. For Timescale, configure the app option
 `timescale` as a JSON string or PostgreSQL URL, then apply `core.sql`, `adapter_nf.sql` and `install.sql` (in that
 order, `psql -v ON_ERROR_STOP=1 -1`) using a database installer role. Give the hooks a separate least-privilege runtime role. See the
 [`nf-app/timescale` guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).
@@ -74,8 +74,8 @@ The installer and `doctor` check the selected Timescale schema before upgrading.
 read-only `schema` hook: the check runs inside NF with the hook's own `timescale` option and returns only the installed
 and required versions. It needs no database route and no `psql` on the workstation. When the installed app has no
 `schema` hook (any upgrade from 5.0.12 or earlier), `install` bootstraps it first: it checks the probe's files for hand
-edits (`--force` overrides), pushes only `hooks/schema.js`, `hooks/lib/settings.js`, `hooks/lib/timescale.js` and
-`static/units.js`, registers only the `schema` hook, records them in the push manifest, runs the probe, and then
+edits (`--force` overrides), pushes only `hooks/schema.js`, `hooks/lib/engine-build.js`, `hooks/lib/settings.js`, `hooks/lib/timescale.js`,
+`static/engine-build.json` and `static/units.js`, registers only the `schema` hook, records them in the push manifest, runs the probe, and then
 continues with the normal install. If the schema is behind, the install stops there and those probe files stay on the
 box; the app keeps its version and its other hooks. `install --dry-run` only reports "would bootstrap the schema probe".
 `doctor` stays read-only and shows a WARN until the probe is installed. If the probe cannot run (the hook does not start,
@@ -83,7 +83,7 @@ or the `pg` package is missing), the installer stops and names both remedies: fo
 (set `NF_TIMESCALE_PREFLIGHT_DSN` in the protected environment to a reachable endpoint for the same database and install
 a PostgreSQL client; a `localhost`, `127.0.0.1` or `::1` option names the NF host, so it is never used from the
 workstation), or fix the probe by installing the app dependencies. Keep credentials out of the command line.
-Lite, SQLite, and PGlite skip this preflight and never bootstrap the probe.
+Lite and a DuckDB build with no Timescale connection skip this preflight.
 
 ## Weather hook: on, off, exporters
 

@@ -145,10 +145,15 @@ def _app(engine="auto", timescale=None):
 
 
 def test_timescale_schema_preflight_engine_selection_and_lite_skip(monkeypatch):
-    assert sync.timescale_schema_check({})[0] == "SKIP"  # Lite has no engine/config
-    assert sync.timescale_schema_check(_app("sqlite", "postgresql://db/x"))[0] == "SKIP"
-    assert sync.timescale_schema_check(_app("pglite"), {"NF_TIMESCALE_PREFLIGHT_DSN": "postgresql://db/x"})[0] == "SKIP"
+    lite = json.loads((Path(__file__).resolve().parents[1] / "lite" / "app.json").read_text(encoding="utf-8"))
+    assert sync.timescale_schema_check({})[0] == "SKIP"
+    assert sync.timescale_schema_check(lite)[0] == "SKIP"  # DuckDB hook, no Timescale option
+    retired = sync.timescale_schema_check(_app("sqlite", "postgresql://db/x"))
+    assert retired[0] == "FAIL" and "removed in 5.0.22" in retired[1] and "duckdb" in retired[1]
+    retired = sync.timescale_schema_check(_app("pglite"), {"NF_TIMESCALE_PREFLIGHT_DSN": "postgresql://db/x"})
+    assert retired[0] == "FAIL" and "removed in 5.0.22" in retired[1]
     assert sync.timescale_schema_check(_app("auto"))[0] == "SKIP"
+    assert sync.timescale_schema_check(_app("duckdb"))[0] == "SKIP"
     assert sync.timescale_schema_check(_app("timescale"))[0] == "FAIL"
 
 

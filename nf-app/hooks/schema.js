@@ -14,18 +14,32 @@
 // host, user, password or connection string; a failure carries the error text with the connection redacted.
 const settings = require('./lib/settings.js');
 const ts = require('./lib/timescale.js');
+const engineBuild = require('./lib/engine-build.js');
 
-/** @param {{ sdk?: any, config?: any, client?: any }} p  client = an already connected pg client (tests). */
-async function handle({ sdk, config: rawConfig = {}, client: given }) {
+/**
+ * @param {{ sdk?: any, config?: any, client?: any, loadDuckdb?: Function }} p
+ * client = an already connected pg client (tests). loadDuckdb stubs the native package probe.
+ */
+async function handle({ sdk, config: rawConfig = {}, client: given, loadDuckdb }) {
   const log = (/** @type {string} */ m) => (sdk && sdk.logEvent ? sdk.logEvent(m) : console.log(m));
-  const done = (/** @type {any} */ result) => { log(JSON.stringify(result)); return result; };
+  const done = (/** @type {any} */ result) => {
+    const fields = engineBuild.statusFields(loadDuckdb);
+    const out = { ...result, ...fields };
+    if (fields.engine_error && !out.error) out.error = fields.engine_error;
+    if (fields.engine_error) out.ok = false;
+    log(JSON.stringify(out));
+    return out;
+  };
   const config = settings.normalizeConfig(rawConfig);
   const engine = String(config.engine || 'auto').toLowerCase();
+  if (engine === 'sqlite' || engine === 'pglite') {
+    return done({ ok: false, required: ts.SCHEMA_VERSION, error: engineBuild.retiredEngineError(engine) });
+  }
   let conn = null;
   try { conn = settings.parseTimescale(config.timescale); } catch (e) {
     return done({ ok: false, required: ts.SCHEMA_VERSION, error: 'the app option "timescale" is not a usable connection (value not shown)' });
   }
-  if (engine === 'sqlite' || engine === 'pglite' || (!conn && engine !== 'timescale')) {
+  if (!conn && engine !== 'timescale') {
     return done({ ok: true, skipped: true, reason: 'timescale not selected', required: ts.SCHEMA_VERSION });
   }
   if (!conn && !given) return done({ ok: false, required: ts.SCHEMA_VERSION, error: 'engine "timescale" but the app option "timescale" is not set' });

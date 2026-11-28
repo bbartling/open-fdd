@@ -6,7 +6,7 @@
 //      (GET /api/v1/point/data …&window=300s&method=AVERAGE) for the trailing window
 //      (values are brought to the role's declared scale first: SI by unit, fraction 0-1, boolean 0/1; see siPlan)
 //   3. run every runnable rule of the SQL pack (sql/fdd → rules/pack-*.json) in an
-//      embedded engine: SQLite-WASM on small edges, PGlite (real Postgres) on big ones
+//      embedded engine: server-side Node DuckDB (@duckdb/node-api) over Parquet, or Timescale on the Timescale build.
 //   4. write one result point per (site, equip, rule): automation layer (history) + model layer (all queued, then
 //      flushed in batches at the end of the run: one UpdatePoints + one AddData call per chunk, see flushWrites)
 //      (Haystack tags fault/ruleRef/equipRef/siteRef), value = fault % of covered time
@@ -62,10 +62,11 @@
 // Nothing site-specific: sites, equips, points and units all come from NF.
 // config (hook settings, all optional). NF stores these as app OPTIONS and passes them as ctx.config (scalars only:
 // see lib/settings.js; a string value such as "24" or a JSON string for timescale is converted):
-//   engine        "auto" | "sqlite" | "pglite" | "duckdb" | "timescale"   (auto: timescale when configured, else pglite when NF reports ≥ 3.5 GiB RAM)
-//                 duckdb (#1645, opt-in): native DuckDB, warm in-memory; when its package is not installed the run falls back to the
-//                 auto choice and says so in engine_note
-//                 With the option timescale set, duckdb reads the saved tuning (fdd.rule_config) from it like the timescale engine
+//   engine        "auto" | "duckdb" | "timescale"
+//                 auto: Timescale when this is the Timescale build or the timescale option is set, otherwise DuckDB.
+//                 sqlite and pglite were removed: naming either fails the run. There is no fallback and no WASM engine.
+//                 On the DuckDB build, if @duckdb/node-api does not load, the run logs the error and does not run rules.
+//                 With the option timescale set, duckdb reads the saved tuning (fdd.rule_config) from it like the timescale engine.
 //   duckdbMemoryLimit  DuckDB memory cap, e.g. "256MB" (default) or "1GB"; duckdbThreads  DuckDB threads (default 2). Engine duckdb only
 //   timescale     the NF Timescale connection: JSON {"host","port","database","user","password"} or a postgres:// URL
 //   windowHours   trailing window per run (default 24)
@@ -77,6 +78,7 @@
 //   bacnet        { enabled: true, firstInstance: 1000 } → fault count per equip as an AV on
 //                 NF's BACnet server (off by default; see exportToBacnet)
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const vm = require('vm');
 const crypto = require('crypto');
@@ -90,8 +92,7 @@ const { queryPoints } = require('./lib/paging.js');
 const settings = require('./lib/settings.js');
 const roleLimits = require('./lib/role-limits.js');
 const ruleTuning = require('./lib/rule-tuning.js');
-const PGLITE_MIN_BYTES = 3.5 * 1024 ** 3;
-
+const engineBuild = require('./lib/engine-build.js');
 // ---- shared code with the UI ------------------------------------------------------
 /** model.js + fdd.js run unchanged in a sandbox: one binding implementation for UI and hook. */
 function loadShared() {
@@ -109,9 +110,8 @@ function loadShared() {
   };
 }
 
-// pglite runs the Postgres pack as written; sqlite runs the translated one.
-// duckdb (#1645) runs the Postgres pack too, with its fdd.* helpers as DuckDB macros (pack.duckdb_helpers_sql).
-const PACK_FILE = { sqlite: 'pack-sqlite.json', pglite: 'pack-postgres.json', timescale: 'pack-postgres.json', duckdb: 'pack-postgres.json' };
+// duckdb and timescale run the Postgres pack. duckdb's fdd.* helpers are macros (pack.duckdb_helpers_sql).
+const PACK_FILE = { timescale: 'pack-postgres.json', duckdb: 'pack-postgres.json' };
 const loadPack = (kind) => JSON.parse(fs.readFileSync(path.join(RULES, PACK_FILE[kind]), 'utf8'));
 
 // ---- NF reads -----------------------------------------------------------------------
@@ -728,50 +728,49 @@ async function flushWrites(http, queue, summary, log, baseMs) {
 }
 
 // ---- run ----------------------------------------------------------------------------
-/** True when the npm package @electric-sql/pglite is installed for this app (searched up from the hooks dir). */
-function pgliteInstalled() {
-  for (let d = __dirname, prev = ''; d !== prev; prev = d, d = path.dirname(d)) {
-    if (fs.existsSync(path.join(d, 'node_modules', '@electric-sql', 'pglite', 'package.json'))) return true;
-  }
-  return false;
+/** A run that stopped before any rule. `ok: false` and the same sentence in the log, the summary and the thrown error. */
+function engineStopped(message, config) {
+  return {
+    ok: false, error: message, failure: message, engine: null,
+    engine_configured: (config && config.engine) || 'auto', engine_note: message, engine_error: message,
+    errors: 0, written: 0, rules: 0, equips: 0, eligible: 0, results: [], skipped: [], stale_reasons: {},
+    status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 },
+    sensor_results: { total: 0, ok: 0, fault: 0, 'not-assessed': 0, stale: 0 },
+    window: { from: null, to: null, hours: 0 },
+    source_freshness: { engine: null, newest_sample: null, age_minutes: null, nf_latest: null, nf_latest_age_minutes: null },
+  };
 }
 
 /**
- * True when the native DuckDB package (@duckdb/node-api, an optionalDependency, #1645) loads on this box. Loading it is
- * the only honest test: the npm package can be present while its native build for this CPU / libc is not (no 32-bit ARM).
+ * Which engine to run. Returns {kind, note}. Throws (never swaps) when the name is retired or unknown, and when the
+ * DuckDB build's native package does not load. `buildId` overrides the stamped build (tests). `hasDuckdb` is
+ * engine-build.duckdbLoadable, or a stub `() => ({ ok, reason })`.
+ * auto: Timescale on the Timescale build or when `timescaleConfig` is set; otherwise DuckDB over Parquet.
+ * @param {any} http unused (kept so callers stay in order)
  */
-function duckdbLoadable() {
-  try { require('@duckdb/node-api'); return true; } catch (e) { return false; }
-}
-
-/**
- * Which engine to run. An engine the config names (sqlite | pglite | timescale) is used as is, never swapped.
- * Only when none was configured ("auto"/unset) is the choice ours: timescale if configured, else pglite on big
- * boxes, but sqlite (vendored, no npm install) when pglite is not installed. Returns {kind, note}.
- * duckdb (#1645) is opt-in and never picked by auto. While it is on trial it is the one configured engine that falls
- * back: when its native package does not load here, the run uses the auto choice and the note says so.
- */
-async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInstalled, hasDuckdb = duckdbLoadable) {
-  // FULL edition: config.timescale set -> run the pack inside NF's TimescaleDB (engine "timescale", or "auto")
-  if (wanted === 'timescale' || ((!wanted || wanted === 'auto') && timescaleConfig)) return { kind: 'timescale', note: '' };
-  if (wanted === 'sqlite' || wanted === 'pglite') return { kind: wanted, note: '' };
-  if (wanted === 'duckdb') {
-    if (hasDuckdb()) return { kind: 'duckdb', note: '' };
-    // a box with a Timescale store falls back to the timescale engine, which reads the saved tuning too
-    const auto = await pickEngine(http, 'auto', timescaleConfig, hasPglite, hasDuckdb);
-    return { kind: auto.kind, note: `engine duckdb: @duckdb/node-api is not installed or has no native build for this box; using ${auto.kind}`
-      + (auto.note ? ` (${auto.note})` : '') };
+async function pickEngine(http, wanted, timescaleConfig, hasDuckdb, buildId) {
+  void http;
+  const name = String(wanted == null || String(wanted).trim() === '' ? 'auto' : wanted).trim().toLowerCase();
+  if (name === 'sqlite' || name === 'pglite') {
+    const err = new Error(engineBuild.retiredEngineError(name));
+    /** @type {any} */ (err).code = 'OPENFDD_ENGINE_RETIRED';
+    throw err;
   }
-  let kind = 'sqlite';
-  try {
-    const { data } = await http.get('/api/v1/platform/info');
-    const total = Math.max(0, ...((data && data.resources) || []).map((r) => Number((r.memory || {}).totalBytes) || 0));
-    if (total >= PGLITE_MIN_BYTES) kind = 'pglite';
-  } catch (e) {
-    kind = 'sqlite';
+  if (name !== 'auto' && name !== 'duckdb' && name !== 'timescale') {
+    throw new Error(`unknown engine ${JSON.stringify(name)}. Use "duckdb", "timescale", or "auto" `
+      + '(auto runs DuckDB unless this is the Timescale build or Timescale is configured).');
   }
-  if (kind === 'pglite' && !hasPglite()) {
-    return { kind: 'sqlite', note: 'engine auto: pglite is not installed (install the app dependencies to use it); using sqlite' };
+  const build = buildId || engineBuild.record().id;
+  const kind = (name === 'timescale' || (name === 'auto' && (build === 'timescale' || timescaleConfig))) ? 'timescale' : 'duckdb';
+  // A DuckDB build that cannot load its package stops, even if Timescale is also configured. A Timescale build
+  // does not load DuckDB unless the option asks for it. Neither path substitutes another engine.
+  if (build === 'duckdb' || kind === 'duckdb') {
+    const probe = engineBuild.describeLoad(hasDuckdb || engineBuild.duckdbLoadable);
+    if (!probe.ok) {
+      const err = new Error(engineBuild.duckdbLoadError(probe.reason));
+      /** @type {any} */ (err).code = 'OPENFDD_DUCKDB_UNAVAILABLE';
+      throw err;
+    }
   }
   return { kind, note: '' };
 }
@@ -946,21 +945,47 @@ async function loadRoleLimitOverrides({ engine, pack, log }) {
   };
 }
 
+function duckdbPin() {
+  try {
+    const pkg = require('../package.json');
+    return (pkg.dependencies && pkg.dependencies['@duckdb/node-api']) || '2.0.1-r.1';
+  } catch (e) { return '2.0.1-r.1'; }
+}
+
+function parquetDirOf(config) {
+  if (config.parquetDir) return String(config.parquetDir);
+  if (process.env.OPENFDD_PARQUET_DIR) return process.env.OPENFDD_PARQUET_DIR;
+  // node --test runs files in parallel (NODE_TEST_CONTEXT=child-v8; execArgv is empty in that child).
+  // A shared directory makes one run's coverage hide the next run's history.
+  if (process.env.NODE_TEST_CONTEXT) return fs.mkdtempSync(path.join(os.tmpdir(), 'openfdd-parquet-'));
+  return path.join(process.cwd(), 'openfdd-parquet');
+}
+
 /**
  * @typedef {{ engine?: string, windowHours?: number, equips?: string[], dryRun?: boolean,
  *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object, writeRetryMs?: number,
- *   duckdbMemoryLimit?: string, duckdbThreads?: number | string }} FddConfig
- * @param {{ sdk: any, config?: FddConfig, createEngine?: Function, pack?: any, now?: number, hasPglite?: () => boolean }} args
+ *   duckdbMemoryLimit?: string, duckdbThreads?: number | string, parquetDir?: string, parquetRetentionDays?: number }} FddConfig
+ * @param {{ sdk: any, config?: FddConfig, createEngine?: Function, pack?: any, now?: number,
+ *   hasDuckdb?: Function, buildId?: string }} args
  */
-async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn, now = Date.now(), hasPglite }) {
-  createEngine = createEngine || require('./lib/engines.js').createEngine;
+async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn, now = Date.now(), hasDuckdb, buildId }) {
+  const makeEngine = createEngine || require('./lib/engines.js').createEngine;
   // NF hands the app options over as ctx.config: strings for numbers and JSON (lib/settings.js converts them)
   const config = /** @type {FddConfig} */ (settings.normalizeConfig(rawConfig));
   const http = sdk.http;
   const log = (m) => (sdk.logEvent ? sdk.logEvent(m) : console.log(m));
-  const shared = loadShared();
-  const { kind, note: engineNote } = await pickEngine(http, config.engine, config.timescale, hasPglite);
+  // A test that supplies createEngine is not probing the native package unless it also passes hasDuckdb.
+  const probe = hasDuckdb || (createEngine ? () => ({ ok: true, reason: '' }) : undefined);
+  let kind, engineNote;
+  try {
+    ({ kind, note: engineNote } = await pickEngine(http, config.engine, config.timescale, probe, buildId));
+  } catch (e) {
+    const message = (e && e.message) || String(e);
+    log(message);
+    return engineStopped(message, config);
+  }
   if (engineNote) log(engineNote);
+  const shared = loadShared();
   const pack = packIn || loadPack(kind);
   const step = pack.poll_seconds;
   const windowHours = Number(config.windowHours) > 0 ? Number(config.windowHours) : 24;
@@ -975,7 +1000,10 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   const modelProblem = modelProblemOf(model);
   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
   const runIso = new Date(now).toISOString();
-  const summary = { engine: kind, engine_configured: config.engine || 'auto', engine_note: engineNote, equips: 0, rules: 0, errors: 0, written: 0, results: [],
+  const built = engineBuild.record();
+  const summary = { ok: true, engine: kind, engine_configured: config.engine || 'auto', engine_note: engineNote,
+    engine_build: built.label, engine_library: built.library, engine_library_version: built.libraryVersion,
+    engine_error: null, equips: 0, rules: 0, errors: 0, written: 0, results: [],
     sensor_results: { total: 0, ok: 0, fault: 0, 'not-assessed': 0, stale: 0 },
     status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 }, requests: { metadata: 0, data: 0 },
     // site time zone used for the occupancy schedule, per site, with where it came from (#1587)
@@ -993,8 +1021,12 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   const queue = { meta: [], values: [], series: [] };    // writes, flushed in batches after all equips ran
   const occCache = { logged: new Set() };    // NF schedules (read once per run) and which sites were logged
   const warnedUnits = new Set();
-  const engine = await createEngine({ kind, pack, config: kind === 'duckdb'
-    ? { memoryLimit: config.duckdbMemoryLimit, threads: config.duckdbThreads, timescale: config.timescale }   // timescale: saved tuning store
+  const parquetDir = kind === 'duckdb' ? parquetDirOf(config) : '';
+  const retentionDays = config.parquetRetentionDays == null ? 90 : Number(config.parquetRetentionDays);
+  if (kind === 'duckdb') log(`engine duckdb: @duckdb/node-api ${duckdbPin()}, parquet ${parquetDir}, retention ${retentionDays} days`);
+  const engine = await makeEngine({ kind, pack, config: kind === 'duckdb'
+    ? { memoryLimit: config.duckdbMemoryLimit, threads: config.duckdbThreads,
+        timescale: config.timescale, parquetDir, retentionDays }
     : config.timescale });
   try {
     const tuning = await loadRoleLimitOverrides({ engine, pack, log });
@@ -1124,7 +1156,21 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             try { newestHere = await engine.newestSample(uuids); } catch (e) { log(`${equipId}: newest-sample lookup failed: ${errText(e)}`); }
           }
         } else {
-          const hist = await fetchHistory(http, uuids, from, to, step);
+          let fetchFrom = from;
+          if (typeof engine.coverage === 'function') {
+            try {
+              const cov = await engine.coverage(uuids);
+              const rows = uuids.map((id) => cov[id]);
+              const gap = rows.some((r) => !r || r.min_ms == null || r.min_ms > from);
+              if (!gap && rows.length) fetchFrom = Math.min(to, Math.min(...rows.map((r) => r.max_ms)) + step * 1000);
+            } catch (e) {
+              log(`${equipId}: parquet coverage failed (${errText(e)}); reading the full window`);
+              fetchFrom = from;
+            }
+          }
+          const hist = fetchFrom >= to
+            ? Object.fromEntries(uuids.map((u) => [u, new Map()]))
+            : await fetchHistory(http, uuids, fetchFrom, to, step);
           newestHere = newestOfHistory(hist);
           const input = buildInput({ equipId, siteId, roles, hist, grid, pack, si, occ: occ && occ.at });
           const long = buildSensorInput({ equipId, sensors: sweepSensors, hist, grid, catalog: shared.catalog, log, warned: warnedUnits });
@@ -1136,9 +1182,18 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           input.sweepSeries = long.sensorSeries.map(({ uuid, role, unit }) => ({ equipment_id: equipId, series_id: uuid,
             sensor_role: role, unit, window_start: from, window_end: to }));
           declaredSweep = input.sweepSeries.length;
-          loadedRows = input.history.length + input.sensorHistory.length;
-          histByTs = new Map(input.history.map((row) => [row.ts, row]));
-          if (loadedRows || declaredSweep) await engine.load(input);
+          input.pointIds = Object.fromEntries(Object.entries(roles).map(([role, p]) => [role, p.uuid]));
+          input.siteId = siteId;
+          input.equipId = equipId;
+          input.window = { from, to };
+          const loaded = await engine.load(input);
+          loadedRows = typeof loaded === 'number' ? loaded : input.history.length + input.sensorHistory.length;
+          if (fetchFrom > from && typeof engine.windowHistory === 'function') {
+            const wide = await engine.windowHistory(equipId);
+            histByTs = new Map((wide || []).map((row) => [row.ts, row]));
+          } else {
+            histByTs = new Map(input.history.map((row) => [row.ts, row]));
+          }
         }
         if (newestHere != null) sourceNewest = Math.max(sourceNewest == null ? -Infinity : sourceNewest, newestHere);
         if (!loadedRows) {
@@ -1530,6 +1585,11 @@ async function exportToBacnet(http, results, cfg, log) {
  */
 async function hook({ sdk, config, ...rest }) {
   const summary = await runFdd({ sdk, config: config || {}, ...rest });
+  if (summary && summary.ok === false && summary.error) {
+    const err = new Error(summary.error);
+    /** @type {any} */ (err).summary = summary;
+    throw err;
+  }
   const st = summary.status;
   if (summary.errors || summary.failure) {
     const fr = summary.source_freshness;
@@ -1546,4 +1606,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { applyOatPolicy, runFdd, loadRoleLimitOverrides, modelProblemOf, loadModel, pickEngine, pgliteInstalled, duckdbLoadable, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { applyOatPolicy, runFdd, loadRoleLimitOverrides, modelProblemOf, loadModel, pickEngine, duckdbLoadable: engineBuild.duckdbLoadable, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });

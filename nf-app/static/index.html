@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open-FDD</title>
+<meta name="ofdd-engine-build" content="duckdb">
+<meta name="ofdd-engine-library" content="@duckdb/node-api">
+<meta name="ofdd-engine-library-version" content="2.0.1-r.1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https: 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <!--
   Open-FDD as a Normal Framework app (ADR-014): light/dark theme in theme.js. Top bar = the site only; each tab that
@@ -55,6 +58,7 @@
 <header>
   <div>
     <h1>⚡ Open-FDD</h1>
+    <span class="pill app-engine" id="engineBuild" data-ofdd-engine="duckdb">DuckDB build</span>
     <div class="sub" id="sub">Loading the Haystack model…</div>
   </div>
   <div class="spacer"></div>

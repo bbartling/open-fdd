@@ -1,7 +1,7 @@
 // node --test nf-app/tests/duckdb-engine.test.mjs
 // #1645 slice 1: the native DuckDB engine (kind "duckdb") runs the Postgres pack with its fdd.* macros and must give
 // the same rows as PGlite (exact Postgres) and sql.js (today's small-box engine) for every rule and timeline.
-// Skipped, with the reason, when @duckdb/node-api (an optionalDependency) has no native build for this platform.
+// Skipped, with the reason, when @duckdb/node-api (a dependency of the DuckDB build) has no native build for this platform.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
@@ -22,7 +22,7 @@ const rulesDir = new URL("../rules/", import.meta.url);
 const readPack = (name) => JSON.parse(readFileSync(new URL(name, rulesDir), "utf8"));
 const pgPack = readPack("pack-postgres.json");
 const litePack = readPack("pack-sqlite.json");
-const PINNED = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).optionalDependencies["@duckdb/node-api"];
+const PINNED = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).dependencies["@duckdb/node-api"];
 
 let unavailable = "";
 try { await import("@duckdb/node-api"); } catch (e) { unavailable = `@duckdb/node-api not loadable here: ${e.message}`; }
@@ -213,6 +213,10 @@ test("duckdb options: memory limit and threads are validated; defaults suit a 1 
     assert.equal("TimeZone" in duckDbOptions({}), false, "TimeZone as a create option autoinstalls ICU over the network");
     assert.throws(() => duckDbOptions({ extraSettings: { temp_directory: "/tmp" } }), /not allowed/);
     assert.equal(duckDbOptions({ extraSettings: { custom_extension_repository: "http://x" } }).temp_directory, "", "safety always wins");
+    const spill = duckDbOptions({ tempDirectory: "/tmp/openfdd-spill", maxTempDirectory: "1GB" });
+    assert.equal(spill.temp_directory, "/tmp/openfdd-spill");
+    assert.equal(spill.max_temp_directory_size, "1GB");
+    assert.equal(spill.autoinstall_known_extensions, "false");
   });
   withDuckEnv({ OPENFDD_DUCKDB_MEMORY_LIMIT: "512MB", OPENFDD_DUCKDB_THREADS: "4" }, () => {
     assert.equal(duckDbOptions({}).memory_limit, "512MB", "env override");
@@ -225,15 +229,13 @@ test("duckdb options: memory limit and threads are validated; defaults suit a 1 
   assert.throws(() => duckDbOptions({ threads: 1.5 }), /threads/);
 });
 
-test("pickEngine: duckdb only when configured; auto never picks it; a missing package falls back with a note", async () => {
+test("pickEngine: auto is duckdb; a missing package fails and does not fall back", async () => {
   const http = { get: async () => ({ data: { resources: [{ memory: { totalBytes: 8 * 1024 ** 3 } }] } }) };
-  assert.deepEqual(await fdd.pickEngine(http, "duckdb", undefined, () => true, () => true), { kind: "duckdb", note: "" });
-  assert.equal((await fdd.pickEngine(http, "auto", undefined, () => true, () => true)).kind, "pglite");
-  const fb = await fdd.pickEngine(http, "duckdb", undefined, () => true, () => false);
-  assert.equal(fb.kind, "pglite");
-  assert.match(fb.note, /duckdb.*not installed.*using pglite/);
+  assert.deepEqual(await fdd.pickEngine(http, "duckdb", undefined, () => true), { kind: "duckdb", note: "" });
+  assert.equal((await fdd.pickEngine(http, "auto", undefined, () => true)).kind, "duckdb");
+  await assert.rejects(() => fdd.pickEngine(http, "duckdb", undefined, () => false), /DuckDB engine failed to load: module did not load/);
   const small = { get: async () => ({ data: { resources: [{ memory: { totalBytes: 1024 ** 3 } }] } }) };
-  assert.equal((await fdd.pickEngine(small, "duckdb", undefined, () => true, () => false)).kind, "sqlite");
+  await assert.rejects(() => fdd.pickEngine(small, "duckdb", undefined, () => false), /DuckDB engine failed to load/);
 });
 
 // ---- saved tuning (#1589): a duckdb run with a tuning store applies the same overrides as the timescale engine ----
@@ -283,11 +285,12 @@ test("duckdb without a tuning store has no overrides reader (no store, nothing s
   try { assert.equal(typeof withStore.ruleConfigOverrides, "function"); } finally { await withStore.close(); }
 });
 
-test("pickEngine: duckdb falling back on a box with a Timescale store picks timescale (which reads saved tuning)", async () => {
+test("pickEngine: duckdb that fails to load does not switch to a configured Timescale store", async () => {
   const http = { get: async () => ({ data: { resources: [{ memory: { totalBytes: 1024 ** 3 } }] } }) };
-  const fb = await fdd.pickEngine(http, "duckdb", { host: "db" }, () => true, () => false);
-  assert.equal(fb.kind, "timescale");
-  assert.match(fb.note, /using timescale/);
+  await assert.rejects(
+    () => fdd.pickEngine(http, "duckdb", { host: "db" }, () => ({ ok: false, reason: "no native build" })),
+    /DuckDB engine failed to load: no native build/,
+  );
 });
 
 // ---- offline and disk-free (#1645 review): no extension download, no spill to the working directory ----
