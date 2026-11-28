@@ -1,0 +1,14 @@
+{
+ "id": "point_data__malformed_uuid",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/point/data?uuids=notauuid&count=3"
+ },
+ "response": {
+  "status": 400,
+  "contentType": "application/grpc",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

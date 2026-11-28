@@ -1,0 +1,15 @@
+{
+ "id": "errors__unknown_get_route_spa_fallback",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/nope"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "text/html",
+  "body": {
+   "$kind": "spa-html",
+   "$prefix": "<!DOCTYPE html>"
+  }
+ }
+}

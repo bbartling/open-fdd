@@ -1,0 +1,14 @@
+{
+ "id": "point_data__no_uuids",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/point/data"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "data": []
+  }
+ }
+}

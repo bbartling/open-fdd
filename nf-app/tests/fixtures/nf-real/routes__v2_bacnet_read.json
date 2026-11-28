@@ -1,0 +1,15 @@
+{
+ "id": "routes__v2_bacnet_read",
+ "request": {
+  "method": "POST",
+  "path": "/api/v2/bacnet/read"
+ },
+ "response": {
+  "status": 405,
+  "contentType": "text/html",
+  "body": {
+   "$kind": "spa-html",
+   "$prefix": ""
+  }
+ }
+}

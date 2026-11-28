@@ -1,0 +1,64 @@
+{
+ "id": "point_query__snake_case_paging",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/point/query",
+  "body": {
+   "layer": "model",
+   "page_size": 1,
+   "page_offset": 0
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "points": [
+    {
+     "uuid": "0046d229-7341-5491-987d-861560b44a6c",
+     "name": "nfft-sim-site/nfft-sim-vav-203/FCU-SENSOR-NULL",
+     "layer": "model",
+     "version": "",
+     "attrs": {
+      "roleRef": "",
+      "fddStatus": "not-assessed",
+      "fddReason": "no covered time in the window (covered_hours 0)",
+      "unit": "%",
+      "fddOutputSince": "2026-11-28T14:40:00.000Z",
+      "markers": "point,his,fault,fdd",
+      "ruleRef": "FCU-SENSOR-NULL",
+      "dis": "VAV-23 East FCU-SENSOR-NULL",
+      "fddOccSource": "",
+      "equipUuid": "1467bf39-23d6-5892-8667-34bb19fa08d8",
+      "fddCoverageHours": "0",
+      "sensorRef": "",
+      "fddLastRun": "2026-11-28T14:42:35.949Z",
+      "fddWindowHours": "24",
+      "fddSensorFaultHours": "",
+      "kind": "Number",
+      "fddOutput": "fault_pct",
+      "siteRef": "nfft-sim-site",
+      "fddSummary": "equip",
+      "equipRef": "nfft-sim-vav-203"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    }
+   ],
+   "totalCount": "882",
+   "nextPageToken": ""
+  }
+ }
+}

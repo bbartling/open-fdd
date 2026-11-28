@@ -1,0 +1,24 @@
+{
+ "id": "commands__list_one",
+ "request": {
+  "method": "GET",
+  "path": "/api/v2/command"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "commands": [
+    {
+     "id": "1",
+     "name": "contract-probe",
+     "startedAt": "2026-11-28T14:52:59.153175504Z",
+     "expiresAt": "2026-11-28T14:54:59.152377954Z",
+     "activeWrites": [],
+     "pendingWrites": []
+    }
+   ],
+   "totalCount": "1"
+  }
+ }
+}

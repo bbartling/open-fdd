@@ -1,0 +1,190 @@
+{
+ "id": "point_query__automation_layer_page",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/point/query",
+  "body": {
+   "layer": "automation",
+   "pageSize": 6,
+   "pageOffset": 0
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "points": [
+    {
+     "uuid": "0046d229-7341-5491-987d-861560b44a6c",
+     "name": "nfft-sim-site/nfft-sim-vav-203/FCU-SENSOR-NULL",
+     "layer": "automation",
+     "version": "",
+     "attrs": {
+      "type": "fdd-result",
+      "group_key": "nfft-sim-site/nfft-sim-vav-203",
+      "units": "%",
+      "description": "Own zone setpoint present but zone temperature null for at least 90% of window",
+      "label": "FCU-SENSOR-NULL",
+      "application_id": "open-fdd"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    },
+    {
+     "uuid": "004cad60-3c0a-5d66-abb1-34bbcecd7e02",
+     "name": "nfft-sim-site/nfft-sim-vav-01/VAV-7",
+     "layer": "automation",
+     "version": "",
+     "attrs": {
+      "application_id": "open-fdd",
+      "type": "fdd-result",
+      "group_key": "nfft-sim-site/nfft-sim-vav-01",
+      "label": "VAV-7",
+      "units": "%",
+      "description": "Min airflow / fixed high flow"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    },
+    {
+     "uuid": "007abbc9-9abc-5955-ad56-f1cccefc66e7",
+     "name": "nfft-sim-site/nfft-sim-vav-207/FAULT-ELAPSED-HOURS",
+     "layer": "automation",
+     "version": "",
+     "attrs": {
+      "application_id": "open-fdd",
+      "description": "Comfort fault sample count → hours",
+      "type": "fdd-result",
+      "label": "FAULT-ELAPSED-HOURS",
+      "units": "%",
+      "group_key": "nfft-sim-site/nfft-sim-vav-207"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    },
+    {
+     "uuid": "01058b64-6c36-531d-bceb-55fcb4c49bad",
+     "name": "nfft-sim-site/nfft-sim-vav-99/PID-HUNT-1",
+     "layer": "automation",
+     "version": "",
+     "attrs": {
+      "units": "%",
+      "type": "fdd-result",
+      "group_key": "nfft-sim-site/nfft-sim-vav-99",
+      "description": "Suspected control-output hunting",
+      "label": "PID-HUNT-1",
+      "application_id": "open-fdd"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    },
+    {
+     "uuid": "011a0243-327b-5f11-981c-aa71605d6f00",
+     "name": "nfft-sim-site/nfft-sim-ahu-2/OA-1/timeline",
+     "layer": "automation",
+     "version": "",
+     "attrs": {
+      "type": "fdd-fault-timeline",
+      "units": "",
+      "description": "OA-1 confirmed fault per assessed timestamp: 1 fault, 0 ok, no sample = not assessed",
+      "application_id": "open-fdd",
+      "label": "OA-1 timeline",
+      "group_key": "nfft-sim-site/nfft-sim-ahu-2"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    },
+    {
+     "uuid": "015fd63c-0bcf-512d-9951-165d4eadc0f5",
+     "name": "nfft-sim-site/nfft-sim-hw-boiler-1/SV-FLATLINE/HW supply temperature",
+     "layer": "automation",
+     "version": "",
+     "attrs": {
+      "group_key": "nfft-sim-site/nfft-sim-hw-boiler-1",
+      "application_id": "open-fdd",
+      "units": "h",
+      "type": "fdd-result",
+      "label": "SV-FLATLINE",
+      "description": "Sensor flatline (stuck)"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    }
+   ],
+   "totalCount": "745",
+   "nextPageToken": ""
+  }
+ }
+}

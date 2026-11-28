@@ -1,0 +1,3248 @@
+{
+ "id": "layers__list",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/point/layers"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "layers": [
+    {
+     "name": "hpl:udmi:1",
+     "description": "UDMI Layer",
+     "kind": "LAYER_BASE",
+     "components": [],
+     "updateAttrMask": [],
+     "pointCount": "0",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [
+      "udmi_device_id",
+      "udmi_point_name",
+      "udmi_registry"
+     ],
+     "defaultDisplayAttrs": [
+      "udmi_device_id",
+      "udmi_point_name",
+      "udmi_units"
+     ],
+     "defaultGroupingAttrs": [
+      "udmi_registry",
+      "udmi_device_id"
+     ],
+     "structuredComponents": [
+      {
+       "name": "udmi_registry",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "udmi_registry",
+       "type": "TEXT",
+       "options": [
+        "AS udmi_registry_text TEXT NOSTEM SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "udmi_device_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "udmi_device_id",
+       "type": "TEXT",
+       "options": [
+        "AS udmi_device_id_text TEXT NOSTEM SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "udmi_point_name",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "udmi_point_name",
+       "type": "TEXT",
+       "options": [
+        "AS udmi_point_name_text TEXT NOSTEM SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "udmi_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "udmi_ref",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      }
+     ],
+     "driver": {
+      "grpcService": "env:UDMI_SERVICE_ADDRESS=unix:///run/nf/udmi_service_0.sock",
+      "polled": false,
+      "concurrency": 0
+     }
+    },
+    {
+     "name": "default",
+     "description": "Default layer",
+     "kind": "LAYER_UNION",
+     "components": [
+      "hpl:modbus:1",
+      "site",
+      "hpl:bacnet:local",
+      "ftest",
+      "hpl:fox:1",
+      "model:brick",
+      "hpl:sparkplug:1",
+      "hpl:bacnet:1",
+      "automation",
+      "llm",
+      "model",
+      "hpl:udmi:1"
+     ],
+     "updateAttrMask": [],
+     "pointCount": "1",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [],
+     "defaultDisplayAttrs": [],
+     "defaultGroupingAttrs": [],
+     "structuredComponents": [
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      }
+     ]
+    },
+    {
+     "name": "hpl:bacnet:1",
+     "description": "BACnet Hardware Presentation Layer",
+     "kind": "LAYER_BASE",
+     "components": [],
+     "updateAttrMask": [],
+     "pointCount": "0",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [
+      "device_prop_object_name",
+      "prop_object_name",
+      "prop_description",
+      "device_prop_description",
+      "device_id"
+     ],
+     "defaultDisplayAttrs": [
+      "device_id"
+     ],
+     "defaultGroupingAttrs": [
+      "device_prop_object_name"
+     ],
+     "structuredComponents": [
+      {
+       "name": "type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "instance",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "integer"
+      },
+      {
+       "name": "prop_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "integer"
+      },
+      {
+       "name": "prop_object_name",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "prop_object_name",
+       "type": "TEXT",
+       "options": [
+        "AS prop_object_name_text TEXT NOSTEM SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "prop_description",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "prop_description",
+       "type": "TEXT",
+       "options": [
+        "AS prop_object_description_text TEXT NOSTEM SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "bacnet_net",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "integer"
+      },
+      {
+       "name": "bacnet_mac",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "bacnet_adr",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "device_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "integer"
+      },
+      {
+       "name": "port_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "integer"
+      },
+      {
+       "name": "device_prop_model_name",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "device_prop_object_name",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "device_prop_vendor_name",
+       "type": "TEXT",
+       "options": [
+        "AS device_prop_vendor_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "device_prop_vendor_name",
+       "type": "TAG",
+       "options": [
+        "TAG SEPARATOR |"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "device_prop_model_name",
+       "type": "TEXT",
+       "options": [
+        "AS device_prop_model_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "device_prop_object_name",
+       "type": "TEXT",
+       "options": [
+        "AS device_prop_object_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "prop_location",
+       "type": "TEXT",
+       "options": [
+        "TEXT NOSTEM"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "prop_model_name",
+       "type": "TEXT",
+       "options": [
+        "TEXT NOSTEM"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "object_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "device_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "uuid"
+      },
+      {
+       "name": "original_device_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "uuid"
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      }
+     ],
+     "driver": {
+      "grpcService": "env:BACNET_SERVICE_ADDRESS=unix:///run/nf/bacnet_hpl_service_0.sock",
+      "polled": true,
+      "concurrency": 0
+     }
+    },
+    {
+     "name": "hpl:modbus:1",
+     "description": "Modbus Hardware Presentation Layer",
+     "kind": "LAYER_BASE",
+     "components": [],
+     "updateAttrMask": [],
+     "pointCount": "0",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [
+      "connection_name",
+      "register_name",
+      "device_address",
+      "register_address"
+     ],
+     "defaultDisplayAttrs": [],
+     "defaultGroupingAttrs": [],
+     "structuredComponents": [
+      {
+       "name": "device_address",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "register_address",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "integer"
+      },
+      {
+       "name": "register_name",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "connection_name",
+       "type": "TEXT",
+       "options": [
+        "TEXT SORTABLE"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "connection_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "uuid"
+      },
+      {
+       "name": "profile_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "uuid"
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      }
+     ],
+     "driver": {
+      "grpcService": "env:MODBUS_SERVICE_ADDRESS=unix:///run/nf/modbus_hpl_service_0.sock",
+      "polled": true,
+      "concurrency": 0
+     }
+    },
+    {
+     "name": "site",
+     "description": "Site Layer",
+     "kind": "LAYER_BASE",
+     "components": [],
+     "updateAttrMask": [],
+     "pointCount": "0",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [],
+     "defaultDisplayAttrs": [],
+     "defaultGroupingAttrs": [],
+     "structuredComponents": [
+      {
+       "name": "address",
+       "type": "TEXT",
+       "options": [
+        "TEXT SORTABLE"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "timezone",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "area",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "real"
+      },
+      {
+       "name": "area_unit",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "year_built",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "integer"
+      },
+      {
+       "name": "latitude",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "double"
+      },
+      {
+       "name": "longitude",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "double"
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      }
+     ]
+    },
+    {
+     "name": "ftest",
+     "description": "Shadow samples for functional test runs",
+     "kind": "LAYER_BASE",
+     "components": [
+      "equipment_id",
+      "role",
+      "source_uuid"
+     ],
+     "updateAttrMask": [],
+     "pointCount": "0",
+     "componentOptions": [
+      "TEXT SORTABLE",
+      "TEXT SORTABLE",
+      "TEXT SORTABLE"
+     ],
+     "indexed": true,
+     "componentTypes": [
+      "TEXT",
+      "TEXT",
+      "TEXT"
+     ],
+     "suggestedExtractionAttrs": [],
+     "defaultDisplayAttrs": [],
+     "defaultGroupingAttrs": [],
+     "structuredComponents": [
+      {
+       "name": "equipment_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "role",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "source_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      }
+     ]
+    },
+    {
+     "name": "model:brick",
+     "description": "Brick Model layer",
+     "kind": "LAYER_BASE",
+     "components": [],
+     "updateAttrMask": [],
+     "pointCount": "0",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [],
+     "defaultDisplayAttrs": [
+      "equipTypeId",
+      "class",
+      "markers",
+      "isPointOf"
+     ],
+     "defaultGroupingAttrs": [],
+     "structuredComponents": [
+      {
+       "name": "id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "dis",
+       "type": "TEXT",
+       "options": [
+        "TEXT"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "markers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "navName",
+       "type": "TEXT",
+       "options": [
+        "TEXT"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "hasLocation",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "isPartOf",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "feeds",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "isPointOf",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "class",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "suggestion_source",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "dataLayer",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "equipTypeId",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      }
+     ]
+    },
+    {
+     "name": "hpl:sparkplug:1",
+     "description": "Sparkplug B Consumer Layer",
+     "kind": "LAYER_BASE",
+     "components": [],
+     "updateAttrMask": [],
+     "pointCount": "0",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [
+      "edge_node_id",
+      "device_id",
+      "metric_name",
+      "connection_name"
+     ],
+     "defaultDisplayAttrs": [
+      "edge_node_id",
+      "device_id",
+      "sparkplug_datatype"
+     ],
+     "defaultGroupingAttrs": [
+      "connection_name",
+      "edge_node_id",
+      "device_id"
+     ],
+     "structuredComponents": [
+      {
+       "name": "connection_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "uuid"
+      },
+      {
+       "name": "connection_name",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "connection_name",
+       "type": "TEXT",
+       "options": [
+        "AS connection_name_text TEXT NOSTEM SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "sparkplug_group",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "edge_node_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "edge_node_id",
+       "type": "TEXT",
+       "options": [
+        "AS edge_node_id_text TEXT NOSTEM SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "device_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "device_id",
+       "type": "TEXT",
+       "options": [
+        "AS device_id_text TEXT NOSTEM SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "metric_name",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "metric_name",
+       "type": "TEXT",
+       "options": [
+        "AS metric_name_text TEXT NOSTEM SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "sparkplug_datatype",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "alias",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": "integer"
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      }
+     ],
+     "driver": {
+      "grpcService": "env:SPARKPLUG_CONSUMER_SERVICE_ADDRESS=unix:///run/nf/sparkplug_consumer_service_0.sock",
+      "polled": false,
+      "concurrency": 0
+     }
+    },
+    {
+     "name": "automation",
+     "description": "Automation Data Points Layer",
+     "kind": "LAYER_BASE",
+     "components": [],
+     "updateAttrMask": [],
+     "pointCount": "746",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [],
+     "defaultDisplayAttrs": [],
+     "defaultGroupingAttrs": [],
+     "structuredComponents": [
+      {
+       "name": "hook_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "application_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "group_key",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "label",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "bacnet_object",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "source",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "contractLayerProbe",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      }
+     ]
+    },
+    {
+     "name": "hpl:bacnet:local",
+     "description": "Locak Bacnet Objects Layer",
+     "kind": "LAYER_BASE",
+     "components": [],
+     "updateAttrMask": [],
+     "pointCount": "134",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [
+      "device_prop_object_name",
+      "device_id"
+     ],
+     "defaultDisplayAttrs": [
+      "device_id"
+     ],
+     "defaultGroupingAttrs": [],
+     "structuredComponents": [
+      {
+       "name": "type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "integer"
+      },
+      {
+       "name": "instance",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "integer"
+      },
+      {
+       "name": "object_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "device_prop_object_name",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "device_prop_object_name",
+       "type": "TEXT",
+       "options": [
+        "AS device_prop_object_name_text_local TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "device_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "integer"
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "prop_min_pres_value",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "prop_max_pres_value",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "prop_description",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "prop_status_flags",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "device_uuid",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "prop_object_name",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "prop_event_state",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "bacnet_net",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "prop_units",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "prop_out_of_service",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      }
+     ]
+    },
+    {
+     "name": "hpl:fox:1",
+     "description": "Fox protocol layer",
+     "kind": "LAYER_BASE",
+     "components": [],
+     "updateAttrMask": [],
+     "pointCount": "0",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [],
+     "defaultDisplayAttrs": [
+      "path",
+      "facets",
+      "station_name"
+     ],
+     "defaultGroupingAttrs": [
+      "parent_name",
+      "path"
+     ],
+     "structuredComponents": [
+      {
+       "name": "type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "path",
+       "type": "PATH",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "facets",
+       "type": "TEXT",
+       "options": [
+        "TEXT"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "fox_address",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "station_name",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "connection_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      }
+     ],
+     "driver": {
+      "grpcService": "env:FOX_SERVICE_ADDRESS=unix:///run/nf/fox_service_0.sock",
+      "polled": false,
+      "concurrency": 0
+     }
+    },
+    {
+     "name": "llm",
+     "description": "LLM Layer",
+     "kind": "LAYER_BASE",
+     "components": [],
+     "updateAttrMask": [],
+     "pointCount": "0",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [],
+     "defaultDisplayAttrs": [],
+     "defaultGroupingAttrs": [],
+     "structuredComponents": [
+      {
+       "name": "llm_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "llm_summary",
+       "type": "TEXT",
+       "options": [
+        "TEXT SORTABLE"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "llm_functional_role",
+       "type": "TEXT",
+       "options": [
+        "TEXT SORTABLE"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "llm_description",
+       "type": "TEXT",
+       "options": [
+        "TEXT SORTABLE"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "llm_unit",
+       "type": "TEXT",
+       "options": [
+        "TEXT SORTABLE"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "llm_markers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "llm_equipments",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "llm_equipment_types",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "llm_equipment_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "llm_equip",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "llm_enrichment_json",
+       "type": "TEXT",
+       "options": [
+        "TEXT SORTABLE"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      }
+     ]
+    },
+    {
+     "name": "model",
+     "description": "Model layer",
+     "kind": "LAYER_BASE",
+     "components": [],
+     "updateAttrMask": [],
+     "pointCount": "882",
+     "componentOptions": [],
+     "indexed": true,
+     "componentTypes": [],
+     "suggestedExtractionAttrs": [],
+     "defaultDisplayAttrs": [
+      "equipTypeId",
+      "class",
+      "markers",
+      "equipRef"
+     ],
+     "defaultGroupingAttrs": [],
+     "structuredComponents": [
+      {
+       "name": "id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "dis",
+       "type": "TEXT",
+       "options": [
+        "TEXT"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "markers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "navName",
+       "type": "TEXT",
+       "options": [
+        "TEXT"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "airRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "blowdownWaterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "blowdownWaterMeterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "chilledWaterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "chilledWaterMeterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "commRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "condensateRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "condenserWaterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "condenserWaterMeterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "connectionRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "deviceRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "dischargeEquipRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "domesticWaterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "domesticWaterMeterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "domesticHotWaterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "domesticHotWaterMeterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "elecMeterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "elecRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "equipRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "fireZoneRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "fuelOilRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "gasolineRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "hotWaterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "hotWaterMeterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "hvacZoneRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "iaqZoneRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "inletEquipRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "lightingZoneRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "makeupWaterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "naturalGasRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "naturalGasMeterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "networkRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "occZoneRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "portfolioRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "refrigRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "securityZoneRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "siteRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "spaceRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "steamRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "submeterOf",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "systemRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "wasteWaterMeterRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "weatherStationRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "ahuRef",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "class",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "suggestion_source",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "dataLayer",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "equipTypeId",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": "text"
+      },
+      {
+       "name": "uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "period",
+       "type": "NUMERIC",
+       "options": [
+        "NUMERIC SORTABLE"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_uuid",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "parent_name",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS parent_name_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "protocol_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "point_type",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "cov",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "display_units",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "description",
+       "type": "TAG",
+       "options": [
+        "TAG",
+        "AS description_text TEXT NOSTEM"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "layers",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "conversion_id",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "quality_flags",
+       "type": "TAG",
+       "options": [
+        "TAG"
+       ],
+       "sqlType": ""
+      },
+      {
+       "name": "feeds",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "kind",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "unit",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "sensorRef",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddOutputSince",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddReason",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddOutput",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddLastRun",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddCoverageHours",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddSummary",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "roleRef",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddSensorFaultHours",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "ruleRef",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "equipUuid",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddOccSource",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddWindowHours",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddStatus",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddKind",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddTimelineOf",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "fddTimelineThrough",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "contractProbe",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      },
+      {
+       "name": "contractProbe2",
+       "type": "TEXT",
+       "options": [],
+       "sqlType": ""
+      }
+     ]
+    }
+   ],
+   "totalCount": "13"
+  }
+ }
+}

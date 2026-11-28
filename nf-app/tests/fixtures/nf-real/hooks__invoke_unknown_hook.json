@@ -1,0 +1,15 @@
+{
+ "id": "hooks__invoke_unknown_hook",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/apps/open-fdd-lite/hooks/nope",
+  "body": {}
+ },
+ "response": {
+  "status": 404,
+  "contentType": "application/grpc",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

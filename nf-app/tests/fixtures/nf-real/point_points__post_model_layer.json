@@ -1,0 +1,33 @@
+{
+ "id": "point_points__post_model_layer",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/point/points",
+  "body": {
+   "points": [
+    {
+     "uuid": "<sim-point-uuid>",
+     "name": "<name>",
+     "layer": "model",
+     "attrs": {
+      "contractProbe": "with-layer"
+     }
+    }
+   ]
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "results": [
+    {
+     "uuid": "2969823e-a2c6-339c-80b3-5c2c005ae2b4",
+     "success": true,
+     "newVersion": "",
+     "taskUuid": "points_updates_queue:9213ec2c-eb3b-11f1-8d89-fab4608d298c"
+    }
+   ]
+  }
+ }
+}

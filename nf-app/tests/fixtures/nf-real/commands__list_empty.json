@@ -1,0 +1,15 @@
+{
+ "id": "commands__list_empty",
+ "request": {
+  "method": "GET",
+  "path": "/api/v2/command"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "commands": [],
+   "totalCount": "0"
+  }
+ }
+}

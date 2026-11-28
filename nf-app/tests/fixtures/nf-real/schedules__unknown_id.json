@@ -1,0 +1,14 @@
+{
+ "id": "schedules__unknown_id",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/schedules/00000000-0000-0000-0000-000000000000"
+ },
+ "response": {
+  "status": 404,
+  "contentType": "application/grpc",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

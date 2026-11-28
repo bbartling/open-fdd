@@ -1,0 +1,19 @@
+{
+ "id": "commands__start_unknown_field",
+ "request": {
+  "method": "POST",
+  "path": "/api/v2/command",
+  "body": {
+   "name": "x",
+   "bogus": 1,
+   "duration": "1m"
+  }
+ },
+ "response": {
+  "status": 400,
+  "contentType": "text/plain",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

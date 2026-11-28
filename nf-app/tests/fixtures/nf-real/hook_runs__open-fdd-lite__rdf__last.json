@@ -1,0 +1,56 @@
+{
+ "id": "hook_runs__open-fdd-lite__rdf__last",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/apps/open-fdd-lite/hooks/rdf/runs?page_size=1&include_results=true"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "runs": [
+    {
+     "hookId": "",
+     "pid": "9",
+     "state": "STATE_SUCCESS",
+     "message": "",
+     "trigger": "TRIGGER_REQUEST",
+     "startTime": "2026-11-28T14:46:13.241942661Z",
+     "endTime": "2026-11-28T14:46:15.242336257Z",
+     "args": {
+      "limit": "150000",
+      "offset": "430305",
+      "snapshot": "69c66d3fccdb4b370162c488cec59ee8b84309bfab9664c306537fc719437b02"
+     },
+     "results": {
+      "": {
+       "endTime": "2026-11-28T14:46:14.448467462Z",
+       "state": "STATE_SUCCESS",
+       "invocationCount": "0",
+       "returnValue": "",
+       "events": [
+        {
+         "ts": "2026-11-28T14:46:14.444Z",
+         "message": "{\"ok\":true,\"ms\":1498,\"base\":\"urn:nf:\",\"snapshot\":\"69c66d3fccdb4b370162c488cec59ee8b84309bfab9664c306537fc719437b02\",\"total_chars\":509500,\"offset\":430305,\"next_offset\":null,\"points\":865,\"turtle\":\"59a3-9148-38192b3fca17\\\" ;\\n            ref:storedAt local:store_nf ] .\\n\\nlocal:d6bd81f7-cda2-546d-a03a-50910d2f978b\\n    a phIoT:point ;\\n    rdfs:label \\\"VAV-28 Breakroom AVG-ZONE-TEMP\\\" ;\\n    ph:hasTag phIoT:point, phIoT:his, local:metric, local:fdd ;\\n    phIoT:siteRef local:baee4790-9a46-5235-94e5-a590e91ae2b7 ;\\n    phIoT:equipRef local:b72fb997-f34b-5ccf-b27f-1f5eb659b9fc ;\\n    ph:unit \\\"°C\\\" ;\\n    ph:kind \\\"Number\\\" ;\\n    local:ruleRef \\\"AVG-ZONE-TEMP\\\" ;\\n    ref:hasExternalReference [ a ref:TimeseriesReference ;\\n            rdfs:label \\\"NF history\\\" ;\\n            ref:hasTimeseriesId \\\"d6bd81f7-cda2-546d-a03a-50910d2f978b\\\" ;\\n            ref:storedAt local:store_nf ] .\\n\\nlocal:d6bf124f-6de1-51cc-814d-98e6aee84b17\\n    a phIoT:point ;\\n    rdfs:label \\\"VAV-26 Lab SV-SPIKE\\\" ;\\n    ph:hasTag phIoT:point, phIoT:his, local:fault, local:fdd ;\\n    phIoT:siteRef local:baee4790-9a46-5235-94e5-a590e91ae2b7 ;\\n    phIoT:equipRef local:73b5c522-94e5-5ed9-a6eb-b2243c47efd5 ;\\n    ph:unit \\\"h\\\" ;\\n    ph:kind \\\"Number\\\" ;\\n    local:ruleRef \\\"SV-SPIKE\\\" ;\\n    ref:hasExternalReference [ a ref:TimeseriesReference ;\\n            rdfs:label \\\"NF history\\\" ;\\n            ref:hasTimeseriesId \\\"d6bf124f-6de1-51cc-814d-98e6aee84b17\\\" ;\\n            ref:storedAt local:store_nf ] .\\n\\nlocal:d6c40e99-162f-5c23-96fa-2f83a2947672\\n    a phIoT:point ;\\n    rdfs:label \\\"VAV-27 Storage SV-SPIKE\\\" ;\\n    ph:hasTag phIoT:point, phIoT:his, local:fault, local:fdd ;\\n    phIoT:siteRef local:baee4790-9a46-5235-94e5-a590e91ae2b7 ;\\n    phIoT:equipRef local:60ba692d-6ebf-5f87-86a0-7a244f2b756f ;\\n    ph:unit \\\"h\\\" ;\\n    ph:kind \\\"Number\\\" ;\\n    local:ruleRef \\\"SV-SPIKE\\\" ;\\n    ref:hasExternalReference [ a ref:TimeseriesReference ;\\n            rdfs:label \\\"NF history\\\" ;\\n            ref:hasTimeseriesId \\\"d6c40e99-162f-5c23-96fa-2f83a2947672\\\" ;\\n            ref:storedAt local:store_nf ] .\\n\\nlocal:d6c7b678-e993-5f85-b27d-9bd19a216656\\n    a phIoT:point ;\\n    rdfs:label \\\"VAV-23 East SV-STALE fault timeline\\\" ;\\n    ph:hasTag phIoT:point, phIoT:his, local:fault_timeline ;\\n    phIoT:siteRef local:baee4790-9a46-5235-94e5-a590e91ae2b7 ;\\n    phIoT:equipRef local:1467bf39-23d6-5892-8667-34bb19fa08d8 ;\\n    ph:kind \\\"Number\\\" ;\\n    local:ruleRef \\\"SV-STALE\\\" ;\\n    ref:hasExternalReference [ a ref:TimeseriesReference ;\\n            rdfs:label \\\"NF history\\\" ;\\n            ref:hasTimeseriesId \\\"d6c7b678-e993-5f85-b27d-9bd19a216656\\\" ;\\n            ref:storedAt local:store_nf ] .\\n\\nlocal:d85d2f13-bd9f-5b6a-83cd-893975e301e2\\n    a phIoT:point ;\\n    rdfs:label \\\"VAV-27 Storage XS-COPY fault timeline\\\" ;\\n    ph:hasTag phIoT:point, phIoT:his, local:fault_timeline ;\\n    phIoT:siteRef local:baee4790-9a46-5235-94e5-a590e91ae2b7 ;\\n    phIoT:equipRef local:60ba692d-6ebf-5f87-...<truncated>"
+        }
+       ],
+       "startTime": "2026-11-28T14:46:12.944926635Z",
+       "enqueuedTime": "2026-11-28T14:46:12.942992116Z",
+       "group": "",
+       "pid": "9",
+       "taskUuid": "",
+       "args": {},
+       "runtimePid": 1330
+      }
+     },
+     "version": "",
+     "enqueuedTime": "2026-11-28T14:46:12.942992116Z",
+     "stats": {
+      "6": "1"
+     }
+    }
+   ],
+   "totalCount": "9"
+  }
+ }
+}

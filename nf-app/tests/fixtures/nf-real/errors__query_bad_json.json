@@ -1,0 +1,15 @@
+{
+ "id": "errors__query_bad_json",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/point/query",
+  "body": "{bad"
+ },
+ "response": {
+  "status": 400,
+  "contentType": "text/plain",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

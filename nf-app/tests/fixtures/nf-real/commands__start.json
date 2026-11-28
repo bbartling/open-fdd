@@ -1,0 +1,19 @@
+{
+ "id": "commands__start",
+ "request": {
+  "method": "POST",
+  "path": "/api/v2/command",
+  "body": {
+   "name": "contract-probe",
+   "duration": "120s"
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "id": "1",
+   "expiresAt": "2026-11-28T14:54:59.152377954Z"
+  }
+ }
+}

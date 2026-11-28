@@ -1,0 +1,91 @@
+{
+ "id": "point_query__bacnet_backed_point_default",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/point/query",
+  "body": {
+   "layer": "default",
+   "pageSize": 300
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "nextPageToken": "",
+   "points": [
+    {
+     "uuid": "2969823e-a2c6-339c-80b3-5c2c005ae2b4",
+     "name": "nfft-sim.ahu-1.rat",
+     "layer": "default",
+     "version": "",
+     "attrs": {
+      "bacnet_net": "0",
+      "type": "OBJECT_ANALOG_VALUE",
+      "device_uuid": "6a87f0f2-0900-11ed-b737-c32fabea95ef",
+      "unit": "°C",
+      "kind": "Number",
+      "markers": "point,his,return,air,temp,sensor",
+      "contractProbe2": "",
+      "prop_description": "AHU-1 return air temperature",
+      "prop_max_pres_value": "0.000000",
+      "prop_object_name": "nfft-sim.ahu-1.rat",
+      "prop_min_pres_value": "0.000000",
+      "equipRef": "nfft-sim-ahu-1",
+      "dis": "AHU-1 return air temperature",
+      "contractProbe": "",
+      "siteRef": "nfft-sim-site",
+      "instance": "8005",
+      "prop_units": "62",
+      "device_id": "10",
+      "id": "nfft-sim-ahu-1.rat",
+      "prop_event_state": "0",
+      "device_prop_object_name": "NF",
+      "prop_status_flags": "",
+      "object_id": "av.8005"
+     },
+     "hpldata": {
+      "@type": "type.googleapis.com/normalgw.bacnet.v1.BACnetPoint",
+      "uuid": "",
+      "deviceAddress": {
+       "mac": "",
+       "net": 0,
+       "adr": "",
+       "maxApdu": 0,
+       "deviceId": 10,
+       "bbmd": "",
+       "portId": 0
+      },
+      "property": {
+       "objectId": {
+        "objectType": "OBJECT_ANALOG_VALUE",
+        "instance": 8005
+       },
+       "propertyId": "PROP_PRESENT_VALUE",
+       "arrayIndex": 4294967295
+      },
+      "hasPriorityArray": false
+     },
+     "latestValue": {
+      "ts": "2026-11-28T14:50:08.207Z",
+      "double": 24
+     },
+     "displayUnits": "°C",
+     "parentUuid": "6a87f0f2-0900-11ed-b737-c32fabea95ef",
+     "protocolId": "av.8005",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "AHU-1 return air temperature",
+     "parentName": "NF",
+     "units": "DEGREES_CELSIUS",
+     "hplDriver": "hpl:bacnet:local",
+     "conversionId": "",
+     "qualityFlags": [],
+     "writability": "WRITABILITY_UNKNOWN"
+    }
+   ],
+   "totalCount": "1"
+  }
+ },
+ "note": "one simulated BACnet-backed point (hpldata, latestValue, units enums)"
+}

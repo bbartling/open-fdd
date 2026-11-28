@@ -1,0 +1,56 @@
+{
+ "id": "hook_runs__open-fdd-lite__open-meteo-weather__last",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/apps/open-fdd-lite/hooks/open-meteo-weather/runs?page_size=1&include_results=true"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "runs": [
+    {
+     "hookId": "",
+     "pid": "3",
+     "state": "STATE_SUCCESS",
+     "message": "",
+     "trigger": "TRIGGER_SCHEDULE",
+     "startTime": "2026-11-28T14:43:00.100231987Z",
+     "endTime": "2026-11-28T14:43:01.100774068Z",
+     "args": {},
+     "results": {
+      "": {
+       "endTime": "2026-11-28T14:43:00.233651432Z",
+       "state": "STATE_SUCCESS",
+       "invocationCount": "0",
+       "returnValue": "",
+       "events": [
+        {
+         "ts": "2026-11-28T14:43:00.230Z",
+         "message": "open-meteo weather {\"site\":\"app-settings\",\"siteName\":\"app-settings\",\"location\":\"40.00,-90.00\",\"coords_source\":\"app setting (latitude/longitude)\",\"observed\":\"2026-11-28T14:30\",\"oa_dry_bulb_f\":37.1,\"oa_rh_pct\":82,\"dewpoint_open_meteo_f\":32.1,\"dewpoint_magnus_f\":32.11,\"dewpoint_delta_f\":0.01,\"dewpoint_written_f\":32.1,\"dewpoint_source\":\"open-meteo\",\"write_path\":\"sdk.http AddPointsData\",\"exporters\":{\"bacnet-av\":{\"status\":\"ok\",\"result\":{\"av.1\":37.1,\"av.2\":82,\"av.3\":32.1}}},\"bacnet\":{\"av.1\":37.1,\"av.2\":82,\"av.3\":32.1}}"
+        },
+        {
+         "ts": "2026-11-28T14:42:59.987Z",
+         "message": "weather location from the app setting (latitude/longitude)"
+        }
+       ],
+       "startTime": "2026-11-28T14:42:59.981085193Z",
+       "enqueuedTime": "2026-11-28T14:42:59.979949349Z",
+       "group": "",
+       "pid": "3",
+       "taskUuid": "",
+       "args": {},
+       "runtimePid": 1328
+      }
+     },
+     "version": "",
+     "enqueuedTime": "2026-11-28T14:42:59.979949349Z",
+     "stats": {
+      "6": "1"
+     }
+    }
+   ],
+   "totalCount": "3"
+  }
+ }
+}

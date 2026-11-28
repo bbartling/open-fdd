@@ -1,0 +1,14 @@
+{
+ "id": "point_data__bad_from",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/point/data?uuids=<sim-point-uuid>&from=yesterday&count=2"
+ },
+ "response": {
+  "status": 400,
+  "contentType": "text/plain",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

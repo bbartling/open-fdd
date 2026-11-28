@@ -1,0 +1,55 @@
+{
+ "id": "hook_runs__nf-hvac-functional-test__admin__last",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/apps/nf-hvac-functional-test/hooks/admin/runs?page_size=1&include_results=true"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "runs": [
+    {
+     "hookId": "",
+     "pid": "11",
+     "state": "STATE_SUCCESS",
+     "message": "",
+     "trigger": "TRIGGER_REQUEST",
+     "startTime": "2026-11-28T14:46:17.242614921Z",
+     "endTime": "2026-11-28T14:46:17.242566318Z",
+     "args": {
+      "action": "status",
+      "payload": "{}"
+     },
+     "results": {
+      "": {
+       "endTime": "2026-11-28T14:46:16.471146625Z",
+       "state": "STATE_SUCCESS",
+       "invocationCount": "0",
+       "returnValue": "",
+       "events": [
+        {
+         "ts": "2026-11-28T14:46:16.470Z",
+         "message": "{\"ok\":true,\"state\":\"IDLE\",\"step_index\":-1,\"run_id\":\"\",\"overrides\":0,\"needs_attention\":false,\"dry_run\":true,\"capability\":[],\"reason\":\"\",\"run_started_at\":0,\"step_started_at\":0,\"step_written\":true,\"max_total_ms\":0,\"pending_start\":false,\"system_id\":null,\"systems\":[],\"steps\":[]}"
+        }
+       ],
+       "startTime": "2026-11-28T14:46:16.468871183Z",
+       "enqueuedTime": "2026-11-28T14:46:16.466517036Z",
+       "group": "",
+       "pid": "11",
+       "taskUuid": "",
+       "args": {},
+       "runtimePid": 1297
+      }
+     },
+     "version": "",
+     "enqueuedTime": "2026-11-28T14:46:16.466517036Z",
+     "stats": {
+      "6": "1"
+     }
+    }
+   ],
+   "totalCount": "11"
+  }
+ }
+}

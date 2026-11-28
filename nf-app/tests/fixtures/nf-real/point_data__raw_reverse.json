@@ -1,0 +1,32 @@
+{
+ "id": "point_data__raw_reverse",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/point/data?uuids=<sim-point-uuid>&count=3&reverse=true"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "data": [
+    {
+     "uuid": "2969823e-a2c6-339c-80b3-5c2c005ae2b4",
+     "values": [
+      {
+       "ts": "2026-11-28T14:50:08.000000207Z",
+       "double": 24
+      },
+      {
+       "ts": "2026-11-28T14:42:08.000000025Z",
+       "double": 24
+      },
+      {
+       "ts": "2026-11-28T14:37:17.000000382Z",
+       "double": 24
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,26 @@
+{
+ "id": "point_query__site_field_no_match",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/point/query",
+  "body": {
+   "layer": "default",
+   "pageSize": 1,
+   "structuredQuery": {
+    "field": {
+     "property": "siteRef",
+     "text": "nope"
+    }
+   }
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "points": [],
+   "totalCount": "0",
+   "nextPageToken": ""
+  }
+ }
+}

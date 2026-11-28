@@ -67,9 +67,9 @@ test("mock NF: rejects malformed writes with 400 and survives them; DELETE clear
 });
 
 test("mock NF: the GET history route still works next to the POST data route", async () => {
-  const r = await fetch(base + "/api/v1/point/data?uuids=nope&window=300s&method=AVERAGE");
+  const r = await fetch(base + "/api/v1/point/data?uuids=00000000-0000-0000-0000-000000000000&window=300s&method=AVERAGE");
   assert.equal(r.status, 200);
-  assert.deepEqual((await r.json()).data, [{ uuid: "nope", values: [] }]);
+  assert.deepEqual((await r.json()).data, [{ uuid: "00000000-0000-0000-0000-000000000000", values: [] }]);
 });
 
 test("mock NF: app metadata is served as JSON without content sniffing", async () => {

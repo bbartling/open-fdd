@@ -1,0 +1,781 @@
+{
+ "id": "apps__list",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/apps"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "applications": [
+    {
+     "id": "nf-hvac-functional-test",
+     "name": "nf-hvac-functional-test",
+     "description": "Runs an AHU functional test with an optional VAV max-cooling-airflow step. Dry-run is the default. Writes use a BACnet priority from 3 to 16 (default 8).",
+     "runtime": "RUNTIME_NODE_JS",
+     "compatibilityDate": "",
+     "hooks": [
+      {
+       "id": "admin",
+       "name": "admin",
+       "entryPoint": "/hooks/admin.js",
+       "points": {
+        "annotations": [],
+        "globalVariables": [],
+        "groupVariables": [],
+        "labelAttribute": "",
+        "layer": "",
+        "noPoints": true,
+        "queryTemplate": "",
+        "equipmentTypeId": "",
+        "siteRef": [],
+        "uuids": []
+       },
+       "requiredLabels": [],
+       "optionalLabels": [],
+       "mode": "MODE_ON_REQUEST",
+       "lastRun": {
+        "hookId": "",
+        "pid": "11",
+        "state": "STATE_SUCCESS",
+        "message": "",
+        "trigger": "TRIGGER_REQUEST",
+        "startTime": "2026-11-28T14:46:17.242614921Z",
+        "endTime": "2026-11-28T14:46:17.242566318Z",
+        "args": {
+         "action": "status",
+         "payload": "{}"
+        },
+        "results": {},
+        "version": "",
+        "enqueuedTime": "2026-11-28T14:46:16.466517036Z",
+        "stats": {
+         "6": "1"
+        }
+       },
+       "invokeTimeout": "8s",
+       "status": "HOOK_STATUS_STARTED",
+       "runtimeConfig": {
+        "memoryLimit": 128,
+        "cpuLimit": 0,
+        "maxRequestsPerLifetime": 0,
+        "minInstances": 0,
+        "maxInstances": 1
+       },
+       "requiredClasses": []
+      },
+      {
+       "id": "sim",
+       "name": "sim",
+       "entryPoint": "/hooks/sim.js",
+       "points": {
+        "annotations": [],
+        "globalVariables": [
+         {
+          "uuid": "",
+          "label": "nfft_sim_enabled",
+          "attrs": {}
+         }
+        ],
+        "groupVariables": [],
+        "labelAttribute": "",
+        "layer": "",
+        "noPoints": false,
+        "queryTemplate": "",
+        "equipmentTypeId": "",
+        "siteRef": [],
+        "uuids": []
+       },
+       "requiredLabels": [],
+       "optionalLabels": [],
+       "schedule": {
+        "rrule": "DTSTART:20260101T000008Z\nRRULE:FREQ=MINUTELY;INTERVAL=2"
+       },
+       "mode": "MODE_SCHEDULED",
+       "lastRun": {
+        "hookId": "",
+        "pid": "64",
+        "state": "STATE_SUCCESS",
+        "message": "",
+        "trigger": "TRIGGER_SCHEDULE",
+        "startTime": "2026-11-28T14:46:08.337039033Z",
+        "endTime": "2026-11-28T14:46:08.337022132Z",
+        "args": {},
+        "results": {},
+        "version": "",
+        "enqueuedTime": "2026-11-28T14:46:07.994771115Z",
+        "stats": {
+         "6": "1"
+        }
+       },
+       "invokeTimeout": "20s",
+       "status": "HOOK_STATUS_STARTED",
+       "runtimeConfig": {
+        "memoryLimit": 96,
+        "cpuLimit": 0,
+        "maxRequestsPerLifetime": 0,
+        "minInstances": 0,
+        "maxInstances": 1
+       },
+       "requiredClasses": []
+      },
+      {
+       "id": "tick",
+       "name": "tick",
+       "entryPoint": "/hooks/tick.js",
+       "points": {
+        "annotations": [],
+        "globalVariables": [
+         {
+          "uuid": "",
+          "label": "ftest_state",
+          "attrs": {}
+         },
+         {
+          "uuid": "",
+          "label": "ftest_step_index",
+          "attrs": {}
+         },
+         {
+          "uuid": "",
+          "label": "ftest_run_seq",
+          "attrs": {}
+         },
+         {
+          "uuid": "",
+          "label": "ftest_overrides_active",
+          "attrs": {}
+         },
+         {
+          "uuid": "",
+          "label": "ftest_needs_attention",
+          "attrs": {}
+         }
+        ],
+        "groupVariables": [],
+        "labelAttribute": "",
+        "layer": "",
+        "noPoints": false,
+        "queryTemplate": "",
+        "equipmentTypeId": "",
+        "siteRef": [],
+        "uuids": []
+       },
+       "requiredLabels": [],
+       "optionalLabels": [],
+       "schedule": {
+        "rrule": "DTSTART:20260101T000000Z\nRRULE:FREQ=SECONDLY;INTERVAL=30"
+       },
+       "mode": "MODE_SCHEDULED",
+       "lastRun": {
+        "hookId": "",
+        "pid": "21",
+        "state": "STATE_SUCCESS",
+        "message": "",
+        "trigger": "TRIGGER_SCHEDULE",
+        "startTime": "2026-11-28T14:46:30.441322798Z",
+        "endTime": "2026-11-28T14:46:30.441312697Z",
+        "args": {},
+        "results": {},
+        "version": "",
+        "enqueuedTime": "2026-11-28T14:46:29.999497999Z",
+        "stats": {
+         "6": "1"
+        }
+       },
+       "invokeTimeout": "8s",
+       "status": "HOOK_STATUS_STARTED",
+       "runtimeConfig": {
+        "memoryLimit": 96,
+        "cpuLimit": 0,
+        "maxRequestsPerLifetime": 0,
+        "minInstances": 0,
+        "maxInstances": 1
+       },
+       "requiredClasses": []
+      },
+      {
+       "id": "trigger",
+       "name": "trigger",
+       "entryPoint": "/hooks/trigger.js",
+       "points": {
+        "annotations": [],
+        "globalVariables": [
+         {
+          "uuid": "",
+          "label": "ftest_trigger_mode",
+          "attrs": {}
+         },
+         {
+          "uuid": "",
+          "label": "ftest_trigger_next",
+          "attrs": {}
+         }
+        ],
+        "groupVariables": [],
+        "labelAttribute": "",
+        "layer": "",
+        "noPoints": false,
+        "queryTemplate": "",
+        "equipmentTypeId": "",
+        "siteRef": [],
+        "uuids": []
+       },
+       "requiredLabels": [],
+       "optionalLabels": [],
+       "schedule": {
+        "rrule": "DTSTART:20260101T000040Z\nRRULE:FREQ=MINUTELY;INTERVAL=1"
+       },
+       "mode": "MODE_SCHEDULED",
+       "lastRun": {
+        "hookId": "",
+        "pid": "12",
+        "state": "STATE_SUCCESS",
+        "message": "",
+        "trigger": "TRIGGER_SCHEDULE",
+        "startTime": "2026-11-28T14:46:40.595403747Z",
+        "endTime": "2026-11-28T14:46:40.595389946Z",
+        "args": {},
+        "results": {},
+        "version": "",
+        "enqueuedTime": "2026-11-28T14:46:39.998141332Z",
+        "stats": {
+         "6": "1"
+        }
+       },
+       "invokeTimeout": "8s",
+       "status": "HOOK_STATUS_STARTED",
+       "runtimeConfig": {
+        "memoryLimit": 96,
+        "cpuLimit": 0,
+        "maxRequestsPerLifetime": 0,
+        "minInstances": 0,
+        "maxInstances": 1
+       },
+       "requiredClasses": []
+      }
+     ],
+     "files": [
+      {
+       "path": "/.gitignore",
+       "mtime": "2026-11-28T14:36:47.496386495Z",
+       "hash": "",
+       "size": "66"
+      },
+      {
+       "path": "/app.json",
+       "mtime": "2026-11-28T14:41:57.173036541Z",
+       "hash": "",
+       "size": "2666"
+      },
+      {
+       "path": "/hooks/admin.js",
+       "mtime": "2026-11-28T14:41:55.529058646Z",
+       "hash": "",
+       "size": "1187"
+      },
+      {
+       "path": "/hooks/lib/admin.js",
+       "mtime": "2026-11-28T14:41:55.557065531Z",
+       "hash": "",
+       "size": "15645"
+      },
+      {
+       "path": "/hooks/lib/capability.js",
+       "mtime": "2026-11-28T14:41:55.564440254Z",
+       "hash": "",
+       "size": "1165"
+      }
+     ],
+     "gitUrl": "",
+     "status": "STATUS_INSTALLED",
+     "options": [
+      {
+       "name": "siteConfig",
+       "description": "Site configuration JSON. Point UUIDs and generic equipment ids only. Dry-run defaults to true.",
+       "optionType": "TYPE_STRING",
+       "choices": [],
+       "validators": [],
+       "defaultValue": {
+        "string": ""
+       },
+       "secret": false,
+       "required": false
+      },
+      {
+       "name": "enabled",
+       "description": "When false, the engine tick does no work.",
+       "optionType": "TYPE_BOOLEAN",
+       "choices": [],
+       "validators": [],
+       "defaultValue": {
+        "boolean": true
+       },
+       "secret": false,
+       "required": false
+      },
+      {
+       "name": "logLevel",
+       "description": "Log level.",
+       "optionType": "TYPE_STRING",
+       "choices": [
+        {
+         "string": "debug"
+        },
+        {
+         "string": "info"
+        },
+        {
+         "string": "warn"
+        },
+        {
+         "string": "error"
+        }
+       ],
+       "validators": [],
+       "defaultValue": {
+        "string": "info"
+       },
+       "secret": false,
+       "required": false
+      },
+      {
+       "name": "enableSimulator",
+       "description": "When true AND simulatorConfirm is CREATE_LOCAL_SIM, the sim hook creates and updates new local BACnet objects for a fake AHU/VAV/reheat bench. Default false. Does not write to real devices or existing points.",
+       "optionType": "TYPE_BOOLEAN",
+       "choices": [],
+       "validators": [],
+       "defaultValue": {
+        "boolean": false
+       },
+       "value": {
+        "boolean": true
+       },
+       "secret": false,
+       "required": false
+      },
+      {
+       "name": "simulatorConfirm",
+       "description": "Must be exactly CREATE_LOCAL_SIM to allow the simulator to create new local objects. Leave empty on a normal install.",
+       "optionType": "TYPE_STRING",
+       "choices": [],
+       "validators": [],
+       "defaultValue": {
+        "string": ""
+       },
+       "value": {
+        "string": "CREATE_LOCAL_SIM"
+       },
+       "secret": false,
+       "required": false
+      },
+      {
+       "name": "version",
+       "description": "Installed Open-FDD revision (set on deploy by nf_app_sync.py)",
+       "optionType": "TYPE_STRING",
+       "choices": [],
+       "validators": [],
+       "defaultValue": {
+        "string": "0.0.0 (5d56909+)"
+       },
+       "value": {
+        "string": "0.0.0 (5d56909+)"
+       },
+       "secret": false,
+       "required": false
+      }
+     ],
+     "layer": {
+      "name": "ftest",
+      "description": "Shadow samples for functional test runs",
+      "kind": "LAYER_BASE",
+      "components": [
+       "equipment_id",
+       "role",
+       "source_uuid"
+      ],
+      "updateAttrMask": [],
+      "pointCount": "0",
+      "componentOptions": [],
+      "indexed": true,
+      "componentTypes": [],
+      "suggestedExtractionAttrs": [],
+      "defaultDisplayAttrs": [],
+      "defaultGroupingAttrs": [],
+      "structuredComponents": [
+       {
+        "name": "equipment_id",
+        "type": "TAG",
+        "options": [],
+        "sqlType": ""
+       },
+       {
+        "name": "role",
+        "type": "TAG",
+        "options": [],
+        "sqlType": ""
+       },
+       {
+        "name": "source_uuid",
+        "type": "TAG",
+        "options": [],
+        "sqlType": ""
+       }
+      ]
+     },
+     "minNfVersion": "",
+     "auth": {
+      "apiKey": {
+       "scopes": [
+        "normalgw.hpl.v1.readwrite",
+        "normalgw.hpl.v2.readwrite",
+        "normalgw.bacnet.v1.readwrite",
+        "normalgw.bacnet.v2.readwrite",
+        "normalgw.ontology.v1.readonly",
+        "normalgw.automation.v1.readonly"
+       ],
+       "clientId": "<redacted>",
+       "clientSecret": "<redacted>"
+      }
+     },
+     "statusMessage": ""
+    },
+    {
+     "id": "open-fdd-lite",
+     "name": "Open-FDD Lite",
+     "description": "Open-FDD Lite: the small-box edition for Normal Framework. Tag-driven dashboard, charts, BACnet server view, RDF export, an Open-Meteo weather hook, and an hourly FDD hook on server-side Node DuckDB. Source of truth: open-fdd lite/",
+     "runtime": "RUNTIME_NODE_JS",
+     "compatibilityDate": "",
+     "hooks": [
+      {
+       "id": "open-meteo-weather",
+       "name": "open-meteo-weather",
+       "entryPoint": "/hooks/open_meteo_weather.js",
+       "points": {
+        "annotations": [],
+        "globalVariables": [
+         {
+          "uuid": "",
+          "label": "oa_dry_bulb_web",
+          "attrs": {
+           "source": "open-meteo",
+           "bacnet_object": "av.1",
+           "description": "Outdoor air dry bulb (Open-Meteo, NF site coordinates)",
+           "units": "degF"
+          }
+         },
+         {
+          "uuid": "",
+          "label": "oa_rh_web",
+          "attrs": {
+           "bacnet_object": "av.2",
+           "description": "Outdoor air relative humidity (Open-Meteo, NF site coordinates)",
+           "units": "%",
+           "source": "open-meteo"
+          }
+         },
+         {
+          "uuid": "",
+          "label": "oa_dewpoint_web",
+          "attrs": {
+           "source": "open-meteo",
+           "bacnet_object": "av.3",
+           "description": "Outdoor air dewpoint (Open-Meteo, NF site coordinates)",
+           "units": "degF"
+          }
+         }
+        ],
+        "groupVariables": [],
+        "labelAttribute": "",
+        "layer": "",
+        "noPoints": true,
+        "queryTemplate": "",
+        "equipmentTypeId": "",
+        "siteRef": [],
+        "uuids": []
+       },
+       "requiredLabels": [],
+       "optionalLabels": [],
+       "schedule": {
+        "rrule": "DTSTART:20261101T000300Z\nRRULE:FREQ=MINUTELY;INTERVAL=20"
+       },
+       "mode": "MODE_SCHEDULED",
+       "lastRun": {
+        "hookId": "",
+        "pid": "3",
+        "state": "STATE_SUCCESS",
+        "message": "",
+        "trigger": "TRIGGER_SCHEDULE",
+        "startTime": "2026-11-28T14:43:00.100231987Z",
+        "endTime": "2026-11-28T14:43:01.100774068Z",
+        "args": {},
+        "results": {},
+        "version": "",
+        "enqueuedTime": "2026-11-28T14:42:59.979949349Z",
+        "stats": {
+         "6": "1"
+        }
+       },
+       "invokeTimeout": "190s",
+       "status": "HOOK_STATUS_STARTED",
+       "runtimeConfig": {
+        "memoryLimit": 64,
+        "cpuLimit": 0,
+        "maxRequestsPerLifetime": 0,
+        "minInstances": 0,
+        "maxInstances": 1
+       },
+       "requiredClasses": []
+      },
+      {
+       "id": "fdd",
+       "name": "fdd",
+       "entryPoint": "/hooks/fdd.js",
+       "points": {
+        "annotations": [],
+        "globalVariables": [],
+        "groupVariables": [],
+        "labelAttribute": "",
+        "layer": "",
+        "noPoints": true,
+        "queryTemplate": "",
+        "equipmentTypeId": "",
+        "siteRef": [],
+        "uuids": []
+       },
+       "requiredLabels": [],
+       "optionalLabels": [],
+       "schedule": {
+        "rrule": "DTSTART:20261101T002000Z\nRRULE:FREQ=HOURLY;INTERVAL=1"
+       },
+       "mode": "MODE_SCHEDULED",
+       "lastRun": {
+        "hookId": "",
+        "pid": "3",
+        "state": "STATE_SUCCESS",
+        "message": "",
+        "trigger": "TRIGGER_REQUEST",
+        "startTime": "2026-11-28T14:42:36.169402074Z",
+        "endTime": "2026-11-28T14:43:15.168593161Z",
+        "args": {},
+        "results": {},
+        "version": "",
+        "enqueuedTime": "2026-11-28T14:42:35.939602485Z",
+        "stats": {
+         "6": "1"
+        }
+       },
+       "invokeTimeout": "300s",
+       "status": "HOOK_STATUS_STARTED",
+       "runtimeConfig": {
+        "memoryLimit": 128,
+        "cpuLimit": 0,
+        "maxRequestsPerLifetime": 0,
+        "minInstances": 0,
+        "maxInstances": 1
+       },
+       "requiredClasses": []
+      },
+      {
+       "id": "rdf",
+       "name": "rdf",
+       "entryPoint": "/hooks/rdf.js",
+       "points": {
+        "annotations": [],
+        "globalVariables": [],
+        "groupVariables": [],
+        "labelAttribute": "",
+        "layer": "",
+        "noPoints": true,
+        "queryTemplate": "",
+        "equipmentTypeId": "",
+        "siteRef": [],
+        "uuids": []
+       },
+       "requiredLabels": [],
+       "optionalLabels": [],
+       "mode": "MODE_ON_REQUEST",
+       "lastRun": {
+        "hookId": "",
+        "pid": "9",
+        "state": "STATE_SUCCESS",
+        "message": "",
+        "trigger": "TRIGGER_REQUEST",
+        "startTime": "2026-11-28T14:46:13.241942661Z",
+        "endTime": "2026-11-28T14:46:15.242336257Z",
+        "args": {
+         "offset": "430305",
+         "snapshot": "69c66d3fccdb4b370162c488cec59ee8b84309bfab9664c306537fc719437b02",
+         "limit": "150000"
+        },
+        "results": {},
+        "version": "",
+        "enqueuedTime": "2026-11-28T14:46:12.942992116Z",
+        "stats": {
+         "6": "1"
+        }
+       },
+       "invokeTimeout": "60s",
+       "status": "HOOK_STATUS_STARTED",
+       "runtimeConfig": {
+        "memoryLimit": 64,
+        "cpuLimit": 0,
+        "maxRequestsPerLifetime": 0,
+        "minInstances": 0,
+        "maxInstances": 1
+       },
+       "requiredClasses": []
+      },
+      {
+       "id": "sparql",
+       "name": "sparql",
+       "entryPoint": "/hooks/sparql.js",
+       "points": {
+        "annotations": [],
+        "globalVariables": [],
+        "groupVariables": [],
+        "labelAttribute": "",
+        "layer": "",
+        "noPoints": true,
+        "queryTemplate": "",
+        "equipmentTypeId": "",
+        "siteRef": [],
+        "uuids": []
+       },
+       "requiredLabels": [],
+       "optionalLabels": [],
+       "mode": "MODE_ON_REQUEST",
+       "lastRun": {
+        "hookId": "",
+        "pid": "1",
+        "state": "STATE_SUCCESS",
+        "message": "",
+        "trigger": "TRIGGER_REQUEST",
+        "startTime": "2026-11-28T14:43:29.315923792Z",
+        "endTime": "2026-11-28T14:43:31.314686642Z",
+        "args": {
+         "query": "SELECT * WHERE {?s ?p ?o} LIMIT 1"
+        },
+        "results": {},
+        "version": "",
+        "enqueuedTime": "2026-11-28T14:43:28.661664809Z",
+        "stats": {
+         "6": "1"
+        }
+       },
+       "invokeTimeout": "60s",
+       "status": "HOOK_STATUS_STARTED",
+       "runtimeConfig": {
+        "memoryLimit": 96,
+        "cpuLimit": 0,
+        "maxRequestsPerLifetime": 0,
+        "minInstances": 0,
+        "maxInstances": 1
+       },
+       "requiredClasses": []
+      }
+     ],
+     "files": [
+      {
+       "path": "/.gitignore",
+       "mtime": "2026-11-28T14:35:35.604666627Z",
+       "hash": "",
+       "size": "66"
+      },
+      {
+       "path": "/app.json",
+       "mtime": "2026-11-28T14:42:31.236132952Z",
+       "hash": "",
+       "size": "1167"
+      },
+      {
+       "path": "/hooks/fdd.js",
+       "mtime": "2026-11-28T14:35:39.118225453Z",
+       "hash": "",
+       "size": "103231"
+      },
+      {
+       "path": "/hooks/lib/duckdb-parquet.js",
+       "mtime": "2026-11-28T14:35:39.133523705Z",
+       "hash": "",
+       "size": "16300"
+      },
+      {
+       "path": "/hooks/lib/engine-build.js",
+       "mtime": "2026-11-28T14:35:39.140886763Z",
+       "hash": "",
+       "size": "3047"
+      }
+     ],
+     "gitUrl": "",
+     "status": "STATUS_INSTALLED",
+     "options": [
+      {
+       "name": "version",
+       "description": "Installed Open-FDD revision (set on deploy by nf_app_sync.py)",
+       "optionType": "TYPE_STRING",
+       "choices": [],
+       "validators": [],
+       "defaultValue": {
+        "string": "5.0.22 (d0e0239)"
+       },
+       "value": {
+        "string": ""
+       },
+       "secret": false,
+       "required": false
+      },
+      {
+       "name": "latitude",
+       "description": "local test coordinate",
+       "optionType": "TYPE_STRING",
+       "choices": [],
+       "validators": [],
+       "defaultValue": {
+        "string": "41.88"
+       },
+       "value": {
+        "string": "41.88"
+       },
+       "secret": false,
+       "required": false
+      },
+      {
+       "name": "longitude",
+       "description": "local test coordinate",
+       "optionType": "TYPE_STRING",
+       "choices": [],
+       "validators": [],
+       "defaultValue": {
+        "string": "-87.63"
+       },
+       "value": {
+        "string": "-87.63"
+       },
+       "secret": false,
+       "required": false
+      }
+     ],
+     "minNfVersion": "",
+     "auth": {
+      "apiKey": {
+       "scopes": [
+        "normalgw.hpl.v1.readwrite",
+        "normalgw.hpl.v2.readwrite",
+        "normalgw.bacnet.v1.readwrite",
+        "normalgw.bacnet.v2.readwrite",
+        "normalgw.ontology.v1.readonly"
+       ],
+       "clientId": "<redacted>",
+       "clientSecret": "<redacted>"
+      }
+     },
+     "statusMessage": ""
+    }
+   ],
+   "totalCount": "2"
+  }
+ },
+ "note": "files[] trimmed to 5 entries per app"
+}

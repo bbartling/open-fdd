@@ -1,0 +1,20 @@
+{
+ "id": "hooks__invoke_sparql",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/apps/open-fdd-lite/hooks/sparql",
+  "body": {
+   "query": "SELECT * WHERE {?s ?p ?o} LIMIT 1"
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "pid": "2",
+   "groups": [
+    ""
+   ]
+  }
+ }
+}

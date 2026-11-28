@@ -1,0 +1,15 @@
+{
+ "id": "equipment__classes",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/equipment/classes"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "equipmentClasses": [],
+   "totalCount": "669"
+  }
+ }
+}

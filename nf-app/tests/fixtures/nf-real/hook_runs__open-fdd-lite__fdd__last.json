@@ -1,0 +1,76 @@
+{
+ "id": "hook_runs__open-fdd-lite__fdd__last",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/apps/open-fdd-lite/hooks/fdd/runs?page_size=1&include_results=true"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "runs": [
+    {
+     "hookId": "",
+     "pid": "3",
+     "state": "STATE_SUCCESS",
+     "message": "",
+     "trigger": "TRIGGER_REQUEST",
+     "startTime": "2026-11-28T14:42:36.169402074Z",
+     "endTime": "2026-11-28T14:43:15.168593161Z",
+     "args": {},
+     "results": {
+      "": {
+       "endTime": "2026-11-28T14:43:15.014935648Z",
+       "state": "STATE_SUCCESS",
+       "invocationCount": "0",
+       "returnValue": "",
+       "events": [
+        {
+         "ts": "2026-11-28T14:43:15.013Z",
+         "message": "open-fdd duckdb: 15 equips, 279 rule runs, 0 errors, 15 with fault time, 74 values written (window 24 h); ok 13, fault 15, not-assessed 393, stale 0 (equipment 0, sensor 0); requests: 4 metadata, 2 data; roles skipped by unit: 0 (none)"
+        },
+        {
+         "ts": "2026-11-28T14:43:15.012Z",
+         "message": "open-fdd counts: eligible 15, evaluated 15, written 74, skipped 0, stale 0 (equipment 0, sensor 0); skipped by reason: none; stale by reason: none"
+        },
+        {
+         "ts": "2026-11-28T14:43:15.011Z",
+         "message": "open-fdd run: engine duckdb, data window 2026-11-27T14:40:00.000Z .. 2026-11-28T14:40:00.000Z (24 h); newest input sample in the duckdb source 2026-11-28T14:35:00.000Z (8 min ago), NF latest value 2026-11-28T14:42:08.060Z (0 min ago)"
+        },
+        {
+         "ts": "2026-11-28T14:43:06.641Z",
+         "message": "nfft-sim-ahu-1: no web weather bound, using the local outside-air sensor \"outside air temp\" for weather_service_air_temperature"
+        },
+        {
+         "ts": "2026-11-28T14:42:50.084Z",
+         "message": "nfft-sim-ahu-2: no web weather bound, using the local outside-air sensor \"outside air temp\" for weather_service_air_temperature"
+        },
+        {
+         "ts": "2026-11-28T14:42:36.608Z",
+         "message": "nfft-sim-site: occupancy_status synthesized from default (schedule 50 h/week (default), America/Chicago, zone from host)"
+        },
+        {
+         "ts": "2026-11-28T14:42:36.472Z",
+         "message": "engine duckdb: @duckdb/node-api 2.0.1-r.1, parquet /app/openfdd-parquet, retention 90 days"
+        }
+       ],
+       "startTime": "2026-11-28T14:42:35.941166891Z",
+       "enqueuedTime": "2026-11-28T14:42:35.939602485Z",
+       "group": "",
+       "pid": "3",
+       "taskUuid": "",
+       "args": {},
+       "runtimePid": 1331
+      }
+     },
+     "version": "",
+     "enqueuedTime": "2026-11-28T14:42:35.939602485Z",
+     "stats": {
+      "6": "1"
+     }
+    }
+   ],
+   "totalCount": "3"
+  }
+ }
+}

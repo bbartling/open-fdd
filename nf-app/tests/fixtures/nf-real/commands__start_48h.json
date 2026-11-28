@@ -1,0 +1,18 @@
+{
+ "id": "commands__start_48h",
+ "request": {
+  "method": "POST",
+  "path": "/api/v2/command",
+  "body": {
+   "name": "contract-probe-2",
+   "duration": "48h"
+  }
+ },
+ "response": {
+  "status": 400,
+  "contentType": "text/plain",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}
