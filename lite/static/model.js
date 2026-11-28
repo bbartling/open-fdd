@@ -87,6 +87,37 @@ function devicesForEquip(equip, devices, points) {
   return out;
 }
 
+/**
+ * Devices the dashboard counts on a site: the same set the Haystack tree shows
+ * (DEVICE records under the site's equipment, plus a synthetic node for a
+ * point deviceRef with no record). DEVICE records that only carry this site's
+ * siteRef are included too. Diagnostic points do not contribute devices.
+ */
+function devicesOnSite(model, site) {
+  const siteId = refId(site);
+  if (!siteId || !model) return [];
+  const onSitePts = (model.points || []).filter((p) => refId(p.siteRef) === siteId && !isDiagnosticPoint(p));
+  const equips = (model.equips || []).filter((e) => refId((e.attrs || {}).siteRef) === siteId);
+  const seen = new Set();
+  const out = [];
+  const add = (rec) => {
+    if (!rec) return;
+    const key = refId(idOf(rec)) || rec.uuid || "";
+    if (key) {
+      if (seen.has(key)) return;
+      seen.add(key);
+    }
+    out.push(rec);
+  };
+  for (const equip of equips) {
+    for (const { rec } of devicesForEquip(equip, model.devices, onSitePts)) add(rec);
+  }
+  for (const d of model.devices || []) {
+    if (refId((d.attrs || {}).siteRef) === siteId) add(d);
+  }
+  return out;
+}
+
 /** DEVICE records, including a device marker that NF did not store as pointType DEVICE. */
 function isDeviceRecord(r) {
   const t = String((r && r.pointType) || "").toUpperCase();
