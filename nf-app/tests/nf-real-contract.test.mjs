@@ -181,6 +181,31 @@ test("errors: a route NF does not have is the web console (GET, 200 html) or a 4
   assert.equal(post.ct, "text/html");
 });
 
+// ---------------------------------------------------------------------------------------------- bacnet readproperty / history write
+test("bacnet/readproperty: echoes the property, value carries array:[], failures are in-band 200s, a bad enum name is an empty 400", async () => {
+  for (const id of ["bacnet__readproperty_device_name", "bacnet__readproperty_device_vendor", "bacnet__readproperty_present_value", "bacnet__readproperty_unknown_property_in_band_error"]) {
+    const r = await replay(plain, id);
+    assert.equal(r.status, fx(id).response.status, id);
+    assert.deepEqual(problems(r.json, id), [], id);
+  }
+  const bad = await replay(plain, "bacnet__readproperty_bad_property_name");
+  assert.deepEqual([bad.status, bad.ct, bad.text], [400, "text/plain", ""]);
+  // The unknown-object in-band error has the same shape as the unknown-property one (errorClass/errorCode, no "value").
+  const rec = fx("bacnet__readproperty_unknown_object_in_band_error").response.body;
+  assert.deepEqual(Object.keys(rec), ["error"]);
+  assert.deepEqual(Object.keys(rec.error).sort(), ["errorClass", "errorCode"]);
+});
+
+test("points/data: answers {success, taskUuid}; a missing or malformed uuid is an empty 400 grpc", async () => {
+  const ok = await replay(plain, "points_data__post_ok");
+  assert.equal(ok.status, 200);
+  assert.deepEqual(problems(ok.json, "points_data__post_ok"), []);
+  for (const id of ["points_data__post_missing_uuid", "points_data__post_malformed_uuid"]) {
+    const r = await replay(plain, id);
+    assert.deepEqual([r.status, r.ct, r.text], [400, "application/grpc", ""], id);
+  }
+});
+
 // ---------------------------------------------------------------------------------------------- point/data
 async function aPointWithData() {
   const r = await send(real, "POST", "/api/v1/point/query", { layer: "default", pageSize: 500 });

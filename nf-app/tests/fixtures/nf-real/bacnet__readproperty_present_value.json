@@ -1,0 +1,25 @@
+{
+ "id": "bacnet__readproperty_present_value",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/bacnet/readproperty?object_id.object_type=OBJECT_ANALOG_VALUE&object_id.instance=8022&property_id=PROP_PRESENT_VALUE&device_address.mac=<loopback-mac>&device_address.port_id=1&array_index=4294967295"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "property": {
+    "objectId": {
+     "objectType": "OBJECT_ANALOG_VALUE",
+     "instance": 8022
+    },
+    "propertyId": "PROP_PRESENT_VALUE",
+    "arrayIndex": 4294967295
+   },
+   "value": {
+    "real": 0,
+    "array": []
+   }
+  }
+ }
+}

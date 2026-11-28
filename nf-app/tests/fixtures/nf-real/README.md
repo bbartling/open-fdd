@@ -20,6 +20,8 @@ Behaviours these recordings pin down (the mock follows them):
 | `point/points` | success needs `layer:"model"` (or another base layer such as `automation`); with no layer, `default` or an unknown layer the call answers `success:true` and applies **nothing**; attrs merge, a missing key is kept, `""` stays as a key |
 | `point/data` | `window` is `300s` (`300` is a 400); resampled `ts` are whole seconds, raw `ts` have nine fractional digits; bad uuid = empty 400 grpc; bad window/method/time = empty 400 `text/plain`; unknown uuid = `values: []` |
 | hooks | invoke answers `{pid, groups}`; run `results` are keyed by group (`""`) and `{}` unless `include_results=true`; a hook that returns `ok:false` is still `STATE_SUCCESS`; unknown hook = empty 404 |
+| `bacnet/readproperty` | `GET` with `device_address.mac` + `port_id`; the reply echoes `property` and the value carries `array:[]`; unknown object or property is an in-band 200 `{error:{errorClass, errorCode}}`; a bad enum name is an empty 400 `text/plain`; addressing by `device_id` alone answered an empty 500 on the recording instance (the mock still serves it) |
+| `points/data` | `POST` `{points:[{uuid, values:[{ts, real}]}]}` answers `{success, taskUuid:""}`; a missing or malformed uuid is an empty 400 `application/grpc` |
 | errors | bodies are empty; a route NF does not have answers the web console (GET, 200 html) or 405 |
 | `apps` | status `STATUS_INSTALLED`; an app that is not installed is a 200 with an empty list |
 | `sites` | `sites: []` while `totalCount` still counts the model sites |

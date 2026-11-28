@@ -423,10 +423,10 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
     return json(res, 200, { success: true });
   }
   if (req.method === "POST" && p === "/api/v1/points/data") {
-    if (!Array.isArray(b.points) || b.points.some((x) => !x || !x.uuid)) return json(res, 400, { error: "points[].uuid is required" });
+    if (!Array.isArray(b.points) || b.points.some((x) => !x || !real.UUID_RE.test(String(x.uuid || "")))) return real.grpcError(res, 400);   // NF: empty 400 grpc for a missing or malformed uuid
     for (const x of b.points) writes.data.push({ uuid: x.uuid, values: x.values || [] });
     note(p, b.points.length);
-    return json(res, 200, { success: true });
+    return json(res, 200, { success: true, taskUuid: "" });
   }
   if (req.method === "GET" && p === "/api/v1/schedules") {   // ScheduleManager.GetSchedules (read-only)
     const off = parseInt(url.searchParams.get("pageOffset") || "0", 10) || 0, size = parseInt(url.searchParams.get("pageSize") || "100", 10) || 100;
@@ -445,8 +445,17 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
   if (p === "/api/v1/bacnet/ports") return json(res, 200, REAL_NF ? real.recorded("bacnet__ports") : { ports: [] });
   if (p === "/api/v1/bacnet/local") return json(res, 200, REAL_NF ? real.recorded("bacnet__local_objects") : { objects: [] });
   if (p === "/api/v1/bacnet/readproperty") {
-    const prop = url.searchParams.get("property_id") || "";
-    return json(res, 200, { value: { characterString: { PROP_OBJECT_NAME: "MockNF", PROP_VENDOR_NAME: "Normal (mock)", PROP_MODEL_NAME: "mock-nf", PROP_FIRMWARE_REVISION: "3.10-mock" }[prop] || "" } });
+    // Real NF: property/object names are enum names (a bad name is an empty 400 text/plain); the reply echoes the property
+    // and the value carries "array":[]; BACnet-level failures are IN-BAND, a 200 with {error:{errorClass, errorCode}}.
+    const q = url.searchParams, prop = q.get("property_id") || "", type = q.get("object_id.object_type") || "";
+    // NF checks the names against the BACnet enums; the mock knows only the common ones (a mock-only approximation).
+    const KNOWN_PROPS = ["PROP_OBJECT_NAME", "PROP_OBJECT_TYPE", "PROP_OBJECT_IDENTIFIER", "PROP_VENDOR_NAME", "PROP_MODEL_NAME", "PROP_FIRMWARE_REVISION", "PROP_DESCRIPTION", "PROP_PRESENT_VALUE", "PROP_PRIORITY_ARRAY", "PROP_RELINQUISH_DEFAULT", "PROP_UNITS", "PROP_STATUS_FLAGS", "PROP_OUT_OF_SERVICE", "PROP_OBJECT_LIST"];
+    if (!KNOWN_PROPS.includes(prop) || !/^OBJECT_[A-Z0-9_]+$/.test(type)) return real.textError(res, 400);
+    const property = { objectId: { objectType: type, instance: Number(q.get("object_id.instance") || 0) }, propertyId: prop, arrayIndex: Number(q.get("array_index") || 4294967295) };
+    const deviceProps = { PROP_OBJECT_NAME: "MockNF", PROP_VENDOR_NAME: "Normal (mock)", PROP_MODEL_NAME: "mock-nf", PROP_FIRMWARE_REVISION: "3.10-mock" };
+    if (type === "OBJECT_DEVICE" && prop in deviceProps) return json(res, 200, { property, value: { characterString: deviceProps[prop], array: [] } });
+    if (prop === "PROP_PRESENT_VALUE") return json(res, 200, { property, value: { real: 0, array: [] } });
+    return json(res, 200, { error: { errorClass: "ERROR_CLASS_PROPERTY", errorCode: "ERROR_CODE_UNKNOWN_PROPERTY" } });
   }
   const hook = p.match(/^\/api\/v1\/apps\/([^/]+)\/hooks\/([^/]+)(\/runs)?$/);
   if (hook) {

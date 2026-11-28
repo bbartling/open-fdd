@@ -1,0 +1,25 @@
+{
+ "id": "bacnet__readproperty_device_vendor",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/bacnet/readproperty?object_id.object_type=OBJECT_DEVICE&object_id.instance=10&property_id=PROP_VENDOR_NAME&device_address.mac=<loopback-mac>&device_address.port_id=1&array_index=4294967295"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "property": {
+    "objectId": {
+     "objectType": "OBJECT_DEVICE",
+     "instance": 10
+    },
+    "propertyId": "PROP_VENDOR_NAME",
+    "arrayIndex": 4294967295
+   },
+   "value": {
+    "characterString": "Normal Software, Inc.",
+    "array": []
+   }
+  }
+ }
+}
