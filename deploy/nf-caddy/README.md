@@ -9,7 +9,7 @@ sit behind a login; plain HTTP for a trusted LAN, self-signed HTTPS for producti
 - NF's Envoy listens on **loopback only**: in NF's compose set `ENVOY_BIND_ADDRESS=127.0.0.1`
   (NF port is `8090` on small installs, `8080` on others; set `NF_UPSTREAM` and `NF_PORT` to match).
   The portal tunnel, app hooks and the NF MCP keep using loopback.
-- Caddy (`caddy:2.11.9-alpine`, host network, `mem_limit: 64m`) binds `LAN_IP` only.
+- Caddy (`caddy:2.11.9-alpine`, host network, `mem_limit: 64m`) binds `LAN_IP` and, if set, `TS_IP` (a second address such as a Tailscale IP). Leave `TS_IP` empty or omit it to bind only `LAN_IP`. Site-specific addresses and the app id belong in `.env`; do not edit the Caddyfile per site.
 
 | Request | Access |
 |---|---|
@@ -21,7 +21,7 @@ sit behind a login; plain HTTP for a trusted LAN, self-signed HTTPS for producti
 | `GET /api/v1/point/updates/data` (live push stream) | open, `flush_interval -1`, Envoy's quiet-stream 504 becomes 204 (see "Live stream") |
 | `GET`/`HEAD /api/v1/apps` (the app list; options can hold a database URL) and `POST .../hooks/tuning` | **no login challenge.** Anonymous is 403 and the browser stays quiet. A presented password is checked (200 or 401) |
 | everything else: NF console `/`, single-app config, `fdd` / `history` / `weather` / `sparql` hooks, schedule and site writes, BACnet writes, `/pgweb` | **basic auth** (401 + `WWW-Authenticate`). Cancelling does not load the page |
-| `:80` `/` | 302 to `/api/v1/apps/static/<APP_ID>/` (`APP_ID` placeholder, default `open-fdd`; `open-fdd-lite` on a Lite box, see "The `/` redirect and app ids"). The redirect itself does not ask for a login |
+| `:80` `/` (plain-HTTP profile) or `:443` `/` (HTTPS profile) | 302 to `/api/v1/apps/static/<APP_ID>/` (`APP_ID` placeholder, default `open-fdd`; `open-fdd-lite` on a Lite box, see "The `/` redirect and app ids"). The redirect itself does not ask for a login. The console stays at `/index.html`. |
 
 Rules live in `routes.caddy`, shared by `Caddyfile` (plain HTTP, Full and Lite) and `Caddyfile.tls` (HTTPS).
 Lite only changes `APP_ID`. `python3 deploy/nf-caddy/test_routes.py` checks the matrix (Caddy 2.11.9).
@@ -78,7 +78,7 @@ route (for example an overloaded NF): it looks the same as an idle close.
 ## Setup
 
 ```bash
-cp .env.example .env                 # set LAN_IP (this box), NF_UPSTREAM, NF_PORT, APP_ID
+cp .env.example .env                 # set LAN_IP, optional TS_IP, NF_UPSTREAM, NF_PORT, APP_ID
 cp auth.caddy.example auth.caddy     # then replace its line with a real hash:
 docker run --rm caddy:2.11.9-alpine caddy hash-password -p 'choose-a-password'
 #   auth.caddy = one line:  admin <hash>      (never commit it; it is gitignored)
@@ -86,7 +86,7 @@ docker compose up -d
 ```
 
 Recreate NF once after setting `ENVOY_BIND_ADDRESS=127.0.0.1` so the LAN port is released for Caddy.
-Then browse `http://<LAN_IP>/` (redirects to the dashboard).
+Then browse `http://<LAN_IP>/` (redirects to the dashboard). If the box is also reached on a second address, set `TS_IP` in `.env` and restart Caddy; leave the Caddyfile unchanged.
 
 ## HTTPS (the production profile)
 
@@ -100,15 +100,17 @@ mkdir -p certs && openssl req -x509 -newkey rsa:2048 -nodes -days 1095 \
 
 In `docker-compose.yml` mount `./Caddyfile.tls` as `/etc/caddy/Caddyfile` and uncomment the two
 cert volumes; import `certs/server.crt` into client trust stores. `certs/` is gitignored.
+`Caddyfile.tls` is a drop-in: set `LAN_IP`, optional `TS_IP`, `NF_UPSTREAM`, and `APP_ID` in `.env`.
+Bare `https://<address>/` opens the dashboard; the NF console is `https://<address>/index.html`.
 
 ## Which layer rejected me
 
 A 401 can come from Caddy or from NF. Read the `WWW-Authenticate` response header:
 
 ```bash
-# Use the port that serves routes (plain HTTP NF_PORT, or 443). :80 on the plain-HTTP
-# profile only redirects, so it will not show this header.
-curl -s -i -o /dev/null -D - <front-door-url>/ | grep -i '^www-authenticate'
+# Use a protected path (the console). :80 on both profiles only redirects, and
+# HTTPS / also redirects to the dashboard, so those will not show this header.
+curl -s -i -o /dev/null -D - <front-door-url>/index.html | grep -i '^www-authenticate'
 ```
 
 | Header | Layer | What it means |
@@ -148,12 +150,17 @@ Never print the password or the hash. Do these on the box that runs NF and Caddy
 
 ## The `/` redirect and app ids
 
-The bare URL (`:80`, plain-HTTP profile) redirects to `/api/v1/apps/static/{$APP_ID:open-fdd}/`. `APP_ID` is a
-placeholder read from the environment when Caddy starts, with `open-fdd` as the default. Set `APP_ID=open-fdd` (full
-edition) or `APP_ID=open-fdd-lite` (Lite) in `.env`. After an app rename or an edition swap: back up the `.env`,
-change `APP_ID`, validate, restart Caddy. Never hard-code an app id in a Caddyfile copy. Syntax checked with
-`caddy adapt`: unset gives `.../open-fdd/`, `APP_ID=open-fdd-lite` gives `.../open-fdd-lite/`. The HTTPS profile's
-`:80` block only redirects to HTTPS; the dashboard URL is the same path on the HTTPS port.
+The bare URL redirects to `/api/v1/apps/static/{$APP_ID:open-fdd}/`: `:80` on the plain-HTTP profile, and
+`:443` `/` on the HTTPS profile (whose `:80` only redirects to HTTPS). `APP_ID` is a placeholder read from the
+environment when Caddy starts, with `open-fdd` as the default. Set `APP_ID=open-fdd` (full edition) or
+`APP_ID=open-fdd-lite` (Lite) in `.env`. After an app rename or an edition swap: back up the `.env`, change
+`APP_ID`, validate, restart Caddy. Never hard-code an app id in a Caddyfile copy. Syntax checked with
+`caddy adapt`: unset gives `.../open-fdd/`, `APP_ID=open-fdd-lite` gives `.../open-fdd-lite/`. The NF console
+stays at `/index.html` (basic auth).
+
+Optional `TS_IP` is a second bind address (for example a Tailscale IP). Leave it empty or omit it and Caddy
+binds only `LAN_IP`. A site that is reached on two addresses only needs `.env` (and `auth.caddy`, plus certs
+for HTTPS). Do not keep a per-site edited copy of `Caddyfile` or `Caddyfile.tls`.
 
 ## Open pages and NF auth
 

@@ -1,17 +1,22 @@
 # TLS front door with optional read-only pgweb sidecar (Full edition only; never used on Lite).
+# Same bind and bare-URL redirect as Caddyfile.tls (LAN_IP, optional TS_IP, APP_ID in .env).
 {
 	auto_https off
 	admin off
 }
 
 :{$TLS_PORT:443} {
-	bind {$LAN_IP}
+	bind {$LAN_IP} {$TS_IP}
 	tls /certs/server.crt /certs/server.key
+
+	@root path /
+	redir @root /api/v1/apps/static/{$APP_ID:open-fdd}/ 302
+
 	import pgweb.caddy
 	import routes.caddy
 }
 
 :80 {
-	bind {$LAN_IP}
+	bind {$LAN_IP} {$TS_IP}
 	redir https://{host}{uri} permanent
 }

@@ -7,6 +7,10 @@
 #   open (no login)  Open-FDD dashboard static files + the read-only API calls it makes
 #   basic auth       everything else: NF console, app/hook config, every write
 #
+# Bind LAN_IP always. TS_IP is an optional second address (Tailscale or another NIC);
+# leave it empty and Caddy binds only LAN_IP. Set both, plus APP_ID, in .env — do not
+# edit this file per site. Bare HTTPS / opens the dashboard; the console is /index.html.
+#
 # Self-signed cert/key are mounted at /certs (README.md shows how to make them); the login
 # lives in /etc/caddy/auth.caddy and is never committed.
 {
@@ -15,13 +19,18 @@
 }
 
 :{$TLS_PORT:443} {
-	bind {$LAN_IP}
+	bind {$LAN_IP} {$TS_IP}
 	tls /certs/server.crt /certs/server.key
+
+	# Bare URL opens the dashboard, same idea as :80 on the plain-HTTP profile.
+	@root path /
+	redir @root /api/v1/apps/static/{$APP_ID:open-fdd}/ 302
+
 	import routes.caddy
 }
 
 # Plain HTTP only redirects to HTTPS.
 :80 {
-	bind {$LAN_IP}
+	bind {$LAN_IP} {$TS_IP}
 	redir https://{host}{uri} permanent
 }

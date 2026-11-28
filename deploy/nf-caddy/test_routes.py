@@ -248,17 +248,58 @@ def check_static_configs(caddy: str, tmp: Path) -> None:
     env.update({
         "LAN_IP": "127.0.0.1", "NF_UPSTREAM": "127.0.0.1:9", "NF_PORT": "18099",
         "TLS_PORT": "18443", "CADDY_ACCESS_LOG": str(tmp / "access.log"),
+        "TS_IP": "",
     })
     plain = adapt(caddy, tmp / "Caddyfile", {**env, "APP_ID": "open-fdd"})
     lite = adapt(caddy, tmp / "Caddyfile", {**env, "APP_ID": "open-fdd-lite"})
-    tls = adapt(caddy, tmp / "Caddyfile.tls", env)
-    pg = adapt(caddy, tmp / "Caddyfile.tls.pgweb", env)
+    tls = adapt(caddy, tmp / "Caddyfile.tls", {**env, "APP_ID": "open-fdd"})
+    pg = adapt(caddy, tmp / "Caddyfile.tls.pgweb", {**env, "APP_ID": "open-fdd"})
+    tls_two = adapt(
+        caddy, tmp / "Caddyfile.tls",
+        {**env, "TS_IP": "127.0.0.2", "APP_ID": "open-fdd-lite"},
+    )
+
+    def listens(cfg: dict, port_suffix: str) -> list[str]:
+        for server in cfg["apps"]["http"]["servers"].values():
+            addrs = [str(a) for a in server.get("listen", [])]
+            if any(a.endswith(port_suffix) for a in addrs):
+                return sorted(addrs)
+        raise SystemExit(f"no server listening on *{port_suffix}")
+
+    if listens(tls, ":18443") != ["127.0.0.1:18443"]:
+        raise SystemExit(f"empty TS_IP must bind only LAN_IP, got {listens(tls, ':18443')}")
+    if listens(plain, ":18099") != ["127.0.0.1:18099"]:
+        raise SystemExit(f"empty TS_IP must bind only LAN_IP on NF_PORT, got {listens(plain, ':18099')}")
+    if listens(tls_two, ":18443") != ["127.0.0.1:18443", "127.0.0.2:18443"]:
+        raise SystemExit(f"TS_IP must add a second bind address, got {listens(tls_two, ':18443')}")
 
     def redir(cfg: dict) -> str:
         for server in cfg["apps"]["http"]["servers"].values():
             if any(str(a).endswith(":80") for a in server.get("listen", [])):
                 return json.dumps(server)
         raise SystemExit("plain HTTP config has no :80 listener")
+
+    def tls_dashboard_redir(cfg: dict) -> str:
+        # `redir` is ordered among routes.caddy directives, so it is not route[0].
+        hits = []
+        for route in routes_of(cfg, ":18443"):
+            for handle in route.get("handle") or []:
+                if handle.get("handler") == "static_response" and int(handle.get("status_code") or 0) == 302:
+                    hits.append(json.dumps(route))
+        if len(hits) != 1:
+            raise SystemExit(f"expected one HTTPS dashboard redirect, got {len(hits)}: {hits}")
+        return hits[0]
+
+    def without_open_root(routes: list) -> list:
+        out, found = [], False
+        for paths, auth in routes:
+            if not found and paths == ["/"] and auth is False:
+                found = True
+                continue
+            out.append((paths, auth))
+        if not found:
+            raise SystemExit("HTTPS / dashboard redirect missing from route policy")
+        return out
 
     full_redir, lite_redir = redir(plain), redir(lite)
     if "/api/v1/apps/static/open-fdd/" not in full_redir:
@@ -268,11 +309,20 @@ def check_static_configs(caddy: str, tmp: Path) -> None:
     if "basic_auth" in full_redir or "authentication" in full_redir:
         raise SystemExit("the :80 redirect listener must not ask for a login")
 
+    full_tls, lite_tls = tls_dashboard_redir(tls), tls_dashboard_redir(tls_two)
+    if "/api/v1/apps/static/open-fdd/" not in full_tls:
+        raise SystemExit("HTTPS / does not open the open-fdd dashboard")
+    if "/api/v1/apps/static/open-fdd-lite/" not in lite_tls:
+        raise SystemExit("HTTPS / APP_ID=open-fdd-lite does not open the lite dashboard")
+    if "basic_auth" in full_tls or "authentication" in full_tls:
+        raise SystemExit("the HTTPS / redirect must not ask for a login")
+
     plain_routes = path_routes(routes_of(plain, ":18099"))
     assert_same_policy(plain_routes, path_routes(routes_of(lite, ":18099")), "Lite")
-    assert_same_policy(plain_routes, path_routes(routes_of(tls, ":18443")), "HTTPS")
-
+    tls_routes = path_routes(routes_of(tls, ":18443"))
+    assert_same_policy(plain_routes, without_open_root(tls_routes), "HTTPS")
     pg_routes = path_routes(routes_of(pg, ":18443"))
+    pg_routes = without_open_root(pg_routes)
     pg_hits = [(paths, auth) for paths, auth in pg_routes if any(p.startswith("/pgweb") for p in paths)]
     if pg_hits != [(["/pgweb", "/pgweb/*"], True)]:
         raise SystemExit(f"pgweb must stay behind basic auth, got {pg_hits}")
