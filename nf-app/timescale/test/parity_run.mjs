@@ -72,7 +72,7 @@ function planFor(equip) {
   for (const p of roleP) if (!plan.skipped.has(p.role)) roleToUuid[p.role] = keyOf.get(p.point_key);
   const sensorSeries = own.filter((p) => p.series).map((p) => ({ uuid: keyOf.get(p.point_key), role: p.role, unit: p.si_unit }));
   const pointMeta = Object.fromEntries(own.map((p) => [keyOf.get(p.point_key), { name: p.point_key, kind: p.kind === "bool" ? "Bool" : "Number" }]));
-  return { plan, args: { siteId: SITE, equipId: equip, roleToUuid, unitsByUuid, fractionRoles: [...plan.scaled], booleanRoles: [...plan.bool], sensorSeries, pointMeta } };
+  return { plan, args: { siteId: SITE, equipId: equip, roleToUuid, unitsByUuid, fractionRoles: [...plan.scaled], booleanRoles: [...plan.bool], percentRoles: [...(plan.percent || [])], raisedRoles: [...(plan.raised || [])], sensorSeries, pointMeta } };
 }
 
 const siByEquip = new Map();

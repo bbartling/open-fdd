@@ -151,7 +151,7 @@ test("two sites with the same AHU-1 in one chart get separate stacks, legend nam
 });
 
 // ---- nulls ---------------------------------------------------------------------------------------------
-test("null fan_status gap: not 'off' (no after-hours), not covered (the long interval counts for nothing)", async () => {
+test("null supply_fan_operating_status gap: not 'off' (no after-hours), not covered (the long interval counts for nothing)", async () => {
   const ctx = load();
   const { option } = await render(ctx, "weekly-fan", siteEquips("site-a"));
   const [inS] = inSchedule(option), [after] = bySuffix(option, " (after hours)");
@@ -178,7 +178,7 @@ test("short cooling event: 1/3 h lands in the <10 bin on the fine grid; a coarse
   const ctx = load();
   const cols = (eq, role) => ctx.rcxBind(view(ctx, "mech-cooling-compressor-status"), [eq], fx.model, catalog)[0].bound[role][0];
   const eq = siteEquips("site-a")[0], M = ctx.get("rcxOverviewMath");
-  const pts = { a: cols(eq, "compressor_status"), o: cols(eq, "oa_t") };
+  const pts = { a: cols(eq, "compressor_operating_status"), o: cols(eq, "outdoor_air_intake_temperature") };
   const rc = ctx.rcxContext(view(ctx, "mech-cooling-compressor-status"), ctx.rcxBind(view(ctx, "mech-cooling-compressor-status"), [eq], fx.model, catalog), 672, fx.model, catalog);
   const fine = await rc.alignedFine(pts, { hours: 672 }), coarse = await rc.aligned(pts, { hours: 672 });
   assert.equal(fine.windowSec, 300);
@@ -213,7 +213,7 @@ test("alignedFine: a long span is fetched in <= 9000-sample chunks walked back f
   const eq = siteEquips("site-a")[0];
   const v = view(ctx, "weekly-fan"), bound = ctx.rcxBind(v, [eq], fx.model, catalog);
   const rc = ctx.rcxContext(v, bound, 1500, fx.model, catalog);
-  const fan = bound[0].bound.fan_status[0];
+  const fan = bound[0].bound.supply_fan_operating_status[0];
   const g = await rc.alignedFine({ f: fan }, { hours: 1500 });
   const chunks = ctx.requests.filter((r) => r.windowSec === 300);
   assert.equal(chunks.length, 2, JSON.stringify(ctx.requests));                  // 1500 h = 2 x 750 h at 300 s (9000 samples)

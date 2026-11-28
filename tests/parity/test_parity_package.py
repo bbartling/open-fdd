@@ -46,7 +46,7 @@ def test_dataset_shapes_and_long_format():
     ds = generate(0, 2, 1)
     assert len(ds.history) == 2 * 288 and ds.model["site"]["id"] == "site-1"
     assert {p["equipment_id"] for p in ds.model["points"]} == {"AHU-1", "AHU-2"}
-    assert ds.role_map["sat"] == "discharge-air-temp"
+    assert ds.role_map["discharge_air_temperature"] == "discharge_air_temperature"
     first = next(iter(ds.samples()))
     assert first[:2] == ("AHU-1", ds.history_columns[0]["name"])
     assert sum(1 for _ in ds.samples()) == len(ds.history) * len(ds.history_columns)
@@ -65,7 +65,7 @@ def _rows(ds, equip):
 
 def test_edge_has_nulls_gap_dupes_out_of_order_jitter_and_dst(edge):
     basic = generate(0, 2, 4, "basic")
-    cols = ("mat", "rat", "zone_t", "oa_h", "duct_static")
+    cols = ("mixed_air_temperature", "return_air_temperature", "zone_air_temperature", "outdoor_air_intake_relative_humidity", "discharge_air_static_pressure")
     nulls = lambda ds: sum(1 for r in ds.history for k in cols if r[k] is None)  # noqa: E731
     assert edge.meta["null_cells"] > 0 and nulls(edge) > nulls(basic) - 0 and nulls(edge) >= edge.meta["null_cells"] // 2
     # long gap (> 2 h) in the sorted unique timestamps of equipment 0
@@ -84,7 +84,7 @@ def test_edge_has_nulls_gap_dupes_out_of_order_jitter_and_dst(edge):
 
     def first_on_utc_hour(day_start_ms):
         on = sorted(r["ts"] for r in _rows(edge, "AHU-1") if day_start_ms + 8 * 3600000 <= r["ts"] < day_start_ms + 86400000
-                    and r["fan_cmd"] is not None and r["fan_cmd"] > 0)
+                    and r["supply_fan_command"] is not None and r["supply_fan_command"] > 0)
         return round((on[0] - day_start_ms) / 3600000)
 
     t0 = edge.meta["t0_ms"]
@@ -173,7 +173,7 @@ def test_policy_short_comparison_fails_unless_relaxed():
 
 def test_known_differences_are_scoped_and_documented():
     allk, stress, edge = known_differences("all"), known_differences("stress_only"), known_differences("edge")
-    assert len(allk) == 13 and set(stress) == {"TRIM-3", "TRIM-4", "VAV-REHEAT"} and not set(allk) & set(stress)
+    assert len(allk) == 15 and set(stress) == {"TRIM-3", "VAV-REHEAT"} and not set(allk) & set(stress)
     assert all(reason for reason in {**allk, **stress, **edge}.values())
     assert set(Policy.default("basic", stress=True).known) == set(allk) | set(stress)
     assert set(Policy.default("basic", stress=False).known) == set(allk)
@@ -185,11 +185,11 @@ def test_known_differences_are_scoped_and_documented():
 def test_imperial_round_trip():
     ds = generate(0, 2, 1)
     imp = to_imperial(ds)
-    assert imp.meta["unit_system"] == "imperial" and imp.units["oa_t"] == "°F" and imp.units["duct_static"] == "inH2O"
+    assert imp.meta["unit_system"] == "imperial" and imp.units["outdoor_air_intake_temperature"] == "°F" and imp.units["discharge_air_static_pressure"] == "inH2O"
     r0, r1 = ds.history[10], imp.history[10]
-    assert r1["oa_t"] == pytest.approx(r0["oa_t"] * 9 / 5 + 32)
-    assert r1["fan_cmd"] == pytest.approx(r0["fan_cmd"] * 100)
-    assert r1["fan_status"] == r0["fan_status"] and r1["oa_h"] == r0["oa_h"]       # unchanged scales
+    assert r1["outdoor_air_intake_temperature"] == pytest.approx(r0["outdoor_air_intake_temperature"] * 9 / 5 + 32)
+    assert r1["supply_fan_command"] == pytest.approx(r0["supply_fan_command"] * 100)
+    assert r1["supply_fan_operating_status"] == r0["supply_fan_operating_status"] and r1["outdoor_air_intake_relative_humidity"] == r0["outdoor_air_intake_relative_humidity"]       # unchanged scales
     back = from_imperial(imp)
     for a, b in zip(ds.history, back.history):
         for k, v in a.items():
@@ -198,7 +198,7 @@ def test_imperial_round_trip():
             else:
                 assert b[k] == v
     for a, b in zip(ds.weather, back.weather):
-        assert b["oa_t"] == pytest.approx(a["oa_t"], abs=1e-9)
+        assert b["outdoor_air_intake_temperature"] == pytest.approx(a["outdoor_air_intake_temperature"], abs=1e-9)
     assert back.units == ds.units and back.meta == ds.meta
     with pytest.raises(ValueError):
         to_imperial(imp)

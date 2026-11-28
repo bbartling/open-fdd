@@ -1,12 +1,12 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- econ7_ok_not_economizing.sql — Economizer OK but not economizing
--- Web DB+DP: prefer equipment web_oa_*; else weather sidecar. Never BAS oa_t.
+-- Web DB+DP: prefer equipment web_oa_*; else weather sidecar. Never BAS outdoor_air_intake_temperature.
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
@@ -17,9 +17,9 @@ wx_web_oa_t AS (
   SELECT timestamp_utc AS ref_ts, ref_val,
     LEAD(timestamp_utc) OVER (ORDER BY timestamp_utc) AS next_ref_ts
   FROM (
-    SELECT timestamp_utc, MAX(web_oa_t) AS ref_val
+    SELECT timestamp_utc, MAX(weather_service_air_temperature) AS ref_val
     FROM weather
-    WHERE web_oa_t IS NOT NULL
+    WHERE weather_service_air_temperature IS NOT NULL
     GROUP BY timestamp_utc
   ) wx_web_oa_t_points
 ),
@@ -27,31 +27,31 @@ wx_web_oa_dp AS (
   SELECT timestamp_utc AS ref_ts, ref_val,
     LEAD(timestamp_utc) OVER (ORDER BY timestamp_utc) AS next_ref_ts
   FROM (
-    SELECT timestamp_utc, MAX(web_oa_dp) AS ref_val
+    SELECT timestamp_utc, MAX(weather_service_air_dew_point_temperature) AS ref_val
     FROM weather
-    WHERE web_oa_dp IS NOT NULL
+    WHERE weather_service_air_dew_point_temperature IS NOT NULL
     GROUP BY timestamp_utc
   ) wx_web_oa_dp_points
 ),
 h AS (
   SELECT
-    run_proof,
+    operating_status,
     h.equipment_id,
     h.timestamp_utc,
-    COALESCE(h.web_oa_t, wx_web_oa_t.ref_val) AS web_oa_t,
-    COALESCE(h.web_oa_dp, wx_web_oa_dp.ref_val) AS web_oa_dp,
-    h.oa_damper_pct AS oa_d,
-    h.clg_valve_pct AS clg,
+    COALESCE(h.weather_service_air_temperature, wx_web_oa_t.ref_val) AS weather_service_air_temperature,
+    COALESCE(h.weather_service_air_dew_point_temperature, wx_web_oa_dp.ref_val) AS weather_service_air_dew_point_temperature,
+    h.outdoor_air_intake_damper_position_command AS oa_d,
+    h.cooling_valve_position_command AS clg,
     -- #1642: mechanical-cooling proof candidates (pandas mechanical_proof_mask; MECH-OAT-1 uses the same selection)
-    CASE WHEN h.compressor_status IS NULL THEN NULL WHEN h.compressor_status > 0.05 THEN 1 ELSE 0 END AS c1,
-    CASE WHEN h.chiller_status IS NULL THEN NULL WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END AS c2,
-    CASE WHEN h.chiller_amps IS NULL THEN NULL WHEN h.chiller_amps > {{MECH_AMPS_MIN}} THEN 1 ELSE 0 END AS c3,
-    CASE WHEN h.chiller_power IS NULL THEN NULL WHEN h.chiller_power > {{MECH_POWER_KW_MIN}} THEN 1 ELSE 0 END AS c4,
-    h.fan_cmd,
-    h.fan_status,
+    CASE WHEN h.compressor_operating_status IS NULL THEN NULL WHEN h.compressor_operating_status > 0.05 THEN 1 ELSE 0 END AS c1,
+    CASE WHEN h.chiller_operating_status IS NULL THEN NULL WHEN h.chiller_operating_status > 0.05 THEN 1 ELSE 0 END AS c2,
+    CASE WHEN h.chiller_electric_current IS NULL THEN NULL WHEN h.chiller_electric_current > {{MECH_AMPS_MIN}} THEN 1 ELSE 0 END AS c3,
+    CASE WHEN h.chiller_electric_power IS NULL THEN NULL WHEN h.chiller_electric_power > {{MECH_POWER_KW_MIN}} THEN 1 ELSE 0 END AS c4,
+    h.supply_fan_command,
+    h.supply_fan_operating_status,
     CASE
-      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END
+      WHEN h.supply_fan_operating_status IS NOT NULL THEN CASE WHEN h.supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN h.supply_fan_command IS NOT NULL THEN CASE WHEN h.supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history h
@@ -93,15 +93,15 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
-      WHEN web_oa_t IS NULL OR web_oa_dp IS NULL OR oa_d IS NULL THEN 0
-      WHEN web_oa_t >= {{ECON7_DB_MIN}} AND web_oa_t < {{ECON7_DB_MAX}} AND web_oa_dp < {{ECON7_DP_MAX}}
+      WHEN weather_service_air_temperature IS NULL OR weather_service_air_dew_point_temperature IS NULL OR oa_d IS NULL THEN 0
+      WHEN weather_service_air_temperature >= {{ECON7_DB_MIN}} AND weather_service_air_temperature < {{ECON7_DB_MAX}} AND weather_service_air_dew_point_temperature < {{ECON7_DP_MAX}}
        AND cooling_demand = 1 AND oa_d < {{ECON7_DAMPER_MIN}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM demand
 ),
 elapsed_hold AS (

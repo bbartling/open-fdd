@@ -5,9 +5,8 @@ Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) 
 
 ## 5.0.22 (unreleased)
 
-- **Parity dataset generator version 5 (#1781).** `open_fdd.parity.generate()` adds the new `boiler_status` history
-  column (a 0/1 status, like the other status roles) for the SHORT-CYCLE rule, so every dataset's content hash changed:
-  `open_fdd/data/parity_hashes.json` is republished for generator 5. Other columns' values are unchanged.
+- **Parity dataset generator version 6 (#1812).** Column names are the roles 1.1.0 names, so every dataset's content hash changed.
+- **Rule inputs use the roles 1.1.0 names and QUDT units (#1812).** SQL, pandas and the NF catalog bind the canonical role names (`supply_fan_command`, `outdoor_air_intake_temperature`, `PERCENT`, `DEG_C`, and the rest of `roles/openfdd-roles.json` 1.1.0-draft.1). Damper, valve and fan-speed values are percent 0-100; start/stop commands are boolean. Saved point roles and fraction tuning still resolve: `legacy_keys` map the old names, and `fdd.schema_meta` core version 5 renames stored roles and multiplies saved fraction thresholds by 100 once. `supply_fan_speed_command` is required for FC1 and stays off the rule-input list until the next roles release. The MIT license text is the full standard notice.
 
 ## open-fdd 4.5.11 - 2026-11-16 (PyPI only; app stays 5.0.20)
 

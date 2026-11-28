@@ -41,22 +41,26 @@ SKIP_NO_KNOWN_PROOF = "no_known_proof"
 
 #: Short role names (``sql/fdd/role_map.json`` keys) and underscore spellings accepted for proof roles.
 _PROOF_ALIASES: dict[str, str] = {
-    "fan_status": "fan-status",
-    "fan_cmd": "fan-cmd",
-    "occ_mode": "occupied",
-    "run_proof": "run-proof",
+    "supply_fan_operating_status": "supply_fan_operating_status",
+    "supply_fan_command": "supply_fan_command",
+    "occupancy_status": "occupancy_status",
+    "operating_status": "operating_status",
 }
 
 #: Site and weather roles: assessed under every policy.
 SITE_ROLES: frozenset[str] = frozenset(
     {
-        "outside-air-temp",
-        "outside-air-humidity",
+        "outdoor_air_intake_temperature",
+        "outdoor_air_intake_relative_humidity",
+        "outside_air_temp",
+        "outside_air_humidity",
+        "oa_t",
+        "oa_h",
         "outside-air-enthalpy",
         "outside-air-dewpoint-temp",
         "outside-air-wetbulb-temp",
-        "oa_t",
-        "oa_h",
+        "outdoor_air_intake_temperature",
+        "outdoor_air_intake_relative_humidity",
         "oat",
     }
 )
@@ -82,13 +86,13 @@ def is_site_role(role: str) -> bool:
 def _proof_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, str]]:
     """The frame's proof columns under the contract's column names (``fan-status``, ``run-proof`` ...).
 
-    Short and underscore spellings (``fan_status``, ``run_proof``) are accepted. Returns the frame and the
-    contract column -> kind map (``run_proof`` / ``status`` / ``command``).
+    Short and underscore spellings (``supply_fan_operating_status``, ``operating_status``) are accepted. Returns the frame and the
+    contract column -> kind map (``operating_status`` / ``status`` / ``command``).
     """
     from open_fdd.nf.model import column_for
 
     c = _spec()
-    kinds: dict[str, str] = {c.get("column", "run-proof"): "run_proof"}
+    kinds: dict[str, str] = {c.get("column", "operating_status"): "operating_status"}
     for group in ("status", "command"):
         for role in c["own"][group]:
             kinds.setdefault(column_for(role), group)
@@ -177,9 +181,9 @@ def activity(frame: pd.DataFrame, *, policy: str = DEFAULT_POLICY) -> Activity:
         state[values.le(spec_threshold).to_numpy()] = "off"
 
     occupancy_source = "none"
-    occ = _numeric_role(frame, "occupied")
+    occ = _numeric_role(frame, "occupancy_status")
     if occ is not None:
-        occupancy_source = "occupied"
+        occupancy_source = "occupancy_status"
         running = state.eq("on").to_numpy()
         state[running & occ.le(0.5).to_numpy()] = "unoccupied"
         state[running & occ.isna().to_numpy()] = "unknown"

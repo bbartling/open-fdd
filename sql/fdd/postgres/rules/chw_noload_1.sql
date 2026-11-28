@@ -8,18 +8,18 @@ WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    chiller_status,
-    chiller_cmd,
-    chw_pump_status,
-    chw_pump_cmd AS pump_cmd,
-    building_zone_load_satisfied,
-    building_ahu_load_satisfied,
+    chiller_operating_status,
+    chiller_command,
+    chilled_water_pump_operating_status,
+    chilled_water_pump_command AS pump_cmd,
+    zone_load_satisfied_status,
+    air_handling_unit_load_satisfied_status,
     CASE
-      WHEN building_zone_load_satisfied IS NOT NULL
-        OR building_ahu_load_satisfied IS NOT NULL THEN 1
+      WHEN zone_load_satisfied_status IS NOT NULL
+        OR air_handling_unit_load_satisfied_status IS NOT NULL THEN 1
       ELSE 0
     END AS sat_present,
-    COALESCE(building_zone_load_satisfied, building_ahu_load_satisfied) AS load_sat
+    COALESCE(zone_load_satisfied_status, air_handling_unit_load_satisfied_status) AS load_sat
   FROM history
 ),
 proof AS (
@@ -29,11 +29,11 @@ proof AS (
     sat_present,
     load_sat,
     CASE
-      WHEN chiller_status IS NULL AND chiller_cmd IS NULL
-           AND chw_pump_status IS NULL AND pump_cmd IS NULL THEN NULL
-      WHEN COALESCE(chiller_status, 0) > 0.05 THEN 1
-      WHEN COALESCE(chiller_cmd, 0) > 0.05 THEN 1
-      WHEN COALESCE(chw_pump_status, 0) > 0.05 THEN 1
+      WHEN chiller_operating_status IS NULL AND chiller_command IS NULL
+           AND chilled_water_pump_operating_status IS NULL AND pump_cmd IS NULL THEN NULL
+      WHEN COALESCE(chiller_operating_status, 0) > 0.05 THEN 1
+      WHEN COALESCE(chiller_command, 0) > 0.05 THEN 1
+      WHEN COALESCE(chilled_water_pump_operating_status, 0) > 0.05 THEN 1
       WHEN COALESCE(pump_cmd, 0) > 0.05 THEN 1
       ELSE 0
     END AS running
@@ -47,7 +47,7 @@ base AS (
     CAST(CASE
       WHEN sat_present = 0 THEN 0
       WHEN running IS NULL OR load_sat IS NULL THEN 0
-      WHEN running = 1 AND load_sat > {{LOAD_SAT_HI}} THEN 1
+      WHEN running = 1 AND load_sat > 0.5 THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM proof

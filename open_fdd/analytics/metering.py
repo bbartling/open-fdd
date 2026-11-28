@@ -22,7 +22,7 @@ ELEC_POWER_ROLES: tuple[str, ...] = (
     "elec-power",
     "building-power",
     "meter-power",
-    "chiller-power",  # plant meters often reuse this column
+    "chiller_electric_power",  # plant meters often reuse this column
 )
 GAS_RATE_ROLES: tuple[str, ...] = (
     "gas-flow",
@@ -148,8 +148,8 @@ def collect_meter_frames(
             continue
         # Prefer typed METER; also accept when role is present on other types
         if allowed and et not in allowed and et not in {"METER", "UNKNOWN"}:
-            # Still allow if role is an explicit elec/gas role (not only chiller_power fallback)
-            if kind == "electric" and role == "chiller-power" and et not in {
+            # Still allow if role is an explicit elec/gas role (not only chiller_electric_power fallback)
+            if kind == "electric" and role == "chiller_electric_power" and et not in {
                 "METER",
                 "CHILLER",
                 "CHW_PLANT",
@@ -187,7 +187,7 @@ def build_meter_monthly_table(
     cdd = monthly_degree_days(oat, kind="cdd") if oat is not None else pd.Series(dtype=float)
     hdd = monthly_degree_days(oat, kind="hdd") if oat is not None else pd.Series(dtype=float)
 
-    energy_col = "kwh" if kind == "electric" else "gas_qty"
+    energy_col = "electric_energy" if kind == "electric" else "gas_qty"
     rows: list[dict[str, Any]] = []
     for eq_id, (role, series) in meters.items():
         monthly = integrate_rate_to_monthly(series, energy_col=energy_col)
@@ -229,7 +229,7 @@ def meter_scatter_frame(monthly_df: pd.DataFrame, *, kind: MeterKind) -> pd.Data
     """Long frame for Plotly: x=degree days, y=energy."""
     if monthly_df is None or monthly_df.empty:
         return pd.DataFrame()
-    energy_col = "kwh" if kind == "electric" else "gas_qty"
+    energy_col = "electric_energy" if kind == "electric" else "gas_qty"
     dd_col = "cdd" if kind == "electric" else "hdd"
     if energy_col not in monthly_df.columns or dd_col not in monthly_df.columns:
         return pd.DataFrame()

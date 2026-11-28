@@ -81,6 +81,18 @@ SCALES = {
     "boolean": ("Status", "boolean", "0/1", "bool"),
     "percent_rh": ("Relative humidity", "humidity", "%RH (0-100)", "none"),
     "text": ("Text", None, "text", "none"),
+    "enumeration": ("Enumeration", None, "text", "none"),
+    "DEG_C": ("Temperature", "temperature", None, ""),
+    "K": ("Temperature difference", None, "K", "none"),
+    "PA": ("Pressure", "pressure_air", None, ""),
+    "L-PER-SEC": ("Flow", "flow_air", None, ""),
+    "KiloW": ("Power", "power", None, ""),
+    "KiloW-HR": ("Energy", "energy", None, ""),
+    "PPM": ("Concentration", "concentration", None, ""),
+    "A": ("Current", None, "A", "none (declare A)"),
+    "NUM": ("Count", None, "count", "none"),
+    "PERCENT": ("Command or position", None, "%", "%"),
+    "PERCENT_RH": ("Relative humidity", "humidity", "%RH (0-100)", "none"),
 }
 
 
@@ -118,11 +130,12 @@ def scale_info(scale: str) -> dict:
     return {"quantity": label, "si": si, "accepted": accepted or "none"}
 
 
-_SCALE_RANGE = {"fraction": "0 to 1", "boolean": "0 or 1", "percent_rh": "0 to 100"}
+_SCALE_RANGE = {"fraction": "0 to 1", "boolean": "0 or 1", "percent_rh": "0 to 100", "PERCENT": "0 to 100",
+                 "PERCENT_RH": "0 to 100", "enumeration": "text"}
 
 
 # Haystack role names the pandas twins use that differ from the SQL contract's role_map name.
-PANDAS_ALIASES = {"cw-fan-cmd": "tower_fan_cmd", "cooling-available": "clg_available"}
+PANDAS_ALIASES = {"cooling_tower_fan_command": "cooling_tower_fan_command", "cooling_operating_mode_status": "cooling_operating_mode_status"}
 # Roles only a pandas twin reads (no SQL column): the scale follows from the suffix.
 PANDAS_ONLY_SCALE = {"-cmd": "fraction", "-status": "boolean"}
 
@@ -199,6 +212,9 @@ PARAM_UNIT = {
     "degC": "°C", "degC_delta": "Δ°C", "degC_delta_per_h": "Δ°C/h", "pct": "%", "%": "%", "frac": "fraction (0-1)",
     "min": "min", "sec": "s", "h": "h", "L_per_s": "L/s", "Pa": "Pa", "kWh": "kWh", "ppm": "ppm", "bool": "0/1",
     "count": "count", "x": "x (ratio)", "unit": "signal units",
+    "PERCENT": "%", "DEG_C": "°C", "K": "K", "L-PER-SEC": "L/s", "MIN": "min", "HR": "h", "PA": "Pa",
+    "KiloW-HR": "kWh", "KiloW": "kW", "PPM": "ppm", "NUM": "count", "boolean": "0/1", "SEC": "s",
+    "K-PER-HR": "K/h", "A": "A",
 }
 
 
@@ -222,7 +238,7 @@ def param_unit(p: dict) -> tuple[str, bool]:
     if label is None:
         raise SystemExit(f"parameter unit {unit!r} has no docs label (add it to docs_units.PARAM_UNIT)")
     delta = p.get("kind") == "temperature_difference" or unit in ("degC_delta", "degC_delta_per_h")
-    if delta and unit == "degC":
+    if delta and unit in ("degC", "DEG_C"):
         label = "Δ°C"
     return label, delta
 
@@ -295,7 +311,8 @@ def units_convention(rules_text: bool = True) -> str:
     for label, key in _CONVENTION_ROWS:
         q = _Q[key]
         rows.append(f"| {label} | {q['si']} | {q['display']['imperial']['unit']} | {accepted_units(key) or ('% (the SI unit only)' if key == 'humidity' else 'none')} |")
-    rows.append("| Command or position | fraction, 0-1 | % | `%`, ratio |")
+    rows.append("| Damper, valve, fan speed | PERCENT, 0-100 | % | `%` |")
+    rows.append("| Start/stop command | boolean, 0 or 1 | 0/1 | bool, `%` (divided by 100) |")
     rows.append("| Status | 0/1 | 0/1 | `bool` |")
     text = """- Rules compute in **SI only**. The engineer declares each point's unit in NF; ingest converts it to SI (`open_fdd/data/units.json`).
   Unknown or incompatible units are skipped, never guessed from the value.

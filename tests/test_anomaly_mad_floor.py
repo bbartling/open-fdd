@@ -51,7 +51,7 @@ def test_screen_skips_a_near_constant_point(tmp_path):
         {"timestamp_utc": IDX.strftime("%Y-%m-%dT%H:%M:%SZ"), "DMPR": quantized_damper().to_numpy(), "FAN": 1.0}
     ).to_csv(folder / "history_wide.csv", index=False)
     (folder / "column_map.json").write_text(
-        json.dumps({"equipType": "AHU", "points": {"oa_damper_pct": "DMPR", "fan_status": "FAN"}}), encoding="utf-8"
+        json.dumps({"equipType": "AHU", "points": {"outdoor_air_intake_damper_position_command": "DMPR", "supply_fan_operating_status": "FAN"}}), encoding="utf-8"
     )
     res = screen_folder(folder, tmp_path / "s", methods=["zscore", "mad"], top_n=0, max_days=0, plots=False)
     row = res.scoreboard[res.scoreboard["point"] == "DMPR"].iloc[0]
@@ -88,7 +88,7 @@ def test_screen_keeps_a_short_excursion_on_a_flat_point(tmp_path):
         {"timestamp_utc": IDX.strftime("%Y-%m-%dT%H:%M:%SZ"), "DMPR": damper.to_numpy(), "FAN": 1.0}
     ).to_csv(folder / "history_wide.csv", index=False)
     (folder / "column_map.json").write_text(
-        json.dumps({"equipType": "AHU", "points": {"oa_damper_pct": "DMPR", "fan_status": "FAN"}}), encoding="utf-8"
+        json.dumps({"equipType": "AHU", "points": {"outdoor_air_intake_damper_position_command": "DMPR", "supply_fan_operating_status": "FAN"}}), encoding="utf-8"
     )
     res = screen_folder(folder, tmp_path / "s", methods=["mad"], top_n=0, max_days=0, plots=False)
     rows = res.scoreboard[res.scoreboard["point"] == "DMPR"]

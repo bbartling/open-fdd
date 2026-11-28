@@ -68,7 +68,7 @@
     },
     "overview-rcx-charts.js#economizerMatResidOption": {
       "views": [
-        "economizer-mat-residual"
+        "economizer-mixed_air_temperature-residual"
       ]
     },
     "overview-rcx-charts.js#economizerTempsOverlayOption": {
@@ -253,7 +253,7 @@
     "cw_temps_ts": "cw_temps_ts"
   },
   "fault_lanes": {
-    "economizer-mat-residual": [
+    "economizer-mixed_air_temperature-residual": [
       "ECON-1",
       "ECON-2",
       "DMP-1"

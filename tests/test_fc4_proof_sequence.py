@@ -9,11 +9,11 @@ from open_fdd.rules.cookbook_catalog import fc4
 def _frame(proof_when):
     idx = pd.date_range("2026-01-01", periods=49, freq="5min", tz="UTC")
     d = pd.DataFrame({
-        "fan-status": 1.0,
-        "cooling-valve": [0.0 if i % 2 else 0.5 for i in range(49)],
-        "heating-valve": 0.0,
-        "outside-air-damper": 0.0,
-        "run-proof": [1.0 if proof_when(i) else 0.0 for i in range(49)],
+        "supply_fan_operating_status": 1.0,
+        "cooling_valve_position_command": [0.0 if i % 2 else 0.5 for i in range(49)],
+        "heating_valve_position_command": 0.0,
+        "outdoor_air_intake_damper_position_command": 0.0,
+        "operating_status": [1.0 if proof_when(i) else 0.0 for i in range(49)],
     }, index=idx)
     d.attrs["run_proof_resolved"] = True
     return d

@@ -65,7 +65,7 @@ coverage semantics, startup holdoffs and UTC time zone.
 
 `sparql_samples.py` uses the seeded dataset's `to_core_rows()` to make a
 long-form `input_sample` table, and builds a **small tutorial RDF graph** from
-the generated point metadata. SPARQL finds `sat` and `duct_static` point keys.
+the generated point metadata. SPARQL finds `discharge_air_temperature` and `discharge_air_static_pressure` point keys.
 DuckDB then retrieves sample counts and SI ranges for those keys with a
 **parameterized query**. The toy graph is not a claim of full Brick/Haystack
 ontology coverage or a production NF RDF export.

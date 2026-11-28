@@ -53,23 +53,23 @@ export function buildPlotSpecModel() {
   const uuidFor = (siteId, equipId, role) => uuidOf(`${siteId}/${equipId}/${role}`);
 
   // site-a AHU-1: valve, duct static (declared in inH2O to exercise conversion) and its setpoint
-  points.push(rolePoint("site-a", "AHU-1", "clg_valve_pct", { unit: "%" }));
-  points.push(rolePoint("site-a", "AHU-1", "duct_static", { unit: "inH2O" }));
-  points.push(rolePoint("site-a", "AHU-1", "duct_static_sp", { unit: "Pa" }));
+  points.push(rolePoint("site-a", "AHU-1", "cooling_valve_position_command", { unit: "%" }));
+  points.push(rolePoint("site-a", "AHU-1", "discharge_air_static_pressure", { unit: "inH2O" }));
+  points.push(rolePoint("site-a", "AHU-1", "discharge_air_static_pressure_setpoint", { unit: "Pa" }));
 
   // site-a plant: one generic chiller (units mixed on purpose: degF, gpm, %, and one point with no unit)
   equips.push({ uuid: uuidOf("site-a/CH-1"), name: "CH-1", layer: "model", pointType: "EQUIPMENT",
     attrs: { id: "CH-1", dis: "CH-1", markers: "equip,chiller", siteRef: "site-a" } });
-  points.push(rolePoint("site-a", "CH-1", "chw_supply_t", { unit: "°F" }));
-  points.push(rolePoint("site-a", "CH-1", "chw_return_t", { unit: "°F" }));
-  points.push(rolePoint("site-a", "CH-1", "chw_flow", { unit: "gpm" }));
-  points.push(rolePoint("site-a", "CH-1", "chw_pump_cmd", { unit: "%" }));
-  points.push(rolePoint("site-a", "CH-1", "chiller_status", { unit: "", kind: "Bool" }));
-  points.push(rolePoint("site-a", "CH-1", "chiller_power", { unit: "" }));      // no unit: dropped as unit_unusable
+  points.push(rolePoint("site-a", "CH-1", "supply_chilled_water_temperature", { unit: "°F" }));
+  points.push(rolePoint("site-a", "CH-1", "return_chilled_water_temperature", { unit: "°F" }));
+  points.push(rolePoint("site-a", "CH-1", "chilled_water_volume_flow_rate", { unit: "gpm" }));
+  points.push(rolePoint("site-a", "CH-1", "chilled_water_pump_command", { unit: "%" }));
+  points.push(rolePoint("site-a", "CH-1", "chiller_operating_status", { unit: "", kind: "Bool" }));
+  points.push(rolePoint("site-a", "CH-1", "chiller_electric_power", { unit: "" }));      // no unit: dropped as unit_unusable
 
   // a weather point of site-a (fills web_* roles of every equip of the site)
-  const wx = catalog.roles.web_oa_t;
-  points.push(toPoint({ uuid: uuidOf("site-a/weather/web_oa_t"), name: "site-a weather web_oa_t", layer: "default", pointType: "POINT",
+  const wx = catalog.roles.weather_service_air_temperature;
+  points.push(toPoint({ uuid: uuidOf("site-a/weather/weather_service_air_temperature"), name: "site-a weather weather_service_air_temperature", layer: "default", pointType: "POINT",
     attrs: { dis: "Outside air temp (weather)", markers: ["point", "his", ...wx.markers].join(","), class: "", siteRef: "site-a",
       weatherStationRef: "station-1", unit: "°C", kind: "Number" } }));
 
@@ -77,8 +77,8 @@ export function buildPlotSpecModel() {
   // timeline for the chilled-water flow under SV-RANGE (the other SV-RANGE sensors have neither)
   points.push(resultPoint("site-a", "AHU-1", "FC1", "fdd+fault_timeline"));
   points.push(resultPoint("site-a", "CH-1", "CHW-1", "fdd+fault"));
-  const flow = uuidFor("site-a", "CH-1", "chw_flow");
-  points.push(resultPoint("site-a", "CH-1", "SV-RANGE", "fdd+fault", { sensorRef: flow, roleRef: "chw_flow", fddSummary: "sensor" }));
+  const flow = uuidFor("site-a", "CH-1", "chilled_water_volume_flow_rate");
+  points.push(resultPoint("site-a", "CH-1", "SV-RANGE", "fdd+fault", { sensorRef: flow, roleRef: "chilled_water_volume_flow_rate", fddSummary: "sensor" }));
   points.push(resultPoint("site-a", "CH-1", "SV-RANGE", "fdd+fault_timeline", { sensorRef: flow }));
 
   return { sites, equips, points };

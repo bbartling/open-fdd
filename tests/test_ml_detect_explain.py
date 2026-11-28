@@ -37,12 +37,12 @@ def _run(argv, out):
 
 def test_zscore_reports_used_and_missing_roles_and_flagged_roles(tmp_path):
     frame = lbnl.load_sdahu_csv(NORMAL_CSV)
-    on = frame.index[(frame["fan-status"] > 0.5) & (frame["occupied"] > 0.5)]
-    frame.loc[on[300], "discharge-air-temp"] = 70.0  # one clear SAT spike on a running row, a day in
-    folder = _folder(frame, tmp_path / "A", drop=["mixed-air-temp"])
+    on = frame.index[(frame["supply_fan_operating_status"] > 0.5) & (frame["occupancy_status"] > 0.5)]
+    frame.loc[on[300], "discharge_air_temperature"] = 70.0  # one clear SAT spike on a running row, a day in
+    folder = _folder(frame, tmp_path / "A", drop=["mixed_air_temperature"])
     summary, flags = _run(["detect", str(folder), "--method", "zscore"], tmp_path / "z")
-    assert "mixed-air-temp" not in summary["roles"] and "mixed-air-temp" not in summary["roles_used"]
-    assert "mixed-air-temp" in summary["roles_configured"] and "mixed-air-temp" in summary["roles_missing"]
+    assert "mixed_air_temperature" not in summary["roles"] and "mixed_air_temperature" not in summary["roles_used"]
+    assert "mixed_air_temperature" in summary["roles_configured"] and "mixed_air_temperature" in summary["roles_missing"]
     assert set(summary["roles_used"]) <= set(summary["roles_configured"])
     hit = flags[flags["flag"] == 1]
     assert len(hit) and hit["flagged_roles"].fillna("").str.len().gt(0).all()
@@ -50,7 +50,7 @@ def test_zscore_reports_used_and_missing_roles_and_flagged_roles(tmp_path):
     for names in hit["flagged_roles"]:
         assert set(names.split(";")) <= set(summary["roles_used"])
     spike = flags[flags["timestamp_utc"].str.startswith(str(on[300])[:19])]
-    assert "discharge-air-temp" in spike["flagged_roles"].iloc[0].split(";")
+    assert "discharge_air_temperature" in spike["flagged_roles"].iloc[0].split(";")
 
 
 def test_pca_and_grey_box_explain_each_flag(tmp_path):

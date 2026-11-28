@@ -2,13 +2,13 @@
 
 The shipped limits are ``open_fdd/data/sensor_sweep_limits.json`` (phase 1, #1581). An override is a small SI document
 
-    {"version": 1, "roles": {"zone-air-temp": {"lo": 12.0, "hi": 30.0}, ...}}
+    {"version": 1, "roles": {"zone_air_temperature": {"lo": 12.0, "hi": 30.0}, ...}}
 
 stored as one revision of ``fdd.rule_config`` (rule_id ``SV-LIMITS``; scope_key ``site`` or ``equip:<equipment id>``;
 append-only, at most one active revision per scope). Precedence per field: shipped file, then the site override, then
 the equipment override. #1763: an override may also carry per-sensor values,
 
-    {"version": 1, "roles": {...}, "sensors": {"<series id>": {"role": "zone-air-temp", "hi": 26.0}}}
+    {"version": 1, "roles": {...}, "sensors": {"<series id>": {"role": "zone_air_temperature", "hi": 26.0}}}
 
 which apply to that one point only (two points of one role stay independent) and win over every role value; a sensor
 field saved at the equipment scope wins over the same field saved at the site scope.

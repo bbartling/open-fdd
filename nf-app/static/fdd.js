@@ -22,14 +22,16 @@ function equipKinds(equipRec, catalog) {
     .map(([kind]) => kind);
 }
 
-const isWebRole = (role) => role.startsWith("web_");
+const isWebRole = (role, def) => role.startsWith("web_") || role.startsWith("weather_service_") || !!(def && def.binding_scope === "weather");
 
 /** How well point `p` fills role `role` (0 = not at all; higher = better). */
 function roleScore(p, role, def) {
-  // Weather-service points only fill web_* roles; equipment sensors never do.
-  if (isWebRole(role) !== has(p, "weather")) return 0;
+  // Weather-service points only fill weather roles; equipment sensors never do.
+  if (isWebRole(role, def) !== has(p, "weather")) return 0;
+  const tags = p.tags || [];
+  if ((def.forbid || []).some((m) => tags.includes(m))) return 0;
   if (p.cls && def.classes.includes(p.cls)) return 2;
-  return def.markers.length > 0 && def.markers.every((m) => p.tags.includes(m)) ? 1 : 0;
+  return def.markers.length > 0 && def.markers.every((m) => tags.includes(m)) ? 1 : 0;
 }
 
 const fillsRole = (p, role, def) => roleScore(p, role, def) > 0;
@@ -40,8 +42,8 @@ const fillsRole = (p, role, def) => roleScore(p, role, def) > 0;
  * Bound by Haystack markers exactly like a catalog role.
  */
 const FDD_EXTRA_ROLES = {
-  compressor_cmd: { name: "compressor-cmd", classes: [], markers: ["compressor", "run", "cmd"], scale: "fraction" },
-  dx_cool_cmd: { name: "dx-cool-cmd", classes: [], markers: ["dx", "cool", "cmd"], scale: "fraction" },
+  compressor_cmd: { name: "compressor-cmd", classes: [], markers: ["compressor", "run", "cmd"], scale: "boolean" },
+  dx_cool_cmd: { name: "dx-cool-cmd", classes: [], markers: ["dx", "cool", "cmd"], scale: "boolean" },
   dx_cooling: { name: "dx-cooling", classes: [], markers: ["dx", "cool", "sensor"], scale: "boolean" },
 };
 

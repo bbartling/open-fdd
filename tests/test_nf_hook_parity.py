@@ -53,7 +53,7 @@ def test_one_ahu_and_no_airref_stamps_run_proof_even_when_only_the_vav_is_reques
     assert fan.uuid in hist.uuids
     df = frames[("s", "V1")]
     series, src = derive_run_proof(df)
-    assert src == "run-proof" and df.attrs["run_proof_source"] == "assumedSingleAhu"
+    assert src == "operating_status" and df.attrs["run_proof_source"] == "assumedSingleAhu"
     assert series.notna().all() and float(series.iloc[0]) == pytest.approx(1.0)
 
 
@@ -62,7 +62,7 @@ def test_single_ahu_assumption_is_off_when_asked_and_does_not_guess_a_dangling_r
     hist = _History()
     start, end = datetime(2026, 1, 5, tzinfo=timezone.utc), datetime(2026, 1, 6, tzinfo=timezone.utc)
     frames = equipment_frames(hist, model, start, end, equip="V1", assume_single_feeder=False)
-    assert fan.uuid not in hist.uuids and "run-proof" not in frames[("s", "V1")].columns
+    assert fan.uuid not in hist.uuids and "operating_status" not in frames[("s", "V1")].columns
     dangling = _model(
         [_equip("AHU", "equip,ahu"), _equip("V1", "equip,vav", airRef="missing")],
         [_point("f1", "AHU", ["fan", "run", "sensor"], kind="Bool"),
@@ -93,7 +93,7 @@ def test_vav1_uses_the_50h_default_and_vav2_still_requires_a_point():
     v1 = table[table["rule"] == "VAV-1"].iloc[0]
     v2 = table[table["rule"] == "VAV-2"].iloc[0]
     assert v1["raw_status"] == "PASS"
-    assert v2["raw_status"] == "SKIPPED_MISSING_ROLES" and "occupied" in v2["missing_roles"]
+    assert v2["raw_status"] == "SKIPPED_MISSING_ROLES" and "occupancy_status" in v2["missing_roles"]
 
 
 def test_l_per_sec_and_inches_of_water_digit_zero_convert_to_si():

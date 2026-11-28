@@ -79,7 +79,7 @@
         "uoa_h.oa_base": "B7",
         "uoa_h.oa_prop": "B8",
         "uoa_h.ra_t": "B9",
-        "uoa_h.oa_t": "B10",
+        "uoa_h.outdoor_air_intake_temperature": "B10",
         "uoa_h.hours": "B11",
         "uoa_h.eff": "B12",
         "uoa_h.cost": "B13",
@@ -110,13 +110,13 @@
         "uoa_c.cop": "B12",
         "uoa_c.cost": "B13",
         "uoa_c.mmbtu": "B16",
-        "uoa_c.kwh": "B17",
+        "uoa_c.electric_energy": "B17",
         "uoa_c.cost_saved": "B18",
         "uoa_c.payback": "B19"
       },
       "outputs": [
         "uoa_c.mmbtu",
-        "uoa_c.kwh",
+        "uoa_c.electric_energy",
         "uoa_c.cost_saved",
         "uoa_c.payback"
       ]
@@ -207,13 +207,13 @@
         "dpe.kwpt": "B11",
         "dpe.cost": "B12",
         "dpe.displaced": "B15",
-        "dpe.kwh": "B16",
+        "dpe.electric_energy": "B16",
         "dpe.cost_saved": "B17",
         "dpe.payback": "B18"
       },
       "outputs": [
         "dpe.displaced",
-        "dpe.kwh",
+        "dpe.electric_energy",
         "dpe.cost_saved",
         "dpe.payback"
       ]
@@ -235,13 +235,13 @@
         "dcv.cop": "B14",
         "dcv.cost": "B15",
         "dcv.therms": "B18",
-        "dcv.kwh": "B19",
+        "dcv.electric_energy": "B19",
         "dcv.cost_saved": "B20",
         "dcv.payback": "B21"
       },
       "outputs": [
         "dcv.therms",
-        "dcv.kwh",
+        "dcv.electric_energy",
         "dcv.cost_saved",
         "dcv.payback"
       ]
@@ -413,13 +413,13 @@
         "chwrst.realization": "B9",
         "chwrst.pump_kwh": "B10",
         "chwrst.cost": "B11",
-        "chwrst.kwh": "B14",
+        "chwrst.electric_energy": "B14",
         "chwrst.net_kwh": "B15",
         "chwrst.cost_saved": "B16",
         "chwrst.payback": "B17"
       },
       "outputs": [
-        "chwrst.kwh",
+        "chwrst.electric_energy",
         "chwrst.net_kwh",
         "chwrst.cost_saved",
         "chwrst.payback"
@@ -517,13 +517,13 @@
         "filter.hours": "B10",
         "filter.cost": "B11",
         "filter.kw": "B14",
-        "filter.kwh": "B15",
+        "filter.electric_energy": "B15",
         "filter.cost_saved": "B16",
         "filter.payback": "B17"
       },
       "outputs": [
         "filter.kw",
-        "filter.kwh",
+        "filter.electric_energy",
         "filter.cost_saved",
         "filter.payback"
       ]
@@ -541,13 +541,13 @@
         "exh.heat_frac": "B10",
         "exh.heat_eff": "B11",
         "exh.cost": "B12",
-        "exh.kwh": "B15",
+        "exh.electric_energy": "B15",
         "exh.therms": "B16",
         "exh.cost_saved": "B17",
         "exh.payback": "B18"
       },
       "outputs": [
-        "exh.kwh",
+        "exh.electric_energy",
         "exh.therms",
         "exh.cost_saved",
         "exh.payback"
@@ -568,13 +568,13 @@
         "inf.cop": "B12",
         "inf.cost": "B13",
         "inf.therms": "B16",
-        "inf.kwh": "B17",
+        "inf.electric_energy": "B17",
         "inf.cost_saved": "B18",
         "inf.payback": "B19"
       },
       "outputs": [
         "inf.therms",
-        "inf.kwh",
+        "inf.electric_energy",
         "inf.cost_saved",
         "inf.payback"
       ]
@@ -803,12 +803,12 @@
         "uh.count": "B7",
         "uh.hours": "B8",
         "uh.cost": "B9",
-        "uh.kwh": "B12",
+        "uh.electric_energy": "B12",
         "uh.cost_saved": "B13",
         "uh.payback": "B14"
       },
       "outputs": [
-        "uh.kwh",
+        "uh.electric_energy",
         "uh.cost_saved",
         "uh.payback"
       ]
@@ -823,12 +823,12 @@
         "whp.hours": "B7",
         "whp.realization": "B8",
         "whp.cost": "B9",
-        "whp.kwh": "B12",
+        "whp.electric_energy": "B12",
         "whp.cost_saved": "B13",
         "whp.payback": "B14"
       },
       "outputs": [
-        "whp.kwh",
+        "whp.electric_energy",
         "whp.cost_saved",
         "whp.payback"
       ]

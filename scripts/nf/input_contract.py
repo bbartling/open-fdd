@@ -10,8 +10,10 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = ROOT / "sql/fdd/input_contract.json"
 
 _IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_]*$")
-_SCALES = {"fraction", "boolean", "percent_rh", "text"}
+_SCALES = {"fraction", "boolean", "enumeration", "percent_rh", "text"}
 _SI_UNITS = {"degC", "Pa", "L/s", "kW", "kWh", "A", "ppm", "count"}
+# QUDT local names from roles/openfdd-roles.json. The contract stores the local name itself.
+_QUDT_UNITS = {"DEG_C", "PA", "L-PER-SEC", "PERCENT", "PERCENT_RH", "PPM", "KiloW", "KiloW-HR", "A", "NUM", "K"}
 _TYPES = {"double", "text", "timestamp"}
 _SQL_TYPES = {"double": "DOUBLE PRECISION", "text": "VARCHAR", "timestamp": "timestamp with time zone"}
 
@@ -29,9 +31,9 @@ def load_source() -> dict:
         if not _IDENTIFIER.fullmatch(role) or not isinstance(spec, dict):
             raise ValueError(f"invalid role declaration: {role!r}")
         scale, sql_type = spec.get("scale"), spec.get("type")
-        if not (scale in _SCALES or (isinstance(scale, str) and scale.startswith("si:") and scale[3:] in _SI_UNITS)):
+        if not (scale in _SCALES or scale in _QUDT_UNITS or (isinstance(scale, str) and scale.startswith("si:") and scale[3:] in _SI_UNITS)):
             raise ValueError(f"{role}: invalid scale {scale!r}")
-        expected_type = "text" if scale == "text" else "double"
+        expected_type = "text" if scale in ("text", "enumeration") else "double"
         if sql_type != expected_type:
             raise ValueError(f"{role}: scale {scale!r} requires type {expected_type!r}, got {sql_type!r}")
 

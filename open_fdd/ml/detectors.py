@@ -27,35 +27,35 @@ import pandas as pd
 
 #: Roles the multivariate detectors use when present (setpoints excluded: often constant).
 FEATURE_ROLES: tuple[str, ...] = (
-    "discharge-air-temp",
-    "mixed-air-temp",
-    "return-air-temp",
-    "outside-air-temp",
-    "outside-air-damper",
-    "cooling-valve",
-    "fan-cmd",
-    "duct-static-pressure",
-    "zone-air-temp",
-    "heating-valve",
+    "discharge_air_temperature",
+    "mixed_air_temperature",
+    "return_air_temperature",
+    "outdoor_air_intake_temperature",
+    "outdoor_air_intake_damper_position_command",
+    "cooling_valve_position_command",
+    "supply_fan_command",
+    "discharge_air_static_pressure",
+    "zone_air_temperature",
+    "heating_valve_position_command",
 )
 
 #: Short role names (sql/fdd/role_map.json keys) accepted as aliases.
 ROLE_ALIASES: dict[str, str] = {
-    "sat": "discharge-air-temp",
-    "sat_sp": "discharge-air-temp-sp",
-    "mat": "mixed-air-temp",
-    "rat": "return-air-temp",
-    "oa_t": "outside-air-temp",
-    "oa_damper_pct": "outside-air-damper",
-    "clg_valve_pct": "cooling-valve",
-    "htg_valve_pct": "heating-valve",
-    "fan_cmd": "fan-cmd",
-    "fan_status": "fan-status",
-    "duct_static": "duct-static-pressure",
-    "duct_static_sp": "duct-static-pressure-sp",
-    "occ_mode": "occupied",
-    "zone_t": "zone-air-temp",
-    "compressor_status": "compressor-status",
+    "sat": "discharge_air_temperature",
+    "sat_sp": "discharge_air_temperature_setpoint",
+    "mat": "mixed_air_temperature",
+    "rat": "return_air_temperature",
+    "oa_t": "outdoor_air_intake_temperature",
+    "oa_damper_pct": "outdoor_air_intake_damper_position_command",
+    "clg_valve_pct": "cooling_valve_position_command",
+    "htg_valve_pct": "heating_valve_position_command",
+    "fan_cmd": "supply_fan_command",
+    "fan_status": "supply_fan_operating_status",
+    "duct_static": "discharge_air_static_pressure",
+    "duct_static_sp": "discharge_air_static_pressure_setpoint",
+    "occ_mode": "occupancy_status",
+    "zone_t": "zone_air_temperature",
+    "compressor_status": "compressor_operating_status",
 }
 
 METHODS: tuple[str, ...] = ("pca", "grey_box", "ocsvm", "copod", "zscore", "mad")
@@ -66,18 +66,18 @@ METHODS: tuple[str, ...] = ("pca", "grey_box", "ocsvm", "copod", "zscore", "mad"
 #: run only when there is no mixed-air temperature, so an AHU keeps exactly the mixed-air residuals.
 GREY_BOX_RESIDUALS: dict[str, tuple[tuple[tuple[str, ...], ...], tuple[str, ...]]] = {
     "oa_fraction": (
-        (("mixed-air-temp",), ("return-air-temp",), ("outside-air-temp",), ("outside-air-damper",)),
+        (("mixed_air_temperature",), ("return_air_temperature",), ("outdoor_air_intake_temperature",), ("outdoor_air_intake_damper_position_command",)),
         (),
     ),
-    "coil_delta_t": ((("mixed-air-temp",), ("discharge-air-temp",), ("cooling-valve",)), ()),
-    "sat_error": ((("discharge-air-temp",), ("discharge-air-temp-sp",), ("cooling-valve",)), ()),
+    "coil_delta_t": ((("mixed_air_temperature",), ("discharge_air_temperature",), ("cooling_valve_position_command",)), ()),
+    "sat_error": ((("discharge_air_temperature",), ("discharge_air_temperature_setpoint",), ("cooling_valve_position_command",)), ()),
     "heat_rise": (
-        (("discharge-air-temp",), ("zone-air-temp", "return-air-temp"), ("heating-valve",)),
-        ("mixed-air-temp",),
+        (("discharge_air_temperature",), ("zone_air_temperature", "return_air_temperature"), ("heating_valve_position_command",)),
+        ("mixed_air_temperature",),
     ),
     "cool_drop": (
-        (("discharge-air-temp",), ("zone-air-temp", "return-air-temp"), ("cooling-valve", "compressor-status")),
-        ("mixed-air-temp",),
+        (("discharge_air_temperature",), ("zone_air_temperature", "return_air_temperature"), ("cooling_valve_position_command", "compressor_operating_status")),
+        ("mixed_air_temperature",),
     ),
 }
 
@@ -117,8 +117,8 @@ DEFAULT_QUANTILE = 0.99
 def canonical_roles(frame: pd.DataFrame) -> pd.DataFrame:
     """Rename a 223P role or a legacy key onto the pandas column the detectors read.
 
-    ``discharge_air_temperature`` and ``sat`` both become ``discharge-air-temp``. A column that is already
-    that pandas name is left as it is. The rule-input name is :func:`open_fdd.point_roles.resolve`.
+    ``discharge-air-temp`` and ``sat`` both become ``discharge_air_temperature``. A column that is already
+    the role name is left as it is. The rule-input name is :func:`open_fdd.point_roles.resolve`.
     """
     from open_fdd.point_roles import pandas_column
 
@@ -137,8 +137,8 @@ def canonical_roles(frame: pd.DataFrame) -> pd.DataFrame:
 def active_mask(frame: pd.DataFrame) -> pd.Series:
     """Rows the shared activity policy assesses (:mod:`open_fdd.analytics.anomaly.activity`, ``proof``).
 
-    Proof is the run-proof contract (``open_fdd.run_proof.derive_run_proof``): a resolved ``run-proof`` column,
-    else an own status role (``fan-status`` first), else an own command (``fan-cmd`` first), each ``> 0.05``;
+    Proof is the run-proof contract (``open_fdd.run_proof.derive_run_proof``): a resolved ``operating_status`` column,
+    else an own status role (``supply_fan_operating_status`` first), else an own command (``supply_fan_command`` first), each ``> 0.05``;
     ``occupied`` must be ``> 0.5`` when it has data.
     Rows without proof are not assessed: a frame with no proof role has no active rows.
     """
@@ -283,16 +283,16 @@ class GreyBox(Detector):
         f = canonical_roles(frame)
         num = lambda r: pd.to_numeric(f[r], errors="coerce").astype(float)  # noqa: E731
         out: dict[str, tuple[pd.Series, pd.Series, float]] = {}
-        if {"mixed-air-temp", "return-air-temp", "outside-air-temp", "outside-air-damper"} <= set(f.columns):
-            mat, rat, oat = num("mixed-air-temp"), num("return-air-temp"), num("outside-air-temp")
+        if {"mixed_air_temperature", "return_air_temperature", "outdoor_air_intake_temperature", "outdoor_air_intake_damper_position_command"} <= set(f.columns):
+            mat, rat, oat = num("mixed_air_temperature"), num("return_air_temperature"), num("outdoor_air_intake_temperature")
             delta = oat - rat
             oaf = ((mat - rat) / delta).where(delta.abs() >= self.min_oat_rat_delta)
-            out["oa_fraction"] = (num("outside-air-damper"), oaf, self.bin_width)
-        if {"mixed-air-temp", "discharge-air-temp", "cooling-valve"} <= set(f.columns):
-            out["coil_delta_t"] = (num("cooling-valve"), num("mixed-air-temp") - num("discharge-air-temp"), self.bin_width)
-        if {"discharge-air-temp", "discharge-air-temp-sp", "cooling-valve"} <= set(f.columns):
-            valve = num("cooling-valve")
-            err = (num("discharge-air-temp") - num("discharge-air-temp-sp")).where((valve > 0.05) & (valve < 0.95))
+            out["oa_fraction"] = (num("outdoor_air_intake_damper_position_command"), oaf, self.bin_width)
+        if {"mixed_air_temperature", "discharge_air_temperature", "cooling_valve_position_command"} <= set(f.columns):
+            out["coil_delta_t"] = (num("cooling_valve_position_command"), num("mixed_air_temperature") - num("discharge_air_temperature"), self.bin_width)
+        if {"discharge_air_temperature", "discharge_air_temperature_setpoint", "cooling_valve_position_command"} <= set(f.columns):
+            valve = num("cooling_valve_position_command")
+            err = (num("discharge_air_temperature") - num("discharge_air_temperature_setpoint")).where((valve > 0.05) & (valve < 0.95))
             out["sat_error"] = (pd.Series(0.0, index=f.index), err, 1.0)
         # scoring uses the single-zone roles picked at fit time; fitting picks the roles that carry data
         families = self.families_ if self.families_ else grey_box_families(f)
@@ -384,8 +384,8 @@ def _assessment(scores: pd.Series, active: pd.Series) -> pd.Series:
 def operating_mode(frame: pd.DataFrame) -> pd.Series:
     """AHU operating mode from the damper and cooling valve commands (fraction 0-1)."""
     f = canonical_roles(frame)
-    valve = pd.to_numeric(f.get("cooling-valve", pd.Series(0.0, index=f.index)), errors="coerce").fillna(0.0)
-    damper = pd.to_numeric(f.get("outside-air-damper", pd.Series(0.0, index=f.index)), errors="coerce").fillna(0.0)
+    valve = pd.to_numeric(f.get("cooling_valve_position_command", pd.Series(0.0, index=f.index)), errors="coerce").fillna(0.0)
+    damper = pd.to_numeric(f.get("outdoor_air_intake_damper_position_command", pd.Series(0.0, index=f.index)), errors="coerce").fillna(0.0)
     mode = pd.Series("min_oa", index=f.index, dtype=object)
     mode[(valve <= 0.05) & (damper > 0.15)] = "econ_only"
     mode[(valve > 0.05) & (damper < 0.5)] = "mech_min_oa"

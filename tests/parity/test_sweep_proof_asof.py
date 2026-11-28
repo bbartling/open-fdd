@@ -31,13 +31,13 @@ def _run(proof, offset_s=60, rules=("SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-R
         t = START + timedelta(minutes=m)
         p = proof(m)
         if p is not ...:
-            con.execute("INSERT INTO history (equipment_id, timestamp_utc, run_proof) VALUES ('eq-1', ?, ?)", [t, p])
-        con.execute("INSERT INTO sensor_history VALUES ('eq-1', 'sat-1', 'sat', '°C', ?, 90.0)", [t + timedelta(seconds=offset_s)])
+            con.execute("INSERT INTO history (equipment_id, timestamp_utc, operating_status) VALUES ('eq-1', ?, ?)", [t, p])
+        con.execute("INSERT INTO sensor_history VALUES ('eq-1', 'discharge_air_temperature-1', 'discharge_air_temperature', '°C', ?, 90.0)", [t + timedelta(seconds=offset_s)])
     out = {}
     for rid in rules:
         cur = con.execute(PACK["rules"][rid]["sql"])
         names = [d[0] for d in cur.description]
-        out[rid] = next(dict(zip(names, r)) for r in cur.fetchall() if r[names.index("series_id")] == "sat-1")
+        out[rid] = next(dict(zip(names, r)) for r in cur.fetchall() if r[names.index("series_id")] == "discharge_air_temperature-1")
     con.close()
     return out
 

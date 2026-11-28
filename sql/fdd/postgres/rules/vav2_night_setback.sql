@@ -1,24 +1,24 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- vav2_night_setback.sql — unoccupied zone stays above heating setback
--- Occupied hours do not latch. Missing occ_mode → no unoccupied proof (no fault).
+-- Occupied hours do not latch. Missing occupancy_status → no unoccupied proof (no fault).
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    zone_t,
-    occ_mode,
+    zone_air_temperature,
+    occupancy_status,
     CAST(CASE
-      WHEN occ_mode IS NULL THEN 0
+      WHEN occupancy_status IS NULL THEN 0
       WHEN (
-        LOWER(trim(CAST(occ_mode AS VARCHAR))) IN
+        LOWER(trim(CAST(occupancy_status AS VARCHAR))) IN
           ('unoccupied','unocc','off','false','night','standby','setback','0','0.0','no')
         OR (
-          fdd.try_double(trim(CAST(occ_mode AS VARCHAR))) IS NOT NULL
-          AND fdd.try_double(trim(CAST(occ_mode AS VARCHAR))) <= 0.05
+          fdd.try_double(trim(CAST(occupancy_status AS VARCHAR))) IS NOT NULL
+          AND fdd.try_double(trim(CAST(occupancy_status AS VARCHAR))) <= 0.05
         )
       )
-       AND zone_t IS NOT NULL AND zone_t > {{SETBACK_HI}} THEN 1
+       AND zone_air_temperature IS NOT NULL AND zone_air_temperature > {{SETBACK_HI}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM history

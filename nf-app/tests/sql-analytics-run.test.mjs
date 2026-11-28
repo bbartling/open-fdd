@@ -16,13 +16,13 @@ const T0 = Date.UTC(2026, 2, 2);   // a Monday
 // one AHU: fan status on 06-18 h for 9 days, hourly OAT; percent damper; RAT / MAT for the economizer; a web OAT
 function core() {
   const points = [
-    { point_key: "AHU-1/fan", equipment_id: "AHU-1", role: "fan_status" },
+    { point_key: "AHU-1/fan", equipment_id: "AHU-1", role: "supply_fan_operating_status" },
     { point_key: "AHU-1/oat", equipment_id: "AHU-1", role: "outside_air_temp" },
-    { point_key: "AHU-1/rat", equipment_id: "AHU-1", role: "rat" },
-    { point_key: "AHU-1/mat", equipment_id: "AHU-1", role: "mat" },
+    { point_key: "AHU-1/return_air_temperature", equipment_id: "AHU-1", role: "return_air_temperature" },
+    { point_key: "AHU-1/mixed_air_temperature", equipment_id: "AHU-1", role: "mixed_air_temperature" },
     { point_key: "AHU-1/dmp", equipment_id: "AHU-1", role: "oa_damper" },
-    { point_key: "CH-1/st", equipment_id: "CH-1", role: "chiller_status" },
-    { point_key: "web", equipment_id: null, role: "web_oa_t" },
+    { point_key: "CH-1/st", equipment_id: "CH-1", role: "chiller_operating_status" },
+    { point_key: "web", equipment_id: null, role: "weather_service_air_temperature" },
   ];
   const samples = [];
   for (let i = 0; i < 12 * 24 * 9; i++) {
@@ -31,7 +31,7 @@ function core() {
     const oat = 12 + 10 * Math.sin(((h - 9) / 24) * 2 * Math.PI);
     const on = h >= 6 && h < 18 ? 1 : 0;
     const dmp = oat < 18 ? 80 : 20;
-    samples.push(["AHU-1/fan", t, on], ["AHU-1/rat", t, 22], ["AHU-1/mat", t, 22 + (dmp / 100) * (oat - 22) + 0.3],
+    samples.push(["AHU-1/fan", t, on], ["AHU-1/return_air_temperature", t, 22], ["AHU-1/mixed_air_temperature", t, 22 + (dmp / 100) * (oat - 22) + 0.3],
       ["AHU-1/dmp", t, dmp], ["CH-1/st", t, oat > 18 ? 1 : 0]);
     if (i % 12 === 0) samples.push(["AHU-1/oat", t, oat], ["web", t + 120000, oat + 0.8]);
   }
@@ -42,8 +42,8 @@ const cases = {
   runtime: { oats: [["AHU-1", "AHU-1/oat"]], weeks: [["AHU-1", T0 + 6 * H], ["AHU-1", T0 + 7 * 24 * H + 5 * H]],
     occupied: [["AHU-1", T0 + 7 * H, T0 + 18 * H], ["AHU-1", T0 + 31 * H, T0 + 42 * H]] },
   mech: { candidates: [["CH-1", 1, 0, "CH-1/st", "on", null]], gates: [], oats: [["CH-1", "AHU-1/oat"]] },
-  econ: [["AHU-1", "fan", "AHU-1/fan"], ["AHU-1", "oat", "AHU-1/oat"], ["AHU-1", "rat", "AHU-1/rat"],
-    ["AHU-1", "mat", "AHU-1/mat"], ["AHU-1", "damper", "AHU-1/dmp"]],
+  econ: [["AHU-1", "fan", "AHU-1/fan"], ["AHU-1", "oat", "AHU-1/oat"], ["AHU-1", "return_air_temperature", "AHU-1/return_air_temperature"],
+    ["AHU-1", "mixed_air_temperature", "AHU-1/mixed_air_temperature"], ["AHU-1", "damper_position", "AHU-1/dmp"]],
   basweb: [["AHU-1", "AHU-1/oat", "web", 5400000]],
 };
 
@@ -65,7 +65,7 @@ c = d["cases"]
 out = {
   "runtime": run_runtime_sql(conn, "duckdb", oats=c["runtime"]["oats"], weeks=c["runtime"]["weeks"], occupied=c["runtime"]["occupied"]),
   "mech": run_mech_bins_sql(conn, "duckdb", Plan(c["mech"]["candidates"], c["mech"]["gates"], c["mech"]["oats"],
-          {("CH-1", 1, 0): ("chiller-status", "chiller-status", "direct")})),
+          {("CH-1", 1, 0): ("chiller_operating_status", "chiller_operating_status", "direct")})),
   "econ": run_economizer_sql(conn, "duckdb", c["econ"]),
   "basweb": run_bas_web_sql(conn, "duckdb", c["basweb"]),
 }

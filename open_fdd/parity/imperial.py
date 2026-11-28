@@ -8,8 +8,9 @@ One conversion table: the factors come from ``open_fdd/data/unit_factors.json`` 
 ``open_fdd.units.convert``, ``open_fdd.nf.units`` and ``nf-app/static/units.js``), so a store that converts with NF's table
 returns the SI dataset exactly.
 
-Only roles with a known conversion change: ``si:degC``, ``si:Pa``, ``si:L/s`` and ``fraction`` (0-1 -> 0-100 percent).
-Statuses (0/1), relative humidity, kW, kWh, A, ppm and counts are the same in both systems.
+Only roles with a known conversion change: ``DEG_C``, ``PA`` and ``L-PER-SEC``.
+Damper, valve and fan-speed roles are already PERCENT 0-100. Statuses, relative humidity, kW, kWh, A, ppm and counts
+are the same in both systems. Imperial is a display of the SI dataset, not a second rule scale.
 """
 from __future__ import annotations
 
@@ -24,12 +25,14 @@ _SCALES = json.loads((Path(__file__).resolve().parent.parent / "data" / "role_sc
 
 #: scale -> (imperial unit, SI -> imperial, imperial -> SI)
 CONVERSIONS = {
+    "DEG_C": ("°F", lambda c: c * 9.0 / 5.0 + 32.0, lambda f: (f - 32.0) * 5.0 / 9.0),
+    "PA": ("inH2O", lambda p: p / PA_PER_IN_WC, lambda w: w * PA_PER_IN_WC),
+    "L-PER-SEC": ("CFM", lambda q: q / LPS_PER_CFM, lambda c: c * LPS_PER_CFM),
     "si:degC": ("°F", lambda c: c * 9.0 / 5.0 + 32.0, lambda f: (f - 32.0) * 5.0 / 9.0),
     "si:Pa": ("inH2O", lambda p: p / PA_PER_IN_WC, lambda w: w * PA_PER_IN_WC),
     "si:L/s": ("CFM", lambda q: q / LPS_PER_CFM, lambda c: c * LPS_PER_CFM),
-    "fraction": ("%", lambda x: x * 100.0, lambda x: x / 100.0),
 }
-_SI_UNIT = {"si:degC": "°C", "si:Pa": "Pa", "si:L/s": "L/s", "fraction": "fraction"}
+_SI_UNIT = {"DEG_C": "°C", "PA": "Pa", "L-PER-SEC": "L/s", "si:degC": "°C", "si:Pa": "Pa", "si:L/s": "L/s"}
 _UNIT_BY_SYSTEM = {  # series/authorization unit tokens
     "imperial": {"°C": "°F", "Pa": "inH2O", "L/s": "CFM"},
     "si": {"°F": "°C", "inH2O": "Pa", "CFM": "L/s"},
@@ -49,9 +52,9 @@ def _convert(ds: Dataset, which: int, target: str) -> Dataset:
         if f.get("column") in plan and f.get("value") is not None:
             f["value"] = plan[f["column"]][which](f["value"])
     for w in out.weather:  # weather roles are outdoor temperatures
-        for k in ("oa_t", "web_oa_t", "web_oa_dp"):
+        for k in ("outdoor_air_intake_temperature", "weather_service_air_temperature", "weather_service_air_dew_point_temperature"):
             if w.get(k) is not None:
-                w[k] = CONVERSIONS["si:degC"][which](w[k])
+                w[k] = CONVERSIONS["DEG_C"][which](w[k])
     tokens = _UNIT_BY_SYSTEM[target]
     for table in (out.authorized_series, out.series):
         for r in table:

@@ -35,28 +35,28 @@ PLANT_GROUPS: tuple[str, ...] = (PLANT_AIR, PLANT_BOILER, PLANT_CHILLER)
 
 # Logical roles treated as motor / fan / pump runtime signals (0–100% or bool).
 MOTOR_SIGNAL_ROLES: tuple[str, ...] = (
-    "fan-cmd",
-    "fan-status",
-    "chw-pump-status",
-    "chw-pump-cmd",
+    "supply_fan_command",
+    "supply_fan_operating_status",
+    "chilled_water_pump_operating_status",
+    "chilled_water_pump_command",
     "hw-pump-cmd",
     "pump-cmd",
-    "pump-status",
+    "pump_operating_status",
 )
-MAPPED_FAN_ROLES: tuple[str, ...] = ("fan-status", "fan-cmd")
+MAPPED_FAN_ROLES: tuple[str, ...] = ("supply_fan_operating_status", "supply_fan_command")
 MAPPED_PUMP_ROLES: tuple[str, ...] = (
-    "chw-pump-status",
-    "chw-pump-cmd",
+    "chilled_water_pump_operating_status",
+    "chilled_water_pump_command",
     "hw-pump-cmd",
-    "pump-status",
+    "pump_operating_status",
     "pump-cmd",
 )
 
 # Mechanical cooling proof — compressor/chiller evidence only.
 # Pumps and cooling valves remain motor/load evidence, never compressor proof.
 CHILLER_STATUS_ROLES: tuple[str, ...] = (
-    "chiller-status",
-    "compressor-status",
+    "chiller_operating_status",
+    "compressor_operating_status",
 )
 CHILLER_RUN_ROLES: tuple[str, ...] = CHILLER_STATUS_ROLES
 COMPRESSOR_STAGE_ROLES: tuple[str, ...] = (
@@ -71,7 +71,7 @@ HEAT_PUMP_COOLING_MODE_ROLES: tuple[str, ...] = (
     "unit-cooling-status",
 )
 DX_RUN_ROLES: tuple[str, ...] = (
-    "compressor-status",
+    "compressor_operating_status",
     "compressor-cmd",
     "dx-cool-cmd",
     "dx-cooling",
@@ -81,7 +81,7 @@ DX_RUN_ROLES: tuple[str, ...] = (
     "cool-stage",
     "dx-stage",
 )
-VRF_RUN_ROLES: tuple[str, ...] = ("vrf-outdoor-compressor-status", "compressor-status")
+VRF_RUN_ROLES: tuple[str, ...] = ("vrf-outdoor-compressor-status", "compressor_operating_status")
 MECH_COOL_SERIES_KINDS = (
     "individual_device",
     "aggregate_device_hours",
@@ -182,11 +182,11 @@ def motor_run_hours_totals(table: pd.DataFrame) -> dict[str, float]:
     for _eq, grp in prefer.groupby("equipment_id"):
         signals = set(grp["signal"])
         # Prefer proven status over command when both exist
-        if "fan-status" in signals and "fan-cmd" in signals:
-            drop_idx.extend(grp.index[grp["signal"] == "fan-cmd"].tolist())
-        if "pump-status" in signals and any(s in signals for s in ("pump-cmd", "hw-pump-cmd", "chw-pump-cmd")):
+        if "supply_fan_operating_status" in signals and "supply_fan_command" in signals:
+            drop_idx.extend(grp.index[grp["signal"] == "supply_fan_command"].tolist())
+        if "pump_operating_status" in signals and any(s in signals for s in ("pump-cmd", "hw-pump-cmd", "chilled_water_pump_command")):
             drop_idx.extend(
-                grp.index[grp["signal"].isin(["pump-cmd", "hw-pump-cmd", "chw-pump-cmd"])].tolist()
+                grp.index[grp["signal"].isin(["pump-cmd", "hw-pump-cmd", "chilled_water_pump_command"])].tolist()
             )
     prefer = prefer.drop(index=drop_idx)
     fan = float(prefer.loc[prefer["motor_kind"] == "fan", "run_hours"].sum())
@@ -204,16 +204,16 @@ def _preferred_motor_roles(df: pd.DataFrame) -> list[tuple[str, str]]:
     fans = [r for r in present if "fan" in r]
     pumps = [r for r in present if "fan" not in r]
     out: list[tuple[str, str]] = []
-    if "fan-status" in fans:
-        out.append(("fan-status", "fan"))
-    elif "fan-cmd" in fans:
-        out.append(("fan-cmd", "fan"))
-    if "pump-status" in pumps:
-        out.append(("pump-status", "pump"))
-    elif "chw-pump-status" in pumps:
-        out.append(("chw-pump-status", "pump"))
+    if "supply_fan_operating_status" in fans:
+        out.append(("supply_fan_operating_status", "fan"))
+    elif "supply_fan_command" in fans:
+        out.append(("supply_fan_command", "fan"))
+    if "pump_operating_status" in pumps:
+        out.append(("pump_operating_status", "pump"))
+    elif "chilled_water_pump_operating_status" in pumps:
+        out.append(("chilled_water_pump_operating_status", "pump"))
     else:
-        for r in ("chw-pump-cmd", "hw-pump-cmd", "pump-cmd"):
+        for r in ("chilled_water_pump_command", "hw-pump-cmd", "pump-cmd"):
             if r in pumps:
                 out.append((r, "pump"))
                 break
@@ -222,9 +222,9 @@ def _preferred_motor_roles(df: pd.DataFrame) -> list[tuple[str, str]]:
 
 # One series per motor family. Status wins over that family's command.
 _MOTOR_ROLE_FAMILIES: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("fan-status", "fan-cmd"), "fan"),
-    (("pump-status", "pump-cmd"), "pump"),
-    (("chw-pump-status", "chw-pump-cmd"), "pump"),
+    (("supply_fan_operating_status", "supply_fan_command"), "fan"),
+    (("pump_operating_status", "pump-cmd"), "pump"),
+    (("chilled_water_pump_operating_status", "chilled_water_pump_command"), "pump"),
     (("hw-pump-cmd",), "pump"),
 )
 
@@ -453,7 +453,7 @@ def _discover_named_pumps_and_towers(
         col = b.get("status") or b.get("cmd")
         if col is None:
             continue
-        signal = "pump-status" if b.get("status") else "pump-cmd"
+        signal = "pump_operating_status" if b.get("status") else "pump-cmd"
         if b["motor_kind"] == "tower":
             signal = "tower_status" if b.get("status") else "tower_cmd"
         plant = b["plant"] if b["plant"] else default_plant
@@ -506,10 +506,10 @@ def _discover_air_supply_fan(
             if role not in logical:
                 logical[role] = pd.to_numeric(mapped[role], errors="coerce")
 
-    if "fan-status" in logical and logical["fan-status"].notna().any():
-        role, kind, ser = "fan-status", "fan", logical["fan-status"]
-    elif "fan-cmd" in logical and logical["fan-cmd"].notna().any():
-        role, kind, ser = "fan-cmd", "fan", logical["fan-cmd"]
+    if "supply_fan_operating_status" in logical and logical["supply_fan_operating_status"].notna().any():
+        role, kind, ser = "supply_fan_operating_status", "fan", logical["supply_fan_operating_status"]
+    elif "supply_fan_command" in logical and logical["supply_fan_command"].notna().any():
+        role, kind, ser = "supply_fan_command", "fan", logical["supply_fan_command"]
     else:
         return []
     return [
@@ -534,7 +534,7 @@ def _resolve_linked_pump_series(
     """Resolve designated CHW pump from role_map (same frame or linked equipment).
 
     Data-model keys on the chiller's role_map entry:
-      - chw_pump_status / chw_pump_cmd → column name
+      - chilled_water_pump_operating_status / chilled_water_pump_command → column name
       - chw_pump_equipment (optional meta) → other equipment_id that owns that column
     """
     eq_roles = role_map.get(equipment_id) or {}
@@ -544,7 +544,7 @@ def _resolve_linked_pump_series(
     if src is None or src.empty:
         return None, "", ""
 
-    for role in ("chw-pump-status", "chw-pump-cmd"):
+    for role in ("chilled_water_pump_operating_status", "chilled_water_pump_command"):
         col = eq_roles.get(role)
         if not col or not isinstance(col, str):
             continue
@@ -564,8 +564,8 @@ def _discover_chiller_on(
 ) -> list[dict[str, Any]]:
     """Chiller plant runtime: prefer mapped/heuristic **pump**, else status proof.
 
-    Order: designated linked pump → chw_pump_status/cmd → named CWP → 
-    ``chiller_status`` / ``compressor_status`` / ``equipment_enable``.
+    Order: designated linked pump → chilled_water_pump_operating_status/cmd → named CWP → 
+    ``chiller_operating_status`` / ``compressor_operating_status`` / ``equipment_enable``.
     Never invent runtime from CHW leave/supply temp.
     """
     del chw_leave_max_f  # kept for call-site compat; leave-temp never drives this chart
@@ -579,17 +579,17 @@ def _discover_chiller_on(
             return [
                 {
                     "equipment_id": equipment_id,
-                    "signal": link_role or "chw-pump-status",
+                    "signal": link_role or "chilled_water_pump_operating_status",
                     "column": link_label,
                     "motor_kind": "chiller",
                     "plant_group": PLANT_CHILLER,
-                    "label": f"{equipment_id} · {link_role or 'chw-pump-status'}",
+                    "label": f"{equipment_id} · {link_role or 'chilled_water_pump_operating_status'}",
                     "series_on": on.astype(float),
                 }
             ]
 
     # 2) Mapped logical roles on this chiller frame
-    for role in ("chw-pump-status", "pump-status"):
+    for role in ("chilled_water_pump_operating_status", "pump_operating_status"):
         if role in mapped.columns and mapped[role].notna().any():
             on = _is_on(mapped[role])
             if bool(on.any()):
@@ -604,7 +604,7 @@ def _discover_chiller_on(
                         "series_on": on.astype(float),
                     }
                 ]
-    for role in ("chw-pump-cmd", "pump-cmd"):
+    for role in ("chilled_water_pump_command", "pump-cmd"):
         if role in mapped.columns and mapped[role].notna().any():
             on = _is_on(mapped[role])
             if bool(on.any()):
@@ -625,7 +625,7 @@ def _discover_chiller_on(
         raw, equipment_id=equipment_id, default_plant=PLANT_CHILLER
     )
     pumps = [p for p in named if p.get("motor_kind") == "pump"]
-    status_pumps = [p for p in pumps if p.get("signal") == "pump-status"]
+    status_pumps = [p for p in pumps if p.get("signal") == "pump_operating_status"]
     pick = (status_pumps or pumps)
     if pick:
         p0 = pick[0]
@@ -644,7 +644,7 @@ def _discover_chiller_on(
             ]
 
     # 4) Fallback: chiller / compressor / equipment enable proof (never leave temp)
-    for role in ("chiller-status", "compressor-status", "equipment-enable"):
+    for role in ("chiller_operating_status", "compressor_operating_status", "equipment-enable"):
         src = mapped if role in mapped.columns and mapped[role].notna().any() else None
         if src is None and role in raw.columns and raw[role].notna().any():
             src = raw
@@ -692,7 +692,7 @@ def discover_plant_motor_series(
 
         eq_roles = role_map.get(eq_id) or {}
         has_explicit = bool(eq_roles)
-        # Explicit role_map keys only — raw CSVs may already have columns named fan_cmd
+        # Explicit role_map keys only — raw CSVs may already have columns named supply_fan_command
         has_mapped_fan = _explicit_role_keys(eq_roles, MAPPED_FAN_ROLES)
         has_mapped_pump = _explicit_role_keys(eq_roles, MAPPED_PUMP_ROLES)
         # Agent/explicit map: never invent fans from column names when fan roles empty
@@ -1017,7 +1017,7 @@ def _oat_series(
 
 def _chw_temp_proof(df: pd.DataFrame, leave_max_f: float) -> pd.Series | None:
     """True when chilled-water leave/supply is colder than threshold (plant producing cold water)."""
-    for role in ("chilled-water-supply-temp", "chw_leave_t", "chws_t"):
+    for role in ("supply_chilled_water_temperature", "chw_leave_t", "chws_t"):
         if role in df.columns and df[role].notna().any():
             t = pd.to_numeric(df[role], errors="coerce")
             # Ignore long zero/null sensor dropouts common in historians
@@ -1033,13 +1033,13 @@ def _chiller_on_mask(
     chiller_power_kw_min: float = 1.0,
 ) -> tuple[pd.Series | None, str]:
     """Chiller ON: cmd/status → amps → power → CHW leave vs slider (no pumps)."""
-    run = _first_on_mask(df, ("chiller-status", "compressor-status", "equipment-enable"))
+    run = _first_on_mask(df, ("chiller_operating_status", "compressor_operating_status", "equipment-enable"))
     if run is not None:
-        return run, "chiller-status"
-    if "chiller-amps" in df.columns and df["chiller-amps"].notna().any():
-        return _above_threshold(df["chiller-amps"], chiller_amps_min), "chiller-amps"
-    if "chiller-power" in df.columns and df["chiller-power"].notna().any():
-        return _above_threshold(df["chiller-power"], chiller_power_kw_min), "chiller_power"
+        return run, "chiller_operating_status"
+    if "chiller_electric_current" in df.columns and df["chiller_electric_current"].notna().any():
+        return _above_threshold(df["chiller_electric_current"], chiller_amps_min), "chiller_electric_current"
+    if "chiller_electric_power" in df.columns and df["chiller_electric_power"].notna().any():
+        return _above_threshold(df["chiller_electric_power"], chiller_power_kw_min), "chiller_electric_power"
     temp = _chw_temp_proof(df, chw_leave_max_f)
     if temp is not None:
         return temp, "chw_leave_temp"
@@ -1153,11 +1153,11 @@ def _select_mech_cooling_proof(
                 return empty
             return {
                 "mask": temp.fillna(False).astype(bool),
-                "proof_role": "chilled-water-supply-temp",
+                "proof_role": "supply_chilled_water_temperature",
                 "proof_column": _mapped_role(
-                    df, ("chilled-water-supply-temp", "chw_leave_t", "chws_t")
+                    df, ("supply_chilled_water_temperature", "chw_leave_t", "chws_t")
                 )
-                or "chilled-water-supply-temp",
+                or "supply_chilled_water_temperature",
                 "proof_threshold": float(chw_leave_max_f),
                 "proof_quality": "inferred",
                 "legacy_proof": "inferred: chw_leave_temp",
@@ -1165,20 +1165,20 @@ def _select_mech_cooling_proof(
         candidates: list[dict[str, Any]] = []
         run = _first_on_mask(df, CHILLER_STATUS_ROLES)
         if run is not None:
-            role = _mapped_role(df, CHILLER_STATUS_ROLES) or "chiller-status"
-            candidates.append(_direct(run, role, "chiller-status"))
+            role = _mapped_role(df, CHILLER_STATUS_ROLES) or "chiller_operating_status"
+            candidates.append(_direct(run, role, "chiller_operating_status"))
         run = _first_on_mask(df, COMPRESSOR_CMD_ROLES)
         if run is not None:
             role = _mapped_role(df, COMPRESSOR_CMD_ROLES) or "compressor-cmd"
-            candidates.append(_direct(run, role, "chiller-status"))
-        amps = _analog_threshold_mask(df, "chiller-amps", chiller_amps_min)
+            candidates.append(_direct(run, role, "chiller_operating_status"))
+        amps = _analog_threshold_mask(df, "chiller_electric_current", chiller_amps_min)
         if amps is not None:
             mask, role, thr = amps
-            candidates.append(_analog(mask, role, thr, "chiller-amps"))
+            candidates.append(_analog(mask, role, thr, "chiller_electric_current"))
         for role, thr, legacy in (
-            ("chiller-power", chiller_power_kw_min, "chiller_power"),
-            ("compressor-power", chiller_power_kw_min, "chiller_power"),
-            ("compressor-current", chiller_amps_min, "chiller-amps"),
+            ("chiller_electric_power", chiller_power_kw_min, "chiller_electric_power"),
+            ("compressor-power", chiller_power_kw_min, "chiller_electric_power"),
+            ("compressor-current", chiller_amps_min, "chiller_electric_current"),
         ):
             hit = _analog_threshold_mask(df, role, thr)
             if hit is not None:
@@ -1188,9 +1188,9 @@ def _select_mech_cooling_proof(
 
     if et in {"AHU", "RTU"}:
         candidates = []
-        run = _first_on_mask(df, ("compressor-status",))
+        run = _first_on_mask(df, ("compressor_operating_status",))
         if run is not None:
-            candidates.append(_direct(run, "compressor-status", "ahu_dx"))
+            candidates.append(_direct(run, "compressor_operating_status", "ahu_dx"))
         run = _first_on_mask(df, COMPRESSOR_CMD_ROLES)
         if run is not None:
             role = _mapped_role(df, COMPRESSOR_CMD_ROLES) or "compressor-cmd"
@@ -1306,13 +1306,13 @@ def _mech_cooling_candidate_roles(
     if et == "CHW_PLANT":
         if use_status_proof:
             roles = list(CHILLER_STATUS_ROLES + COMPRESSOR_CMD_ROLES) + [
-                "chiller-amps",
-                "chiller-power",
+                "chiller_electric_current",
+                "chiller_electric_power",
                 "compressor-power",
                 "compressor-current",
             ]
         else:
-            roles = ["chilled-water-supply-temp", "chw_leave_t", "chws_t"]
+            roles = ["supply_chilled_water_temperature", "chw_leave_t", "chws_t"]
     elif et in {"AHU", "RTU"}:
         roles = list(DX_RUN_ROLES) + ["compressor-power", "compressor-current"]
     elif et == "HP":
@@ -1415,7 +1415,7 @@ def _mechanical_cooling_devices(
 
         if not checked and et in {"AHU", "HP", "RTU"}:
             has_clg_valve = (
-                "cooling-valve" in mapped.columns and mapped["cooling-valve"].notna().any()
+                "cooling_valve_position_command" in mapped.columns and mapped["cooling_valve_position_command"].notna().any()
             )
             if not has_clg_valve:
                 continue
@@ -1810,7 +1810,7 @@ def mech_cooling_oat_bins(
                 device_count=1,
                 oat_needs_f_to_c=(
                     d.get("oat_source") == "web"
-                    and _series_declared_imperial_f(d["mapped"], "web-outside-air-temp")
+                    and _series_declared_imperial_f(d["mapped"], "weather_service_air_temperature")
                 ),
             )
         )
@@ -1879,7 +1879,7 @@ def mech_cooling_oat_bins(
             for o, _src, _mapped in oat_pieces[1:]:
                 oat_union = oat_union.fillna(o)
             aggregate_needs_f = bool(oat_pieces) and all(
-                src == "web" and _series_declared_imperial_f(mapped, "web-outside-air-temp")
+                src == "web" and _series_declared_imperial_f(mapped, "weather_service_air_temperature")
                 for _o, src, mapped in oat_pieces
             )
             rows.extend(
@@ -2114,21 +2114,21 @@ def plant_gated_summary_tables(
     fan_tables, fan_cap = fan_mode_summary_bundle(
         frames,
         role_map,
-        role="discharge-air-temp",
+        role="discharge_air_temperature",
         equipment_types=("AHU", "RTU"),
     )
-    # Merge chw + hw leave into one pump-mode caption; prefer chw_supply_t then hw_supply_t
+    # Merge chw + hw leave into one pump-mode caption; prefer supply_chilled_water_temperature then supply_hot_water_temperature
     pump_tables, pump_cap = pump_mode_summary_bundle(
         frames,
         role_map,
-        role="chilled-water-supply-temp",
+        role="supply_chilled_water_temperature",
         equipment_types=("CHILLER", "CHW_PLANT", "AHU"),
     )
     if all(t.empty for t in pump_tables.values()):
         pump_tables, pump_cap = pump_mode_summary_bundle(
             frames,
             role_map,
-            role="hot-water-supply-temp",
+            role="supply_hot_water_temperature",
             equipment_types=("BOILER", "HW_PLANT", "AHU"),
         )
     return fan_tables, pump_tables, fan_cap, pump_cap
@@ -2192,8 +2192,8 @@ def economizer_weather_summary(
         n = len(mapped)
         coverage = 0.0
         if weather_ok and n:
-            db = _normalize_abs_temp_to_storage_c(db, mapped, "web-outside-air-temp")
-            dp = _normalize_abs_temp_to_storage_c(dp, mapped, "web-outside-air-dewpoint")
+            db = _normalize_abs_temp_to_storage_c(db, mapped, "weather_service_air_temperature")
+            dp = _normalize_abs_temp_to_storage_c(dp, mapped, "weather_service_air_dew_point_temperature")
             coverage = float((db.notna() & dp.notna()).sum() / n)
 
         opp = (
@@ -2202,11 +2202,11 @@ def economizer_weather_summary(
             else pd.Series(False, index=mapped.index)
         )
         damper = None
-        if "outside-air-damper" in mapped.columns:
-            damper = norm_cmd(mapped["outside-air-damper"]).fillna(0)
+        if "outdoor_air_intake_damper_position_command" in mapped.columns:
+            damper = norm_cmd(mapped["outdoor_air_intake_damper_position_command"]).fillna(0)
         clg = None
-        if "cooling-valve" in mapped.columns:
-            clg = norm_cmd(mapped["cooling-valve"]).fillna(0)
+        if "cooling_valve_position_command" in mapped.columns:
+            clg = norm_cmd(mapped["cooling_valve_position_command"]).fillna(0)
 
         integrated_ok = pd.Series(False, index=mapped.index)
         integrated_bad = pd.Series(False, index=mapped.index)
@@ -2267,9 +2267,9 @@ ECON_DIAG_AIR_TYPES = frozenset({"AHU", "RTU"})
 ECON_DIAG_DT_MIN_F = ECON_DIAG_DT_MIN_C  # legacy name; magnitude is SI Δ°C
 
 # Canonical mixing axes. x = OAT − RAT, y = MAT − RAT. Never OAT−MAT / RAT−MAT.
-_ECON_OAT_COLUMNS = ("oat_f", "outside-air-temp", "bas-outside-air-temp")
-_ECON_RAT_COLUMNS = ("rat_f", "return-air-temp")
-_ECON_MAT_COLUMNS = ("mat_f", "mixed-air-temp")
+_ECON_OAT_COLUMNS = ("oat_f", "outdoor_air_intake_temperature", "bas-outside-air-temp")
+_ECON_RAT_COLUMNS = ("rat_f", "return_air_temperature")
+_ECON_MAT_COLUMNS = ("mat_f", "mixed_air_temperature")
 _ECON_DELTA_COLUMNS = (
     "delta_or_f",
     "delta_mr_f",
@@ -2323,9 +2323,9 @@ def build_economizer_delta_points(
         return _empty_economizer_delta_points()
 
     oat = _econ_numeric_column(frame, _ECON_OAT_COLUMNS)
-    rat = _econ_numeric_column(frame, _ECON_RAT_COLUMNS)
-    mat = _econ_numeric_column(frame, _ECON_MAT_COLUMNS)
-    if oat is None or rat is None or mat is None:
+    return_air_temperature = _econ_numeric_column(frame, _ECON_RAT_COLUMNS)
+    mixed_air_temperature = _econ_numeric_column(frame, _ECON_MAT_COLUMNS)
+    if oat is None or return_air_temperature is None or mixed_air_temperature is None:
         return _empty_economizer_delta_points()
 
     if any(role in frame.columns for role in MAPPED_FAN_ROLES):
@@ -2335,16 +2335,16 @@ def build_economizer_delta_points(
     else:
         fan_on = pd.Series(False, index=frame.index)
 
-    delta_or = oat - rat
-    delta_mr = mat - rat
+    delta_or = oat - return_air_temperature
+    delta_mr = mixed_air_temperature - return_air_temperature
     points = pd.DataFrame(
         {
             "delta_or_f": delta_or,
             "delta_mr_f": delta_mr,
             "identifiable": delta_or.abs() >= float(dt_min_f),
             "oat_f": oat,
-            "rat_f": rat,
-            "mat_f": mat,
+            "rat_f": return_air_temperature,
+            "mat_f": mixed_air_temperature,
         },
         index=frame.index,
     )
@@ -2359,10 +2359,10 @@ def build_economizer_delta_points(
 
     if "damper_fb_pct" in frame.columns:
         points["damper_fb_pct"] = pd.to_numeric(frame["damper_fb_pct"], errors="coerce")
-    elif "outside-air-damper" in frame.columns:
+    elif "outdoor_air_intake_damper_position_command" in frame.columns:
         norm_cmd = _legacy_norm_cmd
 
-        points["damper_fb_pct"] = norm_cmd(frame["outside-air-damper"]) * 100.0
+        points["damper_fb_pct"] = norm_cmd(frame["outdoor_air_intake_damper_position_command"]) * 100.0
     else:
         points["damper_fb_pct"] = np.nan
 
@@ -2388,13 +2388,13 @@ def _econ_fan_on_mask(mapped: pd.DataFrame) -> pd.Series:
 
 def _econ_resolve_oat(mapped: pd.DataFrame, *, prefer_web_oat: bool = False) -> pd.Series | None:
     bas = None
-    if "outside-air-temp" in mapped.columns and mapped["outside-air-temp"].notna().any():
-        bas = pd.to_numeric(mapped["outside-air-temp"], errors="coerce")
+    if "outdoor_air_intake_temperature" in mapped.columns and mapped["outdoor_air_intake_temperature"].notna().any():
+        bas = pd.to_numeric(mapped["outdoor_air_intake_temperature"], errors="coerce")
     elif "bas-outside-air-temp" in mapped.columns and mapped["bas-outside-air-temp"].notna().any():
         bas = pd.to_numeric(mapped["bas-outside-air-temp"], errors="coerce")
     web = None
-    if "web-outside-air-temp" in mapped.columns and mapped["web-outside-air-temp"].notna().any():
-        web = pd.to_numeric(mapped["web-outside-air-temp"], errors="coerce")
+    if "weather_service_air_temperature" in mapped.columns and mapped["weather_service_air_temperature"].notna().any():
+        web = pd.to_numeric(mapped["weather_service_air_temperature"], errors="coerce")
     elif "oa_t_effective" in mapped.columns and mapped["oa_t_effective"].notna().any():
         web = pd.to_numeric(mapped["oa_t_effective"], errors="coerce")
     if prefer_web_oat and web is not None and web.notna().any():
@@ -2443,32 +2443,32 @@ def economizer_free_cooling_diagnostics(
             continue
 
         oat = _econ_resolve_oat(mapped, prefer_web_oat=prefer_web_oat)
-        rat = (
-            pd.to_numeric(mapped["return-air-temp"], errors="coerce")
-            if "return-air-temp" in mapped.columns
+        return_air_temperature = (
+            pd.to_numeric(mapped["return_air_temperature"], errors="coerce")
+            if "return_air_temperature" in mapped.columns
             else None
         )
-        mat = (
-            pd.to_numeric(mapped["mixed-air-temp"], errors="coerce")
-            if "mixed-air-temp" in mapped.columns
+        mixed_air_temperature = (
+            pd.to_numeric(mapped["mixed_air_temperature"], errors="coerce")
+            if "mixed_air_temperature" in mapped.columns
             else None
         )
-        sat = (
-            pd.to_numeric(mapped["discharge-air-temp"], errors="coerce")
-            if "discharge-air-temp" in mapped.columns
+        discharge_air_temperature = (
+            pd.to_numeric(mapped["discharge_air_temperature"], errors="coerce")
+            if "discharge_air_temperature" in mapped.columns
             else None
         )
         damper_fb = None
-        if "outside-air-damper" in mapped.columns and mapped["outside-air-damper"].notna().any():
-            damper_fb = norm_cmd(mapped["outside-air-damper"]) * 100.0
+        if "outdoor_air_intake_damper_position_command" in mapped.columns and mapped["outdoor_air_intake_damper_position_command"].notna().any():
+            damper_fb = norm_cmd(mapped["outdoor_air_intake_damper_position_command"]) * 100.0
 
-        if oat is None or rat is None or mat is None:
+        if oat is None or return_air_temperature is None or mixed_air_temperature is None:
             missing = []
             if oat is None:
                 missing.append("OAT")
-            if rat is None:
+            if return_air_temperature is None:
                 missing.append("RAT")
-            if mat is None:
+            if mixed_air_temperature is None:
                 missing.append("MAT")
             skipped.append(
                 {
@@ -2483,9 +2483,9 @@ def economizer_free_cooling_diagnostics(
                 "equipment_id": eq_id,
                 "equipment_type": et_n,
                 "oat_f": oat,
-                "rat_f": rat,
-                "mat_f": mat,
-                "sat_f": sat if sat is not None else np.nan,
+                "rat_f": return_air_temperature,
+                "mat_f": mixed_air_temperature,
+                "sat_f": discharge_air_temperature if discharge_air_temperature is not None else np.nan,
                 "damper_fb_pct": damper_fb if damper_fb is not None else np.nan,
                 "fan_on": fan_on,
             },

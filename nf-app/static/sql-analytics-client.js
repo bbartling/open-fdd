@@ -110,7 +110,7 @@
     if (!Array.isArray(specs) || specs.length > LIMITS.cols) bad(`specs must be an array of at most ${LIMITS.cols}`);
     for (const s of specs) {
       if (!s || typeof s !== "object") bad("each spec is an object");
-      for (const k of ["weeks", "occupied"]) {
+      for (const k of ["weeks", "occupancy_status"]) {
         const max = LIMITS.rows;
         const a = s[k];
         if (a == null) continue;

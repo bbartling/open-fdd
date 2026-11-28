@@ -1,22 +1,22 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- vav1_comfort_fault.sql — zone comfort band with confirm window (Open-FDD parity)
--- When occ_mode is present, require_occupied (default 1) scores the band only
--- while occupied. The rule runner synthesizes occ_mode from the saved Overview
--- calendar (session occupancy_schedule) when no modeled occ_mode exists.
+-- When occupancy_status is present, require_occupied (default 1) scores the band only
+-- while occupied. The rule runner synthesizes occupancy_status from the saved Overview
+-- calendar (session occupancy_schedule) when no modeled occupancy_status exists.
 -- With neither signal, the product path reports NOT_ASSESSED_NO_OCCUPANCY (0 fault
 -- seconds). Unoccupied setback stays on VAV-2.
--- OFDD-065: do not reference fan_cmd here. Zone-only parquet schemas
--- often lack fan_cmd; the rule is then → SKIPPED_MISSING_ROLES.
+-- OFDD-065: do not reference supply_fan_command here. Zone-only parquet schemas
+-- often lack supply_fan_command; the rule is then → SKIPPED_MISSING_ROLES.
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    zone_t,
-    occ_mode,
-    CAST(CASE WHEN zone_t < {{ZONE_T_LO}} OR zone_t > {{ZONE_T_HI}} THEN 1 ELSE 0 END AS INT) AS band_fault
+    zone_air_temperature,
+    occupancy_status,
+    CAST(CASE WHEN zone_air_temperature < {{ZONE_T_LO}} OR zone_air_temperature > {{ZONE_T_HI}} THEN 1 ELSE 0 END AS INT) AS band_fault
   FROM history
-  WHERE zone_t IS NOT NULL
+  WHERE zone_air_temperature IS NOT NULL
 ),
 base AS (
   SELECT
@@ -24,13 +24,13 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN {{REQUIRE_OCCUPIED}} >= 0.5
-       AND occ_mode IS NOT NULL
+       AND occupancy_status IS NOT NULL
        AND (
-         LOWER(trim(CAST(occ_mode AS VARCHAR))) IN
+         LOWER(trim(CAST(occupancy_status AS VARCHAR))) IN
            ('unoccupied','unocc','off','false','night','standby','setback','no')
          OR (
-           fdd.try_double(trim(CAST(occ_mode AS VARCHAR))) IS NOT NULL
-           AND fdd.try_double(trim(CAST(occ_mode AS VARCHAR))) <= 0.05
+           fdd.try_double(trim(CAST(occupancy_status AS VARCHAR))) IS NOT NULL
+           AND fdd.try_double(trim(CAST(occupancy_status AS VARCHAR))) <= 0.05
          )
        )
       THEN 0

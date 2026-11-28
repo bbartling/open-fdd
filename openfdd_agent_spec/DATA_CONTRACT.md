@@ -71,8 +71,8 @@ They are not the defaults unless the registry says so.
 
 ## Role binding
 
-Rules and charts need **roles**. The canonical name is the 223P role above. `nf-app/static/fdd-catalog.json` (generated)
-lists each legacy role key's NF classes and Haystack markers. `fdd.js` binds a point to a role when:
+Rules and charts need **roles** (for example `discharge_air_temperature`, `zone_air_temperature`). The canonical name is the 223P role. `nf-app/static/fdd-catalog.json` (generated)
+lists each role's NF classes and Haystack markers. `fdd.js` binds a point to a role when:
 
 1. its NF `class` is in the role's class list (best match), else
 2. it carries every marker of the role.

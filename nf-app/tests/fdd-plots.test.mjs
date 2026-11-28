@@ -47,16 +47,16 @@ test("views register in the right groups with roles that exist in fdd-catalog", 
   assert.equal(by["fdd-sensor-fault"].tab, "fdd");
   assert.equal(by["fdd-sensor-fault"].scope, "site", "one worst-sensor chart for the whole scope, not one huge card per equip");
   for (const v of views) for (const r of [...v.roles.required, ...v.roles.optional]) assert.ok(catalog.roles[r], `${v.id}: role ${r} not in catalog`);
-  assert.ok(catalog.roles.oa_damper_pct);
+  assert.ok(catalog.roles.outdoor_air_intake_damper_position_command);
 });
 
 test("role expansion: ECON rules gain the OA damper when it is bound", () => {
   const ctx = load();
-  const bound = { oa_damper_pct: [pt("d", "damper")] };
-  assert.deepEqual(Array.from(ctx.fddPlotExpandRoles("ECON-3", ["oa_t"], bound)), ["oa_t", "oa_damper_pct"]);
-  assert.deepEqual(Array.from(ctx.fddPlotExpandRoles("ECON-3", ["oa_t", "oa_damper_pct"], bound)), ["oa_t", "oa_damper_pct"]);
-  assert.deepEqual(Array.from(ctx.fddPlotExpandRoles("ECON-3", ["oa_t"], {})), ["oa_t"]);
-  assert.deepEqual(Array.from(ctx.fddPlotExpandRoles("SV-RANGE", ["oa_t"], bound)), ["oa_t"]);
+  const bound = { outdoor_air_intake_damper_position_command: [pt("d", "damper_position")] };
+  assert.deepEqual(Array.from(ctx.fddPlotExpandRoles("ECON-3", ["outdoor_air_intake_temperature"], bound)), ["outdoor_air_intake_temperature", "outdoor_air_intake_damper_position_command"]);
+  assert.deepEqual(Array.from(ctx.fddPlotExpandRoles("ECON-3", ["outdoor_air_intake_temperature", "outdoor_air_intake_damper_position_command"], bound)), ["outdoor_air_intake_temperature", "outdoor_air_intake_damper_position_command"]);
+  assert.deepEqual(Array.from(ctx.fddPlotExpandRoles("ECON-3", ["outdoor_air_intake_temperature"], {})), ["outdoor_air_intake_temperature"]);
+  assert.deepEqual(Array.from(ctx.fddPlotExpandRoles("SV-RANGE", ["outdoor_air_intake_temperature"], bound)), ["outdoor_air_intake_temperature"]);
 });
 
 test("sensor masks: flatline, spike and range (z and physical bounds)", () => {
@@ -113,17 +113,17 @@ test("heatmap option: categorical states, one row per sensor, no data cells for 
 });
 
 test("rule plot: unit-family grids, fault lane is the LAST grid (via rcxWithFaultLane)", async () => {
-  const sat = pt("sat", "sat"), oat = pt("oat", "oat", { units: "°F" }), damper = pt("dmp", "damper", { units: "%" });
+  const discharge_air_temperature = pt("discharge_air_temperature", "discharge_air_temperature"), oat = pt("oat", "oat", { units: "°F" }), damper = pt("dmp", "damper_position", { units: "%" });
   const res = pt("res", "res", { tags: ["fdd", "fault"], rec: { attrs: { ruleRef: "ECON-1" } } });
   const ctx = load({
-    sat: [[0, 55], [300e3, 56]], oat: [[0, 40], [300e3, 41]], dmp: [[0, 10]],
+    discharge_air_temperature: [[0, 55], [300e3, 56]], oat: [[0, 40], [300e3, 41]], dmp: [[0, 10]],
     res: [[0, 0], [H, 12], [2 * H, 0]],
   });
-  const rule = { id: "ECON-1", required_roles: ["sat", "oa_t"], optional_roles: [] };
+  const rule = { id: "ECON-1", required_roles: ["discharge_air_temperature", "outdoor_air_intake_temperature"], optional_roles: [] };
   const el = { style: {} };
   const note = await ctx.fddRulePlot(el, {
     rule, equipRec: { name: "AHU-1", attrs: {} }, resultPoint: res, hours: 24,
-    bound: { sat: [sat], oa_t: [oat], oa_damper_pct: [damper] },
+    bound: { discharge_air_temperature: [discharge_air_temperature], outdoor_air_intake_temperature: [oat], outdoor_air_intake_damper_position_command: [damper] },
   });
   const o = plain(ctx.last.rendered.option);
   assert.equal(o.grid.length, 3, "temp grid, pct grid, fault lane");
@@ -146,29 +146,29 @@ test("rule plot: unit-family grids, fault lane is the LAST grid (via rcxWithFaul
 });
 
 test("rule plot: signals are plotted in the display system (SI display shows degC, same history)", async () => {
-  const sat = pt("sat", "sat"), oatC = pt("oat", "oat", { units: "°C" }), dmp = pt("dmp", "damper", { units: "%" });
-  const hist = { sat: [[0, 55], [300e3, 56]], oat: [[0, F2C(40)], [300e3, F2C(41)]], dmp: [[0, 10]] };
+  const discharge_air_temperature = pt("discharge_air_temperature", "discharge_air_temperature"), oatC = pt("oat", "oat", { units: "°C" }), dmp = pt("dmp", "damper_position", { units: "%" });
+  const hist = { discharge_air_temperature: [[0, 55], [300e3, 56]], oat: [[0, F2C(40)], [300e3, F2C(41)]], dmp: [[0, 10]] };
   const run = async (units) => {
     const ctx = load(hist);
     ctx.units = units;
-    await ctx.fddRulePlot({ style: {} }, { rule: { id: "ECON-1", required_roles: ["sat", "oa_t"], optional_roles: [] },
-      equipRec: { name: "AHU-1", attrs: {} }, hours: 24, bound: { sat: [sat], oa_t: [oatC], oa_damper_pct: [dmp] } });
+    await ctx.fddRulePlot({ style: {} }, { rule: { id: "ECON-1", required_roles: ["discharge_air_temperature", "outdoor_air_intake_temperature"], optional_roles: [] },
+      equipRec: { name: "AHU-1", attrs: {} }, hours: 24, bound: { discharge_air_temperature: [discharge_air_temperature], outdoor_air_intake_temperature: [oatC], outdoor_air_intake_damper_position_command: [dmp] } });
     return plain(ctx.last.rendered.option);
   };
   const imp = await run("imperial"), si = await run("si");
   // one temp family even though the two points have different native units (°F vs °C)
   assert.equal(imp.grid.length, 2); assert.equal(si.grid.length, 2);
   assert.equal(imp.yAxis[0].name, "°F"); assert.equal(si.yAxis[0].name, "°C");
-  near(imp.series[0].data[0][1], 55, 1e-9); near(si.series[0].data[0][1], F2C(55), 1e-9);   // sat: native F
+  near(imp.series[0].data[0][1], 55, 1e-9); near(si.series[0].data[0][1], F2C(55), 1e-9);   // discharge_air_temperature: native F
   near(imp.series[1].data[0][1], 40, 1e-9); near(si.series[1].data[0][1], F2C(40), 1e-9);   // oat: native C
-  assert.match(imp.series[0].name, /sat \(°F\)/); assert.match(si.series[1].name, /oa_t \(°C\)/);
+  assert.match(imp.series[0].name, /discharge_air_temperature \(°F\)/); assert.match(si.series[1].name, /outdoor_air_intake_temperature \(°C\)/);
   assert.equal(imp.series[2].data[0][1], 10);                                            // percent never converted
 });
 
 test("rule plot without a result point draws signals only; without bound inputs it says so", async () => {
   const ctx = load({ a: [[0, 1], [300e3, 2]] });
-  const rule = { id: "SV-X", required_roles: ["sat"], optional_roles: [] };
-  const note = await ctx.fddRulePlot({ style: {} }, { rule, equipRec: { name: "E", attrs: {} }, bound: { sat: [pt("a", "a")] }, resultPoint: null });
+  const rule = { id: "SV-X", required_roles: ["discharge_air_temperature"], optional_roles: [] };
+  const note = await ctx.fddRulePlot({ style: {} }, { rule, equipRec: { name: "E", attrs: {} }, bound: { discharge_air_temperature: [pt("a", "a")] }, resultPoint: null });
   assert.match(note, /no result point/);
   assert.equal(plain(ctx.last.rendered.option).grid.length, 1);
   assert.match(await ctx.fddRulePlot({ style: {} }, { rule, equipRec: { name: "E", attrs: {} }, bound: {} }), /No bound input/);
@@ -176,8 +176,8 @@ test("rule plot without a result point draws signals only; without bound inputs 
 
 test("SV rule plot draws six fixture sensors with sensor-specific status and timelines", async () => {
   const roleByUuid = {
-    "sensor-sat-1": "sat", "sensor-sat-2": "sat", "sensor-mat-1": "mat", "sensor-oa-1": "oa_t",
-    "sensor-rat-1": "rat", "sensor-static-1": "duct_static",
+    "sensor-discharge_air_temperature-1": "discharge_air_temperature", "sensor-discharge_air_temperature-2": "discharge_air_temperature", "sensor-mixed_air_temperature-1": "mixed_air_temperature", "sensor-oa-1": "outdoor_air_intake_temperature",
+    "sensor-return_air_temperature-1": "return_air_temperature", "sensor-static-1": "discharge_air_static_pressure",
   };
   const data = {};
   const bound = {};
@@ -190,7 +190,7 @@ test("SV rule plot draws six fixture sensors with sensor-specific status and tim
   });
   const sensorResults = [], timelines = [];
   for (const input of inputs) {
-    const role = roleByUuid[input.uuid], status = input.uuid === "sensor-mat-1" ? "fault" : "ok";
+    const role = roleByUuid[input.uuid], status = input.uuid === "sensor-mixed_air_temperature-1" ? "fault" : "ok";
     sensorResults.push(pt(`result-${input.uuid}`, `${input.dis} result`, { tags: ["point", "fdd", "fault"], equipRef: "AHU-A", siteRef: "site-fixture",
       rec: { attrs: { ruleRef: "SV-RATE", sensorRef: input.uuid, fddSummary: "sensor", fddStatus: status, roleRef: role, unit: "h", fddOutput: "fault_hours" } } }));
     timelines.push(pt(`timeline-${input.uuid}`, `${input.dis} timeline`, { tags: ["point", "his", "fault_timeline"], equipRef: "AHU-A", siteRef: "site-fixture",
@@ -200,12 +200,12 @@ test("SV rule plot draws six fixture sensors with sensor-specific status and tim
   const ctx = load(data);
   const equipRec = { name: "AHU-A", attrs: { id: "AHU-A", siteRef: "site-fixture" } };
   const model = { equips: [equipRec], points: [...sensorResults, ...timelines, ...inputs] };
-  const note = await ctx.fddRulePlot({ style: {} }, { rule: { id: "SV-RATE", required_roles: [], optional_roles: ["sat", "mat", "oa_t", "rat"] },
+  const note = await ctx.fddRulePlot({ style: {} }, { rule: { id: "SV-RATE", required_roles: [], optional_roles: ["discharge_air_temperature", "mixed_air_temperature", "outdoor_air_intake_temperature", "return_air_temperature"] },
     equipRec, bound, model, hours: 24 });
   const o = plain(ctx.last.rendered.option);
   assert.match(note, /6 input sensors · 6 per-sensor timelines · 1 faulted/);
   assert.equal(o.series.length, 12, "six input lines and one lane per sensor");
-  assert.equal(o.series.find((s) => s.name.includes("sensor-3")).lineStyle.color, "red", "mat gets its own fault color");
+  assert.equal(o.series.find((s) => s.name.includes("sensor-3")).lineStyle.color, "red", "mixed_air_temperature gets its own fault color");
   assert.equal(o.series.find((s) => s.name.includes("sensor-1")).lineStyle.color, "#16a34a", "healthy SAT keeps its own status color");
   for (const raw of inputs) assert.ok(o.series.some((s) => s.name.includes(raw.dis)), `${raw.dis} plotted`);
   const lanes = o.series.slice(-6);
@@ -215,13 +215,13 @@ test("SV rule plot draws six fixture sensors with sensor-specific status and tim
 });
 
 test("legacy result history in a rule plot is cut at its % to h output boundary", async () => {
-  const sat = pt("sat", "sat");
+  const discharge_air_temperature = pt("discharge_air_temperature", "discharge_air_temperature");
   const res = pt("res", "result", { tags: ["fdd", "fault"], rec: { attrs: {
     ruleRef: "SV-RANGE", unit: "h", fddOutput: "fault_hours", fddOutputSince: new Date(90 * 60e3).toISOString(),
   } } });
-  const ctx = load({ sat: [[2 * H, 55]], res: [[0, 95], [H, 80], [2 * H, 2], [3 * H, 0]] });
-  const note = await ctx.fddRulePlot({ style: {} }, { rule: { id: "SV-RANGE", required_roles: ["sat"], optional_roles: [] },
-    equipRec: { name: "AHU-1", attrs: {} }, bound: { sat: [sat] }, resultPoint: res, hours: 24 });
+  const ctx = load({ discharge_air_temperature: [[2 * H, 55]], res: [[0, 95], [H, 80], [2 * H, 2], [3 * H, 0]] });
+  const note = await ctx.fddRulePlot({ style: {} }, { rule: { id: "SV-RANGE", required_roles: ["discharge_air_temperature"], optional_roles: [] },
+    equipRec: { name: "AHU-1", attrs: {} }, bound: { discharge_air_temperature: [discharge_air_temperature] }, resultPoint: res, hours: 24 });
   const lane = plain(ctx.last.rendered.option.series.at(-1));
   assert.deepEqual(lane.data, [[2 * H, 1], [3 * H, 0]]);
   assert.match(note, /fault in 1 of 2/);
@@ -233,7 +233,7 @@ test("sensor fault view: the worst sensor of the scope, always the four SV lanes
   const bad = Array.from({ length: 8 }, (_, i) => [i * H, i === 4 ? 300 : 70 + (i % 2)]);
   const ctx = load({ a: good, b: bad });
   const view = ctx.get("RCX_VIEWS").find((v) => v.id === "fdd-sensor-fault");
-  const eq = { id: "AHU-1", name: "AHU-1", bound: { sat: [a], oa_t: [b] } };
+  const eq = { id: "AHU-1", name: "AHU-1", bound: { discharge_air_temperature: [a], outdoor_air_intake_temperature: [b] } };
   const note = await view.render({ style: {} }, ctx.rcxContext(view, [eq], 24, { points: [] }, catalog));
   const o = plain(ctx.last.rendered.option);
   assert.equal(o.yAxis[0].name, "°F");                       // flagged in SI (300 F = 149 C > 65.6 C), shown in display units
@@ -258,7 +258,7 @@ test("sensor fault view: a clean sensor still shows all four lanes (nothing flag
   const a = pt("a", "good");
   const ctx = load({ a: Array.from({ length: 8 }, (_, i) => [i * H, 70 + (i % 2)]) });
   const view = ctx.get("RCX_VIEWS").find((v) => v.id === "fdd-sensor-fault");
-  await view.render({ style: {} }, ctx.rcxContext(view, [{ id: "AHU-1", name: "AHU-1", bound: { sat: [a] } }], 24, { points: [] }, catalog));
+  await view.render({ style: {} }, ctx.rcxContext(view, [{ id: "AHU-1", name: "AHU-1", bound: { discharge_air_temperature: [a] } }], 24, { points: [] }, catalog));
   const o = plain(ctx.last.rendered.option);
   assert.deepEqual(o.series.slice(1).map((s) => s.name), ["SV Range", "SV Rate", "SV Spike", "SV Stale"]);
   assert.ok(o.series.slice(1).every((s) => s.data.length === 8 && s.data.every(([, f]) => f === 0)));
@@ -288,10 +288,10 @@ test("sweep limits come from open_fdd/data/sensor_sweep_limits.json: per-role en
   const ctx = load();
   const doc = JSON.parse(readFileSync(new URL("../../open_fdd/data/sensor_sweep_limits.json", import.meta.url), "utf8"));
   assert.deepEqual(plain(ctx.get("ofddPlotSpecData").sweep_limits), doc, "plot-spec-data.js carries the file verbatim");
-  const oa = plain(ctx.fddPlotSweepLimits("outside-air-temp", "temp"));
-  const entry = doc.roles.find((r) => r.role === "outside-air-temp");
+  const oa = plain(ctx.fddPlotSweepLimits("outdoor_air_intake_temperature", "temp"));
+  const entry = doc.roles.find((r) => r.role === "outdoor_air_intake_temperature");
   assert.deepEqual([oa.lo, oa.hi, oa.spike_delta, oa.rate_per_h, oa.stale_s, oa.source], [entry.lo, entry.hi, entry.spike_delta, entry.rate_per_h, doc.defaults.stale_s, "role"]);
-  const hw = plain(ctx.fddPlotSweepLimits("hot-water-supply-temp", "temp"));
+  const hw = plain(ctx.fddPlotSweepLimits("supply_hot_water_temperature", "temp"));
   assert.ok(hw.hi > 90, "hot water is judged by its own band (no air-sensor limit, no skip)");
   const fb = plain(ctx.fddPlotSweepLimits("no-such-role", "pct"));
   assert.deepEqual([fb.lo, fb.hi, fb.spike_delta, fb.rate_per_h, fb.source], [0, 100, 25, null, "quantity"]);
@@ -307,7 +307,7 @@ test("sensor fault view: with FDD hook results the four lanes ARE the hook's tim
   const hist = Array.from({ length: 6 }, (_, i) => [i * H, 70]);                       // flat, in range: a browser estimate would flag nothing
   const ctx = load({ a: hist, b: hist, "tb-range": [[0, 0], [H, 1], [2 * H, 1]], "tb-stale": [[3 * H, 1]] });
   const view = ctx.get("RCX_VIEWS").find((v) => v.id === "fdd-sensor-fault");
-  const eq = { id: "AHU-1", name: "AHU-1", bound: { sat: [a], oa_t: [b] } };
+  const eq = { id: "AHU-1", name: "AHU-1", bound: { discharge_air_temperature: [a], outdoor_air_intake_temperature: [b] } };
   const note = await view.render({ style: {} }, ctx.rcxContext(view, [eq], 24, { points }, catalog));
   const o = plain(ctx.last.rendered.option);
   assert.match(o.title.text, /stuck/); assert.match(o.title.text, /FDD hook results/);
@@ -335,11 +335,11 @@ test("#1646 run-proof legend: a VAV's off-shading comes from its AHU's fan statu
       rec("u-rh", "VAV-1 RH", ["reheat", "cmd"], { equipRef: "VAV-1", class: "reheat-cmd", unit: "%" })].map(toPoint) };
   const viaFeeder = ctx.fddPlotProof(vav, {}, model, catalog);
   assert.equal(viaFeeder.point.uuid, "u-fan");
-  assert.equal(viaFeeder.role, "fan_status");
-  assert.equal(viaFeeder.where, "fan status AHU-1 fan, via feeder AHU-1 (airRef)");
-  assert.match(ctx.fddPlotProof(ahu, {}, model, catalog).where, /^fan status AHU-1 fan, own$/);
+  assert.equal(viaFeeder.role, "supply_fan_operating_status");
+  assert.equal(viaFeeder.where, "supply fan operating status AHU-1 fan, via feeder AHU-1 (airRef)");
+  assert.match(ctx.fddPlotProof(ahu, {}, model, catalog).where, /^supply fan operating status AHU-1 fan, own$/);
   // no model / no resolver: the rule's own bound proof role, as before
-  const ownOnly = ctx.fddPlotProof(vav, { fan_status: [pt("x", "VAV fan")] }, null, null);
-  assert.equal(ownOnly.where, "fan status VAV fan, own");
+  const ownOnly = ctx.fddPlotProof(vav, { supply_fan_operating_status: [pt("x", "VAV fan")] }, null, null);
+  assert.equal(ownOnly.where, "supply fan operating status VAV fan, own");
   assert.equal(ctx.fddPlotProof(vav, {}, null, null).point, null);
 });

@@ -58,10 +58,10 @@ def test_make_folder_from_lbnl_and_example(tmp_path, capsys):
     out = tmp_path / "LB"
     assert main(["make-folder", "--from-lbnl", str(FIXTURE), "--out", str(out)]) == 0
     cmap = json.loads((out / "column_map.json").read_text(encoding="utf-8"))
-    assert cmap["points"]["discharge-air-temp"] == "discharge_air_temp" and cmap["equipType"] == "AHU"
+    assert cmap["points"]["discharge_air_temperature"] == "discharge_air_temperature" and cmap["equipType"] == "AHU"
     from open_fdd.ml.cli import role_frame_from_folder
 
-    assert "fan-status" in role_frame_from_folder(out).columns
+    assert "supply_fan_operating_status" in role_frame_from_folder(out).columns
     ex = tmp_path / "EX"
     assert main(["make-folder", "--example", "--out", str(ex)]) == 0
     assert main(["methods", str(ex), "--json"]) == 0

@@ -3,8 +3,8 @@ const point = (uuid, name, role, unit, equipRef = 'AHU-A') => ({
   uuid, name, layer: 'default', pointType: 'POINT',
   attrs: {
     siteRef: 'site-fixture', equipRef, unit, dis: name,
-    markers: `point,his,${role === 'sat' || role === 'mat' || role === 'oa_t' || role === 'rat' ? 'discharge,air,temp,sensor' : role === 'duct_static' ? 'discharge,air,pressure,sensor' : role === 'zone_flow' ? 'air,flow,sensor' : 'outside,air,temp,sensor'}`,
-    class: role === 'sat' ? 'discharge-air-temp-sensor' : role === 'mat' ? 'mixed-air-temp-sensor' : role === 'rat' ? 'return-air-temp-sensor' : role === 'duct_static' ? 'discharge-air-pressure-sensor' : role === 'zone_flow' ? 'discharge-air-flow-sensor' : 'outside-air-temp-sensor',
+    markers: `point,his,${role === 'discharge_air_temperature' || role === 'mixed_air_temperature' || role === 'outdoor_air_intake_temperature' || role === 'return_air_temperature' ? 'discharge,air,temp,sensor' : role === 'discharge_air_static_pressure' ? 'discharge,air,pressure,sensor' : role === 'discharge_air_volume_flow_rate' ? 'air,flow,sensor' : 'outside,air,temp,sensor'}`,
+    class: role === 'discharge_air_temperature' ? 'discharge-air-temp-sensor' : role === 'mixed_air_temperature' ? 'mixed-air-temp-sensor' : role === 'return_air_temperature' ? 'return-air-temp-sensor' : role === 'discharge_air_static_pressure' ? 'discharge-air-pressure-sensor' : role === 'discharge_air_volume_flow_rate' ? 'discharge-air-flow-sensor' : 'outside-air-temp-sensor',
   },
 });
 
@@ -15,19 +15,19 @@ export const multiSensorEquip = Object.freeze({
     { uuid: 'vav-fixture-uuid', name: 'VAV-A', pointType: 'EQUIPMENT', attrs: { id: 'VAV-A', siteRef: 'site-fixture', markers: 'equip,vav' } },
   ],
   points: [
-    point('sensor-sat-1', 'sensor-1', 'sat', '°C'),
-    point('sensor-sat-2', 'sensor-2', 'sat', '°C'),
-    point('sensor-mat-1', 'sensor-3', 'mat', '°C'),
-    point('sensor-oa-1', 'sensor-4', 'oa_t', '°C'),
-    point('sensor-rat-1', 'sensor-5', 'rat', '°C'),
-    point('sensor-static-1', 'sensor-6', 'duct_static', 'in h₂0'),
-    point('sensor-flow-1', 'sensor-7', 'zone_flow', 'L/sec', 'VAV-A'),
+    point('sensor-discharge_air_temperature-1', 'sensor-1', 'discharge_air_temperature', '°C'),
+    point('sensor-discharge_air_temperature-2', 'sensor-2', 'discharge_air_temperature', '°C'),
+    point('sensor-mixed_air_temperature-1', 'sensor-3', 'mixed_air_temperature', '°C'),
+    point('sensor-oa-1', 'sensor-4', 'outdoor_air_intake_temperature', '°C'),
+    point('sensor-return_air_temperature-1', 'sensor-5', 'return_air_temperature', '°C'),
+    point('sensor-static-1', 'sensor-6', 'discharge_air_static_pressure', 'in h₂0'),
+    point('sensor-flow-1', 'sensor-7', 'discharge_air_volume_flow_rate', 'L/sec', 'VAV-A'),
   ],
-  unitBoundaryPoint: point('sensor-unit-boundary', 'sensor-8', 'sat', '°C'),
+  unitBoundaryPoint: point('sensor-unit-boundary', 'sensor-8', 'discharge_air_temperature', '°C'),
   historyValue(uuid, index) {
-    if (uuid === 'sensor-sat-2') return 20; // constant: flatline
-    if (uuid === 'sensor-mat-1' && index === 120) return 100; // rate spike
-    if (uuid === 'sensor-rat-1') return 65; // out of range
+    if (uuid === 'sensor-discharge_air_temperature-2') return 20; // constant: flatline
+    if (uuid === 'sensor-mixed_air_temperature-1' && index === 120) return 100; // rate spike
+    if (uuid === 'sensor-return_air_temperature-1') return 65; // out of range
     if (uuid === 'sensor-unit-boundary') return index < 144 ? 12 : 12; // caller supplies the historical unit boundary
     return uuid === 'sensor-static-1' ? 250 : uuid === 'sensor-flow-1' ? 1 : 22;
   },

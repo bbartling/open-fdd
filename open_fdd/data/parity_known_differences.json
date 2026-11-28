@@ -23,11 +23,11 @@
    "reason": "pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).",
    "expected": {
     "basic/0/8/7": {
-     "hours": 0.5,
+     "hours": 0.3333,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 0.3333,
+     "hours": 0.1667,
      "tol": 0.01
     }
    }
@@ -38,14 +38,49 @@
    "reason": "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve",
    "expected": {
     "basic/0/8/7": {
-     "hours": 5.1667,
+     "hours": 4.5,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 3.0833,
+     "hours": 13.1667,
      "tol": 0.01
     }
    }
+  },
+  {
+   "rule": "CW-APR-1",
+   "scope": "all",
+   "reason": "pandas applies the hydronic proof gate with the 600 s startup holdoff; the SQL has no startup holdoff yet (#1646). The tower fan and chilled-water command are boolean, so the on-window is wide enough for that holdoff to show on the 2x3 set as well.",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 2.9167,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 0.5,
+     "tol": 0.01
+    }
+   }
+  },
+  {
+   "rule": "CW-FAN-1",
+   "scope": "all",
+   "reason": "pandas applies the hydronic proof gate with the 600 s startup holdoff; the SQL has no startup holdoff yet (#1646). The tower fan and chilled-water command are boolean, so the on-window is wide enough for that holdoff to show on the 2x3 set as well.",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 2.5,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 0.3333,
+     "tol": 0.01
+    }
+   }
+  },
+  {
+   "rule": "ECON-3",
+   "scope": "edge",
+   "reason": "Jittered timestamps (#1642): the weather join itself now matches. pandas joins the raw weather readings as-of (runner.WEB_ASOF_BOUND_SECONDS = 1500 s), as SQL does, which took the edge 4x3 delta from 15.24 h to 0.34 h (MECH-OAT-1 went to 0 and is no longer listed). The remaining 0.34 h on edge AHU-1 is not yet attributed; basic (on-grid) datasets match exactly."
   },
   {
    "rule": "ECON-4",
@@ -93,19 +128,34 @@
    }
   },
   {
+   "rule": "FC3",
+   "scope": "edge",
+   "reason": "Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows)."
+  },
+  {
+   "rule": "FC5",
+   "scope": "edge",
+   "reason": "Edge profile only: after a data gap pandas re-applies its 600 s startup delay; the SQL has no startup holdoff (#1646). Basic datasets match."
+  },
+  {
    "rule": "FC6",
-   "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 15.75,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 6.75,
-     "tol": 0.01
-    }
-   }
+   "scope": "edge",
+   "reason": "Edge profile only. Basic datasets match: fan-on is supply_fan_operating_status, else the start/stop command. On edge, pandas applies its 600 s fan-running startup holdoff across jittered timestamps and the data gap; SQL's mode-delay window does not drop that same interval, so SQL fault hours are about 0.16 h higher."
+  },
+  {
+   "rule": "FC8",
+   "scope": "edge",
+   "reason": "Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas."
+  },
+  {
+   "rule": "FC9",
+   "scope": "edge",
+   "reason": "Same cause as FC8: the series begins with the fan already running; pandas holds off 600 s from the first sample, SQL does not (verified by trimming the start)."
+  },
+  {
+   "rule": "FCU-VALVE-PASS-CLG",
+   "scope": "edge",
+   "reason": "Planted out-of-range zone_air_temperature (80 degC): the pandas quality layer marks those samples OUT_OF_RANGE and excludes them, SQL computes zone_air_temperature - discharge_air_temperature on the value as given and faults."
   },
   {
    "rule": "HP-1",
@@ -113,7 +163,7 @@
    "reason": "Small residual left after #1642; not yet attributed.",
    "expected": {
     "basic/0/8/7": {
-     "hours": 0.1667,
+     "hours": 0.0833,
      "tol": 0.01
     },
     "basic/0/4/3": {
@@ -183,12 +233,12 @@
    }
   },
   {
-   "rule": "TRIM-4",
+   "rule": "TRIM-3",
    "scope": "stress_only",
    "reason": "role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run",
    "expected": {
     "basic/0/8/7": {
-     "hours": 0.9167,
+     "hours": 0.5,
      "tol": 0.01
     },
     "basic/0/4/3": {
@@ -196,6 +246,31 @@
      "tol": 0.01
     }
    }
+  },
+  {
+   "rule": "TRIM-4",
+   "scope": "all",
+   "reason": "pandas applies its hydronic proof gate with the 600 s startup holdoff; the SQL has no startup holdoff yet (#1646). SQL confirms one 5-minute sample earlier per pump start. The boolean plant command makes that sample visible on the 2 x 3 set as well.",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 0.9167,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 0.1667,
+     "tol": 0.01
+    }
+   }
+  },
+  {
+   "rule": "VAV-1",
+   "scope": "edge",
+   "reason": "Two input-handling differences: (1) NULL zone_air_temperature cells: SQL drops NULL rows (WHERE zone_air_temperature IS NOT NULL) and holds the previous sample's state across the null run, pandas scores a NULL as not faulted; (2) planted out-of-range zone_air_temperature (80 degC): the pandas quality layer marks it OUT_OF_RANGE and excludes it, SQL scores the value as given."
+  },
+  {
+   "rule": "VAV-7",
+   "scope": "edge",
+   "reason": "Duplicate (equipment, timestamp) rows: SQL scores the rows as delivered, the reference de-duplicates first (the input contract is one row per timestamp). Verified: de-duplicating the rows before SQL makes SQL equal pandas."
   },
   {
    "rule": "VAV-AHU-LEAVE",
@@ -208,21 +283,6 @@
     },
     "basic/0/4/3": {
      "hours": 0.3333,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "TRIM-3",
-   "scope": "stress_only",
-   "reason": "role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 0.9167,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 0.0,
      "tol": 0.01
     }
    }
@@ -243,49 +303,9 @@
    }
   },
   {
-   "rule": "FC3",
-   "scope": "edge",
-   "reason": "Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows)."
-  },
-  {
-   "rule": "FC8",
-   "scope": "edge",
-   "reason": "Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas."
-  },
-  {
-   "rule": "FC9",
-   "scope": "edge",
-   "reason": "Same cause as FC8: the series begins with the fan already running; pandas holds off 600 s from the first sample, SQL does not (verified by trimming the start)."
-  },
-  {
-   "rule": "VAV-1",
-   "scope": "edge",
-   "reason": "Two input-handling differences: (1) NULL zone_t cells: SQL drops NULL rows (WHERE zone_t IS NOT NULL) and holds the previous sample's state across the null run, pandas scores a NULL as not faulted; (2) planted out-of-range zone_t (80 degC): the pandas quality layer marks it OUT_OF_RANGE and excludes it, SQL scores the value as given."
-  },
-  {
-   "rule": "FCU-VALVE-PASS-CLG",
-   "scope": "edge",
-   "reason": "Planted out-of-range zone_t (80 degC): the pandas quality layer marks those samples OUT_OF_RANGE and excludes them, SQL computes zone_t - sat on the value as given and faults."
-  },
-  {
-   "rule": "VAV-7",
-   "scope": "edge",
-   "reason": "Duplicate (equipment, timestamp) rows: SQL scores the rows as delivered, the reference de-duplicates first (the input contract is one row per timestamp). Verified: de-duplicating the rows before SQL makes SQL equal pandas."
-  },
-  {
    "rule": "WX-1",
    "scope": "edge",
-   "reason": "Gap handling: SQL flags |oa_t - previous sample| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a >2 h gap is a spike in SQL only."
-  },
-  {
-   "rule": "FC5",
-   "scope": "edge",
-   "reason": "Edge profile only: after a data gap pandas re-applies its 600 s startup delay; the SQL has no startup holdoff (#1646). Basic datasets match."
-  },
-  {
-   "rule": "ECON-3",
-   "scope": "edge",
-   "reason": "Jittered timestamps (#1642): the weather join itself now matches. pandas joins the raw weather readings as-of (runner.WEB_ASOF_BOUND_SECONDS = 1500 s), as SQL does, which took the edge 4x3 delta from 15.24 h to 0.34 h (MECH-OAT-1 went to 0 and is no longer listed). The remaining 0.34 h on edge AHU-1 is not yet attributed; basic (on-grid) datasets match exactly."
+   "reason": "Gap handling: SQL flags |outdoor_air_intake_temperature - previous sample| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a >2 h gap is a spike in SQL only."
   }
  ]
 }

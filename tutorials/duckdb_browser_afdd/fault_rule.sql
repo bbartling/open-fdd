@@ -9,7 +9,7 @@ WITH analysis_window AS (
 -- Turn the two point roles into columns at each equipment timestamp.
 readings AS (
     SELECT equipment_id, ts,
-           MAX(value) FILTER (WHERE role = 'sat') AS sat_c,
+           MAX(value) FILTER (WHERE role = 'discharge_air_temperature') AS sat_c,
            MAX(value) FILTER (WHERE role = 'cooling_enabled') AS cooling_enabled
     FROM fdd.input_sample CROSS JOIN analysis_window
     WHERE ts > window_end - INTERVAL '1 hour' AND ts <= window_end

@@ -58,9 +58,9 @@ def _frames():
     chw.attrs["equipment_type"] = "CHW_PLANT"
     frames = {"AHU-1": ahu, "HW-1": hw, "CHW-1": chw}
     role_map = {
-        "AHU-1": {"fan-status": "sf_status", "fan-cmd": "sf_cmd", "outside-air-temp": "oat"},
-        "HW-1": {"hw-pump-cmd": "p1", "web-outside-air-temp": "wx"},
-        "CHW-1": {"chw-pump-status": "pmp_s", "chw-pump-cmd": "pmp_c"},
+        "AHU-1": {"supply_fan_operating_status": "sf_status", "supply_fan_command": "sf_cmd", "outdoor_air_intake_temperature": "oat"},
+        "HW-1": {"hw-pump-cmd": "p1", "weather_service_air_temperature": "wx"},
+        "CHW-1": {"chilled_water_pump_operating_status": "pmp_s", "chilled_water_pump_command": "pmp_c"},
     }
     return frames, role_map
 
@@ -69,8 +69,8 @@ def _pandas_reference(frames, role_map):
     want = motor_run_hours_weekly(frames, role_map, include_all_mapped=True)
     # Plant discovery may add series the SQL never reads (a chiller "on" derived from temperatures, named towers);
     # the SQL contract is bound fan / pump roles only.
-    want = want[want["signal"].isin(["fan-status", "fan-cmd", "pump-status", "pump-cmd", "chw-pump-status",
-                                     "chw-pump-cmd", "hw-pump-cmd"])]
+    want = want[want["signal"].isin(["supply_fan_operating_status", "supply_fan_command", "pump_operating_status", "pump-cmd", "chilled_water_pump_operating_status",
+                                     "chilled_water_pump_command", "hw-pump-cmd"])]
     return want
 
 
@@ -126,12 +126,12 @@ def _series(key, start, n, step_ms, value):
 
 
 def test_status_beats_command_and_ambiguous_roles_are_left_out():
-    points = [_pt("s", "AHU-1", "fan_status"), _pt("c", "AHU-1", "fan_cmd"),
-              _pt("x1", "AHU-2", "fan_status"), _pt("x2", "AHU-2", "fan_status")]
+    points = [_pt("s", "AHU-1", "supply_fan_operating_status"), _pt("c", "AHU-1", "supply_fan_command"),
+              _pt("x1", "AHU-2", "supply_fan_operating_status"), _pt("x2", "AHU-2", "supply_fan_operating_status")]
     samples = (_series("s", T0, 13, 300 * MS, 1) + _series("c", T0, 13, 300 * MS, 0)
                + _series("x1", T0, 13, 300 * MS, 1) + _series("x2", T0, 13, 300 * MS, 1))
     rows = _run(points, samples)
-    assert [(r["equipment_id"], r["signal"]) for r in rows] == [("AHU-1", "fan_status")]
+    assert [(r["equipment_id"], r["signal"]) for r in rows] == [("AHU-1", "supply_fan_operating_status")]
     assert rows[0]["run_hours"] == pytest.approx(1.0)  # 12 intervals of 5 min; the last sample owns 0
 
 
@@ -150,7 +150,7 @@ def test_percent_values_and_threshold():
 
 
 def test_intervals_book_to_the_starting_week_and_partial_weeks():
-    points = [_pt("f", "AHU-1", "fan_status")]
+    points = [_pt("f", "AHU-1", "supply_fan_operating_status")]
     sunday_late = T0 + 7 * 24 * H - H // 2  # Sunday 23:30, the interval runs into Monday
     samples = [("local", "f", T0, 1.0), ("local", "f", T0 + H // 2, 0.0),
                ("local", "f", sunday_late, 1.0), ("local", "f", sunday_late + H, 1.0)]
@@ -161,7 +161,7 @@ def test_intervals_book_to_the_starting_week_and_partial_weeks():
 
 
 def test_window_bounds_the_samples():
-    points = [_pt("f", "AHU-1", "fan_status")]
+    points = [_pt("f", "AHU-1", "supply_fan_operating_status")]
     samples = _series("f", T0, 25, H // 2, 1)  # 12 h of half-hour samples
     rows = _run(points, samples, start_ms=T0 + 2 * H, end_ms=T0 + 4 * H)
     assert rows[0]["run_hours"] == pytest.approx(1.5)  # samples at 2.0 .. 3.5 h; the last one owns 0
@@ -169,7 +169,7 @@ def test_window_bounds_the_samples():
 
 
 def test_avg_oat_is_the_as_of_reading_over_on_intervals():
-    points = [_pt("f", "AHU-1", "fan_status"), _pt("o", "AHU-1", "outside_air_temp")]
+    points = [_pt("f", "AHU-1", "supply_fan_operating_status"), _pt("o", "AHU-1", "outside_air_temp")]
     samples = [("local", "f", T0 + i * H // 2, v) for i, v in enumerate([1, 1, 0, 1, 1])]
     samples += [("local", "o", T0, 10.0), ("local", "o", T0 + H, 20.0)]  # hourly OAT, carried to the half hours
     rows = _run(points, samples, oats=[("AHU-1", "o")])
@@ -180,8 +180,8 @@ def test_avg_oat_is_the_as_of_reading_over_on_intervals():
 
 
 def test_no_motor_roles_gives_no_rows():
-    frames = {"AHU-1": pd.DataFrame({"sat": [12.0, 13.0]}, index=pd.date_range(MON, periods=2, freq="5min"))}
-    out = motor_run_hours_weekly_sql(frames, {"AHU-1": {"sat": "sat"}})
+    frames = {"AHU-1": pd.DataFrame({"discharge_air_temperature": [12.0, 13.0]}, index=pd.date_range(MON, periods=2, freq="5min"))}
+    out = motor_run_hours_weekly_sql(frames, {"AHU-1": {"discharge_air_temperature": "discharge_air_temperature"}})
     assert out.empty and list(out.columns)[:2] == ["week_start", "week_label"]
 
 
@@ -219,7 +219,7 @@ def test_local_weeks_and_occupancy_match_pandas(engine):
 
 
 def test_custom_weeks_drop_samples_before_the_first_boundary():
-    points = [_pt("f", "AHU-1", "fan_status")]
+    points = [_pt("f", "AHU-1", "supply_fan_operating_status")]
     samples = _series("f", T0, 25, H // 2, 1)
     rows = _run(points, samples, weeks=[("AHU-1", T0 + 6 * H)])
     assert [r["week_start_ms"] for r in rows] == [T0 + 6 * H]
@@ -231,8 +231,8 @@ def test_custom_weeks_drop_samples_before_the_first_boundary():
 
 def _pandas_reference_kw(frames, role_map, **kw):
     want = motor_run_hours_weekly(frames, role_map, include_all_mapped=True, **kw)
-    return want[want["signal"].isin(["fan-status", "fan-cmd", "pump-status", "pump-cmd", "chw-pump-status",
-                                      "chw-pump-cmd", "hw-pump-cmd"])]
+    return want[want["signal"].isin(["supply_fan_operating_status", "supply_fan_command", "pump_operating_status", "pump-cmd", "chilled_water_pump_operating_status",
+                                      "chilled_water_pump_command", "hw-pump-cmd"])]
 
 
 @pytest.mark.skipif(not _postgres_configured(), reason="needs POSTGRES_TEST_URL and OPENFDD_PG_TEST_DISPOSABLE=1")

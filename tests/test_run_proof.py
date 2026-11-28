@@ -112,7 +112,7 @@ def test_sparql_finds_the_feeding_equipment():
 
 
 def test_a_ref_never_crosses_sites_and_never_guesses():
-    a = ProofNode("AHU-1", "x", roles=frozenset({"fan_status"}))
+    a = ProofNode("AHU-1", "x", roles=frozenset({"supply_fan_operating_status"}))
     v = ProofNode("VAV-1", "y", refs={"airRef": "AHU-1"})
     assert not resolve_run_proof(v, [a, v], spec()).found
     v2 = ProofNode("VAV-2", "x")                                  # no kinds: the single-AHU assumption does not apply
@@ -121,7 +121,7 @@ def test_a_ref_never_crosses_sites_and_never_guesses():
 
 def test_one_ahu_and_no_airref_is_assumed_and_can_be_turned_off():
     c = spec()
-    a = ProofNode("AHU-1", "s", roles=frozenset({"fan_status"}), kinds=frozenset({"ahu"}))
+    a = ProofNode("AHU-1", "s", roles=frozenset({"supply_fan_operating_status"}), kinds=frozenset({"ahu"}))
     v = ProofNode("VAV-1", "s", kinds=frozenset({"vav"}))
     dangling = ProofNode("VAV-2", "s", refs={"airRef": "missing"}, kinds=frozenset({"vav"}))
     boiler = ProofNode("B-1", "s", kinds=frozenset({"boiler"}))
@@ -130,16 +130,16 @@ def test_one_ahu_and_no_airref_is_assumed_and_can_be_turned_off():
     assert not resolve_run_proof(v, [a, v], c, assume_single_feeder=False).found
     assert not resolve_run_proof(dangling, [a, dangling], c).found
     assert not resolve_run_proof(boiler, [a, boiler], c).found
-    other = ProofNode("AHU-2", "s", roles=frozenset({"fan_cmd"}), kinds=frozenset({"ahu"}))
+    other = ProofNode("AHU-2", "s", roles=frozenset({"supply_fan_command"}), kinds=frozenset({"ahu"}))
     assert not resolve_run_proof(v, [a, other, v], c).found
 
 
 def test_own_status_beats_own_command_and_feeder_order_is_the_contract_order():
     c = spec()
-    both = ProofNode("A", "s", roles=frozenset({"fan_cmd", "fan_status"}))
-    assert resolve_run_proof(both, [both], c).role == "fan_status"
-    p1 = ProofNode("P1", "s", roles=frozenset({"pump_status"}))
-    p2 = ProofNode("P2", "s", roles=frozenset({"fan_status"}))
+    both = ProofNode("A", "s", roles=frozenset({"supply_fan_command", "supply_fan_operating_status"}))
+    assert resolve_run_proof(both, [both], c).role == "supply_fan_operating_status"
+    p1 = ProofNode("P1", "s", roles=frozenset({"pump_operating_status"}))
+    p2 = ProofNode("P2", "s", roles=frozenset({"supply_fan_operating_status"}))
     loop = ProofNode("L", "s", refs={"hotWaterRef": "P1", "airRef": "P2"})
     r = resolve_run_proof(loop, [p1, p2, loop], c)
     assert (r.equip, r.via) == ("P2", "airRef")                   # airRef is listed before hotWaterRef
@@ -151,14 +151,14 @@ def _vav(proof: str = "none", hours: int = 12):
     proof: none | resolved (a run-proof column that is on for the first half) | status (its own fan status)."""
     idx = pd.date_range("2026-01-05", periods=hours * 12, freq="5min", tz="UTC")
     df = pd.DataFrame(index=idx)
-    df["outside-air-temp"] = 30.0                  # hot outside while the reheat valve is wide open
-    df["reheat-valve"] = 0.9
-    df["zone-airflow"] = 100.0                     # air is on (VAV-3 also needs it)
+    df["outdoor_air_intake_temperature"] = 30.0                  # hot outside while the reheat valve is wide open
+    df["terminal_unit_heating_valve_position_command"] = 90.0
+    df["discharge_air_volume_flow_rate"] = 100.0                     # air is on (VAV-3 also needs it)
     on = [1.0 if i < len(idx) // 2 else 0.0 for i in range(len(idx))]
     if proof == "resolved":
-        df["run-proof"] = on
+        df["operating_status"] = on
     elif proof == "status":
-        df["fan-status"] = on
+        df["supply_fan_operating_status"] = on
     df.attrs["equipment_id"] = "EQ"
     df.attrs["equipment_type"] = "VAV"
     return df
@@ -171,14 +171,14 @@ def _run(rule_id, df, **params):
 
 def test_derive_run_proof_prefers_the_resolved_column_then_own_status_then_command():
     s, src = derive_run_proof(_vav("status"))
-    assert src == "fan-status" and int(proof_on(s).sum()) == 6 * 12
+    assert src == "supply_fan_operating_status" and int(proof_on(s).sum()) == 6 * 12
     df = _vav("status")
-    df["run-proof"] = 1.0
+    df["operating_status"] = 1.0
     s, src = derive_run_proof(df)
-    assert src == "run-proof" and bool(proof_on(s).all())
+    assert src == "operating_status" and bool(proof_on(s).all())
     cmd = _vav()
-    cmd["fan-cmd"] = 0.5
-    assert derive_run_proof(cmd)[1] == "fan-cmd"
+    cmd["supply_fan_command"] = 0.5
+    assert derive_run_proof(cmd)[1] == "supply_fan_command"
     assert derive_run_proof(_vav())[0] is None
 
 
@@ -214,21 +214,21 @@ def test_sweep_gate_mask():
 
 def test_sensor_sweeps_honour_the_gate():
     idx = pd.date_range("2026-01-05", periods=288, freq="5min", tz="UTC")
-    df = pd.DataFrame({"outside-air-temp": 90.0, "run-proof": [1.0 if i < 144 else 0.0 for i in range(288)]}, index=idx)
-    df.attrs.update(equipment_id="EQ", equipment_type="AHU", role_units={"outside-air-temp": "°C"})
+    df = pd.DataFrame({"outdoor_air_intake_temperature": 90.0, "operating_status": [1.0 if i < 144 else 0.0 for i in range(288)]}, index=idx)
+    df.attrs.update(equipment_id="EQ", equipment_type="AHU", role_units={"outdoor_air_intake_temperature": "°C"})
     on = run_cookbook_rule(RULES_BY_ID["SV-RANGE"], df.copy(), equipment_id="EQ", equipment_kind="ahu", poll_seconds=300.0,
                            params_by_rule={"SV-RANGE": {"confirm_min": 0}})
     off = run_cookbook_rule(RULES_BY_ID["SV-RANGE"], df.copy(), equipment_id="EQ", equipment_kind="ahu", poll_seconds=300.0,
                             params_by_rule={"SV-RANGE": {"confirm_min": 0, "require_run_proof": 0}})
     assert 0 < on.fault_hours < off.fault_hours
-    none = df.drop(columns=["run-proof"])
+    none = df.drop(columns=["operating_status"])
     res = run_cookbook_rule(RULES_BY_ID["SV-RANGE"], none, equipment_id="EQ", equipment_kind="ahu", poll_seconds=300.0)
     assert res.status == "SKIPPED_NO_RUN_PROOF"
 
 def test_the_global_gate_switch_also_ungates_sweeps():
     idx = pd.date_range("2026-01-05", periods=288, freq="5min", tz="UTC")
-    none = pd.DataFrame({"outside-air-temp": 90.0}, index=idx)
-    none.attrs.update(equipment_id="EQ", equipment_type="AHU", role_units={"outside-air-temp": "\u00b0C"})
+    none = pd.DataFrame({"outdoor_air_intake_temperature": 90.0}, index=idx)
+    none.attrs.update(equipment_id="EQ", equipment_type="AHU", role_units={"outdoor_air_intake_temperature": "\u00b0C"})
     gated = run_cookbook_rule(RULES_BY_ID["SV-RANGE"], none.copy(), equipment_id="EQ", equipment_kind="ahu", poll_seconds=300.0,
                               params_by_rule={"SV-RANGE": {"confirm_min": 0}})
     assert gated.status == "SKIPPED_NO_RUN_PROOF"
@@ -238,15 +238,15 @@ def test_the_global_gate_switch_also_ungates_sweeps():
 
 
 def test_ambiguous_feeder_name_binds_nothing():
-    a = ProofNode("A", "s", aliases=("shared",), roles=frozenset({"fan_status"}))
-    b = ProofNode("B", "s", aliases=("shared",), roles=frozenset({"fan_status"}))
+    a = ProofNode("A", "s", aliases=("shared",), roles=frozenset({"supply_fan_operating_status"}))
+    b = ProofNode("B", "s", aliases=("shared",), roles=frozenset({"supply_fan_operating_status"}))
     v = ProofNode("V", "s", refs={"airRef": "shared"})
     assert not resolve_run_proof(v, [a, b, v], spec()).found
 
 
 def test_a_ref_that_also_names_the_requester_binds_nothing():
     # the requester carries the referenced alias too: two same-site matches, so the reference is ambiguous
-    a = ProofNode("A", "s", aliases=("shared",), roles=frozenset({"fan_status"}))
+    a = ProofNode("A", "s", aliases=("shared",), roles=frozenset({"supply_fan_operating_status"}))
     v = ProofNode("V", "s", aliases=("shared",), refs={"airRef": "shared"})
     assert not resolve_run_proof(v, [a, v], spec()).found
     # a ref that names only the requester is not a feeder either
@@ -256,7 +256,7 @@ def test_a_ref_that_also_names_the_requester_binds_nothing():
 
 def test_explicit_off_proof_is_assessed_zero_not_missing_proof():
     df = _vav("resolved")
-    df["run-proof"] = 0.0
+    df["operating_status"] = 0.0
     result = _run("VAV-3", df)
     assert result.status != "SKIPPED_NO_RUN_PROOF"
     assert result.fault_hours == 0
@@ -264,10 +264,10 @@ def test_explicit_off_proof_is_assessed_zero_not_missing_proof():
 
 def test_stale_proof_samples_do_not_prove_operation():
     stale = _vav("resolved")
-    stale["run-proof"] = [1.0 if i < len(stale) // 2 else float("nan") for i in range(len(stale))]   # proof stops reporting
+    stale["operating_status"] = [1.0 if i < len(stale) // 2 else float("nan") for i in range(len(stale))]   # proof stops reporting
     assert _run("VAV-3", stale).fault_hours == pytest.approx(_run("VAV-3", _vav("resolved")).fault_hours)   # missing != running
     gone = _vav("resolved")
-    gone["run-proof"] = float("nan")                                                     # no proof sample at all: skipped
+    gone["operating_status"] = float("nan")                                                     # no proof sample at all: skipped
     assert _run("VAV-3", gone).status == "SKIPPED_NO_RUN_PROOF"
 
 

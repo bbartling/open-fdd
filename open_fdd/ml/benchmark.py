@@ -37,7 +37,7 @@ SUPPRESS_FPR = 0.05
 #: Duct static is left out of the benchmark features: its unit and behavior differ between the published
 #: fault-free file (nearly constant, Pa) and every faulted file (inches of water, varying), so a model trained on
 #: the fault-free file would flag every faulted file for that reason alone, whatever the fault.
-BENCHMARK_ROLES = tuple(r for r in FEATURE_ROLES if r != "duct-static-pressure")
+BENCHMARK_ROLES = tuple(r for r in FEATURE_ROLES if r != "discharge_air_static_pressure")
 
 
 def test_weeks(index: pd.DatetimeIndex) -> pd.Series:
@@ -184,10 +184,10 @@ def run_benchmark(
 
     # published-data checks a reader should know about
     if "oa_bias_4_annual.csv" in frames:
-        diff = (frames["oa_bias_4_annual.csv"]["outside-air-temp"] - normal["outside-air-temp"]).dropna()
+        diff = (frames["oa_bias_4_annual.csv"]["outdoor_air_intake_temperature"] - normal["outdoor_air_intake_temperature"]).dropna()
         result.data_checks.append(f"oa_bias file minus fault-free OAT: median {diff.median():+.2f} °C")
     if "coi_bias_4_annual.csv" in frames:
-        diff = (frames["coi_bias_4_annual.csv"]["discharge-air-temp"] - normal["discharge-air-temp"])
+        diff = (frames["coi_bias_4_annual.csv"]["discharge_air_temperature"] - normal["discharge_air_temperature"])
         diff = diff[actives[normal_name]].dropna()
         result.data_checks.append(f"coi_bias_4 file minus fault-free SAT (fan on): median {diff.median():+.2f} °C")
     return result

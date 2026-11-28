@@ -15,7 +15,7 @@ test("the metric rules are exactly the run-proof-exempt statistics with no fault
   const registry = readFileSync(new URL("../../sql/fdd/registry.yaml", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   for (const id of metric) {
     const block = registry.slice(registry.indexOf(`rule_id: ${id}\n`), registry.indexOf("rule_id:", registry.indexOf(`rule_id: ${id}\n`) + 10));
-    assert.match(block, /run_proof: exempt/, id);
+    assert.match(block, /operating_status: exempt/, id);
   }
 });
 

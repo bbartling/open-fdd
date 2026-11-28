@@ -65,7 +65,7 @@
   ],
   "points": [
     {
-      "uuid": "e75bf35b-906a-5f93-adf8-7f88d40d5aac",
+      "uuid": "cf50c9d7-d357-502c-a720-f5c8bab69001",
       "tags": [
         "point",
         "his",
@@ -73,7 +73,7 @@
         "run",
         "sensor"
       ],
-      "dis": "AHU-1 fan-status",
+      "dis": "AHU-1 supply_fan_operating_status",
       "units": "",
       "kind": "Bool",
       "name": "fan run",
@@ -85,12 +85,12 @@
       "bacnet": "",
       "cls": "discharge-run-sensor",
       "rec": {
-        "uuid": "e75bf35b-906a-5f93-adf8-7f88d40d5aac",
-        "name": "site-a AHU-1 fan_status",
+        "uuid": "cf50c9d7-d357-502c-a720-f5c8bab69001",
+        "name": "site-a AHU-1 supply_fan_operating_status",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 fan-status",
+          "dis": "AHU-1 supply_fan_operating_status",
           "markers": "point,his,fan,run,sensor",
           "class": "discharge-run-sensor",
           "equipRef": "AHU-1",
@@ -101,7 +101,7 @@
       }
     },
     {
-      "uuid": "60140e88-9070-5fa7-a965-72432a23356b",
+      "uuid": "04d701ba-460d-57ed-a70b-ef7b42dc9080",
       "tags": [
         "point",
         "his",
@@ -109,7 +109,7 @@
         "run",
         "cmd"
       ],
-      "dis": "AHU-1 fan-cmd",
+      "dis": "AHU-1 supply_fan_command",
       "units": "%",
       "kind": "Number",
       "name": "fan run cmd",
@@ -121,12 +121,12 @@
       "bacnet": "",
       "cls": "discharge-run-cmd",
       "rec": {
-        "uuid": "60140e88-9070-5fa7-a965-72432a23356b",
-        "name": "site-a AHU-1 fan_cmd",
+        "uuid": "04d701ba-460d-57ed-a70b-ef7b42dc9080",
+        "name": "site-a AHU-1 supply_fan_command",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 fan-cmd",
+          "dis": "AHU-1 supply_fan_command",
           "markers": "point,his,fan,run,cmd",
           "class": "discharge-run-cmd",
           "equipRef": "AHU-1",
@@ -137,7 +137,7 @@
       }
     },
     {
-      "uuid": "de46e335-b043-54a5-a721-6ce4684625e4",
+      "uuid": "8ff4f43c-6012-52f0-aa6f-9411e7c4fbfc",
       "tags": [
         "point",
         "his",
@@ -146,7 +146,7 @@
         "temp",
         "sensor"
       ],
-      "dis": "AHU-1 outside-air-temp",
+      "dis": "AHU-1 outdoor_air_intake_temperature",
       "units": "°C",
       "kind": "Number",
       "name": "outside air temp",
@@ -158,12 +158,12 @@
       "bacnet": "",
       "cls": "outside-air-temp-sensor",
       "rec": {
-        "uuid": "de46e335-b043-54a5-a721-6ce4684625e4",
-        "name": "site-a AHU-1 oa_t",
+        "uuid": "8ff4f43c-6012-52f0-aa6f-9411e7c4fbfc",
+        "name": "site-a AHU-1 outdoor_air_intake_temperature",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 outside-air-temp",
+          "dis": "AHU-1 outdoor_air_intake_temperature",
           "markers": "point,his,outside,air,temp,sensor",
           "class": "outside-air-temp-sensor",
           "equipRef": "AHU-1",
@@ -174,7 +174,7 @@
       }
     },
     {
-      "uuid": "34101046-777e-52f7-a750-dae9ee770b4a",
+      "uuid": "8eb9f236-d2e4-561e-aca0-bb37e19d90f0",
       "tags": [
         "point",
         "his",
@@ -183,7 +183,7 @@
         "temp",
         "sensor"
       ],
-      "dis": "AHU-1 return-air-temp",
+      "dis": "AHU-1 return_air_temperature",
       "units": "°C",
       "kind": "Number",
       "name": "return air temp",
@@ -195,12 +195,12 @@
       "bacnet": "",
       "cls": "return-air-temp-sensor",
       "rec": {
-        "uuid": "34101046-777e-52f7-a750-dae9ee770b4a",
-        "name": "site-a AHU-1 rat",
+        "uuid": "8eb9f236-d2e4-561e-aca0-bb37e19d90f0",
+        "name": "site-a AHU-1 return_air_temperature",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 return-air-temp",
+          "dis": "AHU-1 return_air_temperature",
           "markers": "point,his,return,air,temp,sensor",
           "class": "return-air-temp-sensor",
           "equipRef": "AHU-1",
@@ -211,7 +211,7 @@
       }
     },
     {
-      "uuid": "e138aba4-cb5c-5bec-a0cd-9eee35ebc01e",
+      "uuid": "4d8cb00a-e5e2-59fe-a689-a217aa8634d9",
       "tags": [
         "point",
         "his",
@@ -220,7 +220,7 @@
         "temp",
         "sensor"
       ],
-      "dis": "AHU-1 mixed-air-temp",
+      "dis": "AHU-1 mixed_air_temperature",
       "units": "°C",
       "kind": "Number",
       "name": "mixed air temp",
@@ -232,12 +232,12 @@
       "bacnet": "",
       "cls": "mixed-air-temp-sensor",
       "rec": {
-        "uuid": "e138aba4-cb5c-5bec-a0cd-9eee35ebc01e",
-        "name": "site-a AHU-1 mat",
+        "uuid": "4d8cb00a-e5e2-59fe-a689-a217aa8634d9",
+        "name": "site-a AHU-1 mixed_air_temperature",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 mixed-air-temp",
+          "dis": "AHU-1 mixed_air_temperature",
           "markers": "point,his,mixed,air,temp,sensor",
           "class": "mixed-air-temp-sensor",
           "equipRef": "AHU-1",
@@ -248,7 +248,7 @@
       }
     },
     {
-      "uuid": "6dcb8915-2e7c-5850-a9e4-618435bd2f33",
+      "uuid": "5cd65841-41fd-5e36-a2b6-7d54bcc02e83",
       "tags": [
         "point",
         "his",
@@ -257,7 +257,7 @@
         "temp",
         "sensor"
       ],
-      "dis": "AHU-1 discharge-air-temp",
+      "dis": "AHU-1 discharge_air_temperature",
       "units": "°C",
       "kind": "Number",
       "name": "discharge air temp",
@@ -269,12 +269,12 @@
       "bacnet": "",
       "cls": "discharge-air-temp-sensor",
       "rec": {
-        "uuid": "6dcb8915-2e7c-5850-a9e4-618435bd2f33",
-        "name": "site-a AHU-1 sat",
+        "uuid": "5cd65841-41fd-5e36-a2b6-7d54bcc02e83",
+        "name": "site-a AHU-1 discharge_air_temperature",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 discharge-air-temp",
+          "dis": "AHU-1 discharge_air_temperature",
           "markers": "point,his,discharge,air,temp,sensor",
           "class": "discharge-air-temp-sensor",
           "equipRef": "AHU-1",
@@ -285,7 +285,7 @@
       }
     },
     {
-      "uuid": "62535a14-7efc-5226-ac36-48ccf299048e",
+      "uuid": "ecfcd335-cfd2-5333-af8f-64471bea1399",
       "tags": [
         "point",
         "his",
@@ -294,7 +294,7 @@
         "temp",
         "sp"
       ],
-      "dis": "AHU-1 discharge-air-temp-sp",
+      "dis": "AHU-1 discharge_air_temperature_setpoint",
       "units": "°C",
       "kind": "Number",
       "name": "discharge air temp sp",
@@ -306,12 +306,12 @@
       "bacnet": "",
       "cls": "discharge-air-temp-sp",
       "rec": {
-        "uuid": "62535a14-7efc-5226-ac36-48ccf299048e",
-        "name": "site-a AHU-1 sat_sp",
+        "uuid": "ecfcd335-cfd2-5333-af8f-64471bea1399",
+        "name": "site-a AHU-1 discharge_air_temperature_setpoint",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 discharge-air-temp-sp",
+          "dis": "AHU-1 discharge_air_temperature_setpoint",
           "markers": "point,his,discharge,air,temp,sp",
           "class": "discharge-air-temp-sp",
           "equipRef": "AHU-1",
@@ -322,17 +322,18 @@
       }
     },
     {
-      "uuid": "0ae010e9-93a3-50b0-a566-4bcd251bb34c",
+      "uuid": "ce57e324-a8b9-5bc9-ab84-97f152b58d3d",
       "tags": [
         "point",
         "his",
         "outside",
-        "damper"
+        "damper",
+        "cmd"
       ],
-      "dis": "AHU-1 outside-air-damper",
+      "dis": "AHU-1 outdoor_air_intake_damper_position_command",
       "units": "%",
       "kind": "Number",
-      "name": "outside damper",
+      "name": "outside damper cmd",
       "equipRef": "AHU-1",
       "weatherStationRef": "",
       "siteRef": "site-a",
@@ -341,13 +342,13 @@
       "bacnet": "",
       "cls": "outside-damper-cmd",
       "rec": {
-        "uuid": "0ae010e9-93a3-50b0-a566-4bcd251bb34c",
-        "name": "site-a AHU-1 oa_damper_pct",
+        "uuid": "ce57e324-a8b9-5bc9-ab84-97f152b58d3d",
+        "name": "site-a AHU-1 outdoor_air_intake_damper_position_command",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 outside-air-damper",
-          "markers": "point,his,outside,damper",
+          "dis": "AHU-1 outdoor_air_intake_damper_position_command",
+          "markers": "point,his,outside,damper,cmd",
           "class": "outside-damper-cmd",
           "equipRef": "AHU-1",
           "siteRef": "site-a",
@@ -357,7 +358,7 @@
       }
     },
     {
-      "uuid": "2f13ddb8-2520-5c74-aa77-6052aec11f3d",
+      "uuid": "18541a03-543b-58c6-a7a4-f10d288b32e9",
       "tags": [
         "point",
         "his",
@@ -365,7 +366,7 @@
         "run",
         "sensor"
       ],
-      "dis": "AHU-1 compressor-status",
+      "dis": "AHU-1 compressor_operating_status",
       "units": "",
       "kind": "Bool",
       "name": "compressor run",
@@ -377,12 +378,12 @@
       "bacnet": "",
       "cls": "",
       "rec": {
-        "uuid": "2f13ddb8-2520-5c74-aa77-6052aec11f3d",
-        "name": "site-a AHU-1 compressor_status",
+        "uuid": "18541a03-543b-58c6-a7a4-f10d288b32e9",
+        "name": "site-a AHU-1 compressor_operating_status",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 compressor-status",
+          "dis": "AHU-1 compressor_operating_status",
           "markers": "point,his,compressor,run,sensor",
           "class": "",
           "equipRef": "AHU-1",
@@ -427,7 +428,7 @@
       }
     },
     {
-      "uuid": "9fc1c009-8f68-568c-a9b7-e5163145e311",
+      "uuid": "bdfd98d7-b3b8-5e1b-af3f-08dad46d93f5",
       "tags": [
         "point",
         "his",
@@ -435,7 +436,7 @@
         "run",
         "sensor"
       ],
-      "dis": "AHU-1 fan-status",
+      "dis": "AHU-1 supply_fan_operating_status",
       "units": "",
       "kind": "Bool",
       "name": "fan run",
@@ -447,12 +448,12 @@
       "bacnet": "",
       "cls": "discharge-run-sensor",
       "rec": {
-        "uuid": "9fc1c009-8f68-568c-a9b7-e5163145e311",
-        "name": "site-b AHU-1 fan_status",
+        "uuid": "bdfd98d7-b3b8-5e1b-af3f-08dad46d93f5",
+        "name": "site-b AHU-1 supply_fan_operating_status",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 fan-status",
+          "dis": "AHU-1 supply_fan_operating_status",
           "markers": "point,his,fan,run,sensor",
           "class": "discharge-run-sensor",
           "equipRef": "AHU-1",
@@ -463,7 +464,7 @@
       }
     },
     {
-      "uuid": "44e93151-c546-52cc-a288-d0fd29c49b43",
+      "uuid": "c4b4a7aa-ea5d-5349-ad63-50722739770d",
       "tags": [
         "point",
         "his",
@@ -471,7 +472,7 @@
         "run",
         "cmd"
       ],
-      "dis": "AHU-1 fan-cmd",
+      "dis": "AHU-1 supply_fan_command",
       "units": "%",
       "kind": "Number",
       "name": "fan run cmd",
@@ -483,12 +484,12 @@
       "bacnet": "",
       "cls": "discharge-run-cmd",
       "rec": {
-        "uuid": "44e93151-c546-52cc-a288-d0fd29c49b43",
-        "name": "site-b AHU-1 fan_cmd",
+        "uuid": "c4b4a7aa-ea5d-5349-ad63-50722739770d",
+        "name": "site-b AHU-1 supply_fan_command",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 fan-cmd",
+          "dis": "AHU-1 supply_fan_command",
           "markers": "point,his,fan,run,cmd",
           "class": "discharge-run-cmd",
           "equipRef": "AHU-1",
@@ -499,7 +500,7 @@
       }
     },
     {
-      "uuid": "80682ab8-2c52-58b3-af46-b2c442af5e00",
+      "uuid": "02c8bf7d-7e08-5cf1-a396-b8a2b01ec78b",
       "tags": [
         "point",
         "his",
@@ -508,7 +509,7 @@
         "temp",
         "sensor"
       ],
-      "dis": "AHU-1 outside-air-temp",
+      "dis": "AHU-1 outdoor_air_intake_temperature",
       "units": "°F",
       "kind": "Number",
       "name": "outside air temp",
@@ -520,12 +521,12 @@
       "bacnet": "",
       "cls": "outside-air-temp-sensor",
       "rec": {
-        "uuid": "80682ab8-2c52-58b3-af46-b2c442af5e00",
-        "name": "site-b AHU-1 oa_t",
+        "uuid": "02c8bf7d-7e08-5cf1-a396-b8a2b01ec78b",
+        "name": "site-b AHU-1 outdoor_air_intake_temperature",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 outside-air-temp",
+          "dis": "AHU-1 outdoor_air_intake_temperature",
           "markers": "point,his,outside,air,temp,sensor",
           "class": "outside-air-temp-sensor",
           "equipRef": "AHU-1",
@@ -536,7 +537,7 @@
       }
     },
     {
-      "uuid": "712c7d2d-9461-5dc2-acee-bac95cecabd4",
+      "uuid": "6b2ea3a2-fd1f-5817-a474-dcedc2570fad",
       "tags": [
         "point",
         "his",
@@ -545,7 +546,7 @@
         "temp",
         "sensor"
       ],
-      "dis": "AHU-1 return-air-temp",
+      "dis": "AHU-1 return_air_temperature",
       "units": "°F",
       "kind": "Number",
       "name": "return air temp",
@@ -557,12 +558,12 @@
       "bacnet": "",
       "cls": "return-air-temp-sensor",
       "rec": {
-        "uuid": "712c7d2d-9461-5dc2-acee-bac95cecabd4",
-        "name": "site-b AHU-1 rat",
+        "uuid": "6b2ea3a2-fd1f-5817-a474-dcedc2570fad",
+        "name": "site-b AHU-1 return_air_temperature",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 return-air-temp",
+          "dis": "AHU-1 return_air_temperature",
           "markers": "point,his,return,air,temp,sensor",
           "class": "return-air-temp-sensor",
           "equipRef": "AHU-1",
@@ -573,7 +574,7 @@
       }
     },
     {
-      "uuid": "0ee94d02-27de-5ffa-a06e-49d99e3240c4",
+      "uuid": "bd837d00-5fce-5a44-a6a3-a120e6613c34",
       "tags": [
         "point",
         "his",
@@ -582,7 +583,7 @@
         "temp",
         "sensor"
       ],
-      "dis": "AHU-1 mixed-air-temp",
+      "dis": "AHU-1 mixed_air_temperature",
       "units": "°F",
       "kind": "Number",
       "name": "mixed air temp",
@@ -594,12 +595,12 @@
       "bacnet": "",
       "cls": "mixed-air-temp-sensor",
       "rec": {
-        "uuid": "0ee94d02-27de-5ffa-a06e-49d99e3240c4",
-        "name": "site-b AHU-1 mat",
+        "uuid": "bd837d00-5fce-5a44-a6a3-a120e6613c34",
+        "name": "site-b AHU-1 mixed_air_temperature",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 mixed-air-temp",
+          "dis": "AHU-1 mixed_air_temperature",
           "markers": "point,his,mixed,air,temp,sensor",
           "class": "mixed-air-temp-sensor",
           "equipRef": "AHU-1",
@@ -610,7 +611,7 @@
       }
     },
     {
-      "uuid": "84af4222-6ee7-58d1-a73c-6395bac9b6cb",
+      "uuid": "338d2f66-703c-5aea-ac6d-37c38da611e0",
       "tags": [
         "point",
         "his",
@@ -619,7 +620,7 @@
         "temp",
         "sensor"
       ],
-      "dis": "AHU-1 discharge-air-temp",
+      "dis": "AHU-1 discharge_air_temperature",
       "units": "°F",
       "kind": "Number",
       "name": "discharge air temp",
@@ -631,12 +632,12 @@
       "bacnet": "",
       "cls": "discharge-air-temp-sensor",
       "rec": {
-        "uuid": "84af4222-6ee7-58d1-a73c-6395bac9b6cb",
-        "name": "site-b AHU-1 sat",
+        "uuid": "338d2f66-703c-5aea-ac6d-37c38da611e0",
+        "name": "site-b AHU-1 discharge_air_temperature",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 discharge-air-temp",
+          "dis": "AHU-1 discharge_air_temperature",
           "markers": "point,his,discharge,air,temp,sensor",
           "class": "discharge-air-temp-sensor",
           "equipRef": "AHU-1",
@@ -647,7 +648,7 @@
       }
     },
     {
-      "uuid": "4b55df4e-c6e5-506c-adfc-a2345a516fab",
+      "uuid": "ef7857fe-df40-5141-ada1-8ee98846ebad",
       "tags": [
         "point",
         "his",
@@ -656,7 +657,7 @@
         "temp",
         "sp"
       ],
-      "dis": "AHU-1 discharge-air-temp-sp",
+      "dis": "AHU-1 discharge_air_temperature_setpoint",
       "units": "°F",
       "kind": "Number",
       "name": "discharge air temp sp",
@@ -668,12 +669,12 @@
       "bacnet": "",
       "cls": "discharge-air-temp-sp",
       "rec": {
-        "uuid": "4b55df4e-c6e5-506c-adfc-a2345a516fab",
-        "name": "site-b AHU-1 sat_sp",
+        "uuid": "ef7857fe-df40-5141-ada1-8ee98846ebad",
+        "name": "site-b AHU-1 discharge_air_temperature_setpoint",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 discharge-air-temp-sp",
+          "dis": "AHU-1 discharge_air_temperature_setpoint",
           "markers": "point,his,discharge,air,temp,sp",
           "class": "discharge-air-temp-sp",
           "equipRef": "AHU-1",
@@ -684,17 +685,18 @@
       }
     },
     {
-      "uuid": "f49a4f1c-d387-5869-ae04-dc0254b64ccc",
+      "uuid": "b675a75d-6e79-5b67-a474-4baf54e2cf58",
       "tags": [
         "point",
         "his",
         "outside",
-        "damper"
+        "damper",
+        "cmd"
       ],
-      "dis": "AHU-1 outside-air-damper",
+      "dis": "AHU-1 outdoor_air_intake_damper_position_command",
       "units": "%",
       "kind": "Number",
-      "name": "outside damper",
+      "name": "outside damper cmd",
       "equipRef": "AHU-1",
       "weatherStationRef": "",
       "siteRef": "site-b",
@@ -703,13 +705,13 @@
       "bacnet": "",
       "cls": "outside-damper-cmd",
       "rec": {
-        "uuid": "f49a4f1c-d387-5869-ae04-dc0254b64ccc",
-        "name": "site-b AHU-1 oa_damper_pct",
+        "uuid": "b675a75d-6e79-5b67-a474-4baf54e2cf58",
+        "name": "site-b AHU-1 outdoor_air_intake_damper_position_command",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 outside-air-damper",
-          "markers": "point,his,outside,damper",
+          "dis": "AHU-1 outdoor_air_intake_damper_position_command",
+          "markers": "point,his,outside,damper,cmd",
           "class": "outside-damper-cmd",
           "equipRef": "AHU-1",
           "siteRef": "site-b",
@@ -719,7 +721,7 @@
       }
     },
     {
-      "uuid": "e1231f5c-1dbb-592f-af6c-2f9d42f4626d",
+      "uuid": "eaf228ef-e743-5319-abaa-2a3e4c61a633",
       "tags": [
         "point",
         "his",
@@ -727,7 +729,7 @@
         "run",
         "sensor"
       ],
-      "dis": "AHU-1 compressor-status",
+      "dis": "AHU-1 compressor_operating_status",
       "units": "",
       "kind": "Bool",
       "name": "compressor run",
@@ -739,12 +741,12 @@
       "bacnet": "",
       "cls": "",
       "rec": {
-        "uuid": "e1231f5c-1dbb-592f-af6c-2f9d42f4626d",
-        "name": "site-b AHU-1 compressor_status",
+        "uuid": "eaf228ef-e743-5319-abaa-2a3e4c61a633",
+        "name": "site-b AHU-1 compressor_operating_status",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 compressor-status",
+          "dis": "AHU-1 compressor_operating_status",
           "markers": "point,his,compressor,run,sensor",
           "class": "",
           "equipRef": "AHU-1",
@@ -789,7 +791,7 @@
       }
     },
     {
-      "uuid": "93b4d51f-789a-5aaa-a9f6-180371067907",
+      "uuid": "2845e860-acb9-5fdd-a8f3-08cdeb616ac3",
       "tags": [
         "point",
         "his",
@@ -797,7 +799,7 @@
         "valve",
         "cmd"
       ],
-      "dis": "AHU-1 cooling-valve",
+      "dis": "AHU-1 cooling_valve_position_command",
       "units": "%",
       "kind": "Number",
       "name": "cool valve cmd",
@@ -809,12 +811,12 @@
       "bacnet": "",
       "cls": "chilled-water-cool-valve-cmd",
       "rec": {
-        "uuid": "93b4d51f-789a-5aaa-a9f6-180371067907",
-        "name": "site-a AHU-1 clg_valve_pct",
+        "uuid": "2845e860-acb9-5fdd-a8f3-08cdeb616ac3",
+        "name": "site-a AHU-1 cooling_valve_position_command",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 cooling-valve",
+          "dis": "AHU-1 cooling_valve_position_command",
           "markers": "point,his,cool,valve,cmd",
           "class": "chilled-water-cool-valve-cmd",
           "equipRef": "AHU-1",
@@ -825,7 +827,7 @@
       }
     },
     {
-      "uuid": "91f0ba2b-c9bf-514b-a326-99b0f9e4726d",
+      "uuid": "6777b046-881a-5653-a6f6-7e8e3ba8f6f0",
       "tags": [
         "point",
         "his",
@@ -834,7 +836,7 @@
         "pressure",
         "sensor"
       ],
-      "dis": "AHU-1 duct-static-pressure",
+      "dis": "AHU-1 discharge_air_static_pressure",
       "units": "inH2O",
       "kind": "Number",
       "name": "discharge air pressure",
@@ -846,12 +848,12 @@
       "bacnet": "",
       "cls": "discharge-air-pressure-sensor",
       "rec": {
-        "uuid": "91f0ba2b-c9bf-514b-a326-99b0f9e4726d",
-        "name": "site-a AHU-1 duct_static",
+        "uuid": "6777b046-881a-5653-a6f6-7e8e3ba8f6f0",
+        "name": "site-a AHU-1 discharge_air_static_pressure",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 duct-static-pressure",
+          "dis": "AHU-1 discharge_air_static_pressure",
           "markers": "point,his,discharge,air,pressure,sensor",
           "class": "discharge-air-pressure-sensor",
           "equipRef": "AHU-1",
@@ -862,7 +864,7 @@
       }
     },
     {
-      "uuid": "b755cb92-9f35-5f25-ad65-196c258c6c47",
+      "uuid": "30d180fd-6c6c-56c3-ab3c-cb7698d089a2",
       "tags": [
         "point",
         "his",
@@ -871,7 +873,7 @@
         "pressure",
         "sp"
       ],
-      "dis": "AHU-1 duct-static-pressure-sp",
+      "dis": "AHU-1 discharge_air_static_pressure_setpoint",
       "units": "Pa",
       "kind": "Number",
       "name": "discharge air pressure sp",
@@ -883,12 +885,12 @@
       "bacnet": "",
       "cls": "discharge-air-pressure-sp",
       "rec": {
-        "uuid": "b755cb92-9f35-5f25-ad65-196c258c6c47",
-        "name": "site-a AHU-1 duct_static_sp",
+        "uuid": "30d180fd-6c6c-56c3-ab3c-cb7698d089a2",
+        "name": "site-a AHU-1 discharge_air_static_pressure_setpoint",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "AHU-1 duct-static-pressure-sp",
+          "dis": "AHU-1 discharge_air_static_pressure_setpoint",
           "markers": "point,his,discharge,air,pressure,sp",
           "class": "discharge-air-pressure-sp",
           "equipRef": "AHU-1",
@@ -899,7 +901,7 @@
       }
     },
     {
-      "uuid": "ea064811-f0a2-5f54-abc8-b1ca6ff1727f",
+      "uuid": "32725bf7-1137-503b-a25d-5ccdaf09ffff",
       "tags": [
         "point",
         "his",
@@ -909,7 +911,7 @@
         "temp",
         "sensor"
       ],
-      "dis": "CH-1 chilled-water-supply-temp",
+      "dis": "CH-1 supply_chilled_water_temperature",
       "units": "°F",
       "kind": "Number",
       "name": "chilled water leaving temp",
@@ -921,12 +923,12 @@
       "bacnet": "",
       "cls": "",
       "rec": {
-        "uuid": "ea064811-f0a2-5f54-abc8-b1ca6ff1727f",
-        "name": "site-a CH-1 chw_supply_t",
+        "uuid": "32725bf7-1137-503b-a25d-5ccdaf09ffff",
+        "name": "site-a CH-1 supply_chilled_water_temperature",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "CH-1 chilled-water-supply-temp",
+          "dis": "CH-1 supply_chilled_water_temperature",
           "markers": "point,his,chilled,water,leaving,temp,sensor",
           "class": "",
           "equipRef": "CH-1",
@@ -937,7 +939,7 @@
       }
     },
     {
-      "uuid": "5d30cbe9-f826-5d51-ac11-e4a3b9dbec7c",
+      "uuid": "c38dc056-aae7-5848-a0a8-5e2709702faf",
       "tags": [
         "point",
         "his",
@@ -947,7 +949,7 @@
         "temp",
         "sensor"
       ],
-      "dis": "CH-1 chilled-water-return-temp",
+      "dis": "CH-1 return_chilled_water_temperature",
       "units": "°F",
       "kind": "Number",
       "name": "chilled water entering temp",
@@ -959,12 +961,12 @@
       "bacnet": "",
       "cls": "",
       "rec": {
-        "uuid": "5d30cbe9-f826-5d51-ac11-e4a3b9dbec7c",
-        "name": "site-a CH-1 chw_return_t",
+        "uuid": "c38dc056-aae7-5848-a0a8-5e2709702faf",
+        "name": "site-a CH-1 return_chilled_water_temperature",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "CH-1 chilled-water-return-temp",
+          "dis": "CH-1 return_chilled_water_temperature",
           "markers": "point,his,chilled,water,entering,temp,sensor",
           "class": "",
           "equipRef": "CH-1",
@@ -975,7 +977,7 @@
       }
     },
     {
-      "uuid": "fc0d32b0-bfa2-582f-a57d-da965843453a",
+      "uuid": "2935f525-8060-5d1a-a032-d3e49009c5eb",
       "tags": [
         "point",
         "his",
@@ -984,7 +986,7 @@
         "flow",
         "sensor"
       ],
-      "dis": "CH-1 chw-flow",
+      "dis": "CH-1 chilled_water_volume_flow_rate",
       "units": "gpm",
       "kind": "Number",
       "name": "chilled water flow",
@@ -996,12 +998,12 @@
       "bacnet": "",
       "cls": "chilled-water-delta-flow-sensor",
       "rec": {
-        "uuid": "fc0d32b0-bfa2-582f-a57d-da965843453a",
-        "name": "site-a CH-1 chw_flow",
+        "uuid": "2935f525-8060-5d1a-a032-d3e49009c5eb",
+        "name": "site-a CH-1 chilled_water_volume_flow_rate",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "CH-1 chw-flow",
+          "dis": "CH-1 chilled_water_volume_flow_rate",
           "markers": "point,his,chilled,water,flow,sensor",
           "class": "chilled-water-delta-flow-sensor",
           "equipRef": "CH-1",
@@ -1012,7 +1014,7 @@
       }
     },
     {
-      "uuid": "cb932bdd-5b35-5391-ade9-863689f960be",
+      "uuid": "2fc22497-c5c1-5235-abb7-5db8e9a33a55",
       "tags": [
         "point",
         "his",
@@ -1022,7 +1024,7 @@
         "run",
         "cmd"
       ],
-      "dis": "CH-1 chw-pump-cmd",
+      "dis": "CH-1 chilled_water_pump_command",
       "units": "%",
       "kind": "Number",
       "name": "chilled water pump run cmd",
@@ -1034,12 +1036,12 @@
       "bacnet": "",
       "cls": "",
       "rec": {
-        "uuid": "cb932bdd-5b35-5391-ade9-863689f960be",
-        "name": "site-a CH-1 chw_pump_cmd",
+        "uuid": "2fc22497-c5c1-5235-abb7-5db8e9a33a55",
+        "name": "site-a CH-1 chilled_water_pump_command",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "CH-1 chw-pump-cmd",
+          "dis": "CH-1 chilled_water_pump_command",
           "markers": "point,his,chilled,water,pump,run,cmd",
           "class": "",
           "equipRef": "CH-1",
@@ -1050,7 +1052,7 @@
       }
     },
     {
-      "uuid": "6b0ea524-9283-539a-aa51-dfc55c084f57",
+      "uuid": "9a4b5015-928c-545d-a23b-da45036c089f",
       "tags": [
         "point",
         "his",
@@ -1058,7 +1060,7 @@
         "run",
         "sensor"
       ],
-      "dis": "CH-1 chiller-status",
+      "dis": "CH-1 chiller_operating_status",
       "units": "",
       "kind": "Bool",
       "name": "chiller run",
@@ -1070,12 +1072,12 @@
       "bacnet": "",
       "cls": "",
       "rec": {
-        "uuid": "6b0ea524-9283-539a-aa51-dfc55c084f57",
-        "name": "site-a CH-1 chiller_status",
+        "uuid": "9a4b5015-928c-545d-a23b-da45036c089f",
+        "name": "site-a CH-1 chiller_operating_status",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "CH-1 chiller-status",
+          "dis": "CH-1 chiller_operating_status",
           "markers": "point,his,chiller,run,sensor",
           "class": "",
           "equipRef": "CH-1",
@@ -1086,7 +1088,7 @@
       }
     },
     {
-      "uuid": "a5954d72-dccc-58b5-a6e9-8eed0b9112ac",
+      "uuid": "d8e72de5-9145-5591-a74b-3e6e69c3a954",
       "tags": [
         "point",
         "his",
@@ -1094,7 +1096,7 @@
         "power",
         "sensor"
       ],
-      "dis": "CH-1 chiller-power",
+      "dis": "CH-1 chiller_electric_power",
       "units": "",
       "kind": "Number",
       "name": "elec power",
@@ -1106,12 +1108,12 @@
       "bacnet": "",
       "cls": "total-active-ac-elec-power-sensor",
       "rec": {
-        "uuid": "a5954d72-dccc-58b5-a6e9-8eed0b9112ac",
-        "name": "site-a CH-1 chiller_power",
+        "uuid": "d8e72de5-9145-5591-a74b-3e6e69c3a954",
+        "name": "site-a CH-1 chiller_electric_power",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
-          "dis": "CH-1 chiller-power",
+          "dis": "CH-1 chiller_electric_power",
           "markers": "point,his,elec,power,sensor",
           "class": "total-active-ac-elec-power-sensor",
           "equipRef": "CH-1",
@@ -1122,14 +1124,15 @@
       }
     },
     {
-      "uuid": "50f7648c-2a8e-5a15-accd-95826b0dc224",
+      "uuid": "b5f1514d-5ad3-52e1-a8d6-a1030a7f29a3",
       "tags": [
         "point",
         "his",
         "weather",
         "outside",
         "air",
-        "temp"
+        "temp",
+        "sensor"
       ],
       "dis": "Outside air temp (weather)",
       "units": "°C",
@@ -1143,13 +1146,13 @@
       "bacnet": "",
       "cls": "",
       "rec": {
-        "uuid": "50f7648c-2a8e-5a15-accd-95826b0dc224",
-        "name": "site-a weather web_oa_t",
+        "uuid": "b5f1514d-5ad3-52e1-a8d6-a1030a7f29a3",
+        "name": "site-a weather weather_service_air_temperature",
         "layer": "default",
         "pointType": "POINT",
         "attrs": {
           "dis": "Outside air temp (weather)",
-          "markers": "point,his,weather,outside,air,temp",
+          "markers": "point,his,weather,outside,air,temp,sensor",
           "class": "",
           "siteRef": "site-a",
           "weatherStationRef": "station-1",
@@ -1231,7 +1234,7 @@
       }
     },
     {
-      "uuid": "f2084f57-1152-5ba8-a537-423642e6814e",
+      "uuid": "6d62f61e-d3a3-5c80-a24c-1b6a03847b3b",
       "tags": [
         "point",
         "his",
@@ -1250,7 +1253,7 @@
       "bacnet": "",
       "cls": "",
       "rec": {
-        "uuid": "f2084f57-1152-5ba8-a537-423642e6814e",
+        "uuid": "6d62f61e-d3a3-5c80-a24c-1b6a03847b3b",
         "name": "site-a CH-1 SV-RANGE fdd+fault",
         "layer": "default",
         "pointType": "POINT",
@@ -1263,14 +1266,14 @@
           "unit": "",
           "kind": "Number",
           "ruleRef": "SV-RANGE",
-          "sensorRef": "fc0d32b0-bfa2-582f-a57d-da965843453a",
-          "roleRef": "chw_flow",
+          "sensorRef": "2935f525-8060-5d1a-a032-d3e49009c5eb",
+          "roleRef": "chilled_water_volume_flow_rate",
           "fddSummary": "sensor"
         }
       }
     },
     {
-      "uuid": "c940c4bb-92c9-5756-a9d6-8f3007688ec1",
+      "uuid": "e8f35f0f-2b28-5096-a8c1-46a25ba28c1a",
       "tags": [
         "point",
         "his",
@@ -1289,7 +1292,7 @@
       "bacnet": "",
       "cls": "",
       "rec": {
-        "uuid": "c940c4bb-92c9-5756-a9d6-8f3007688ec1",
+        "uuid": "e8f35f0f-2b28-5096-a8c1-46a25ba28c1a",
         "name": "site-a CH-1 SV-RANGE fdd+fault_timeline",
         "layer": "default",
         "pointType": "POINT",
@@ -1302,7 +1305,7 @@
           "unit": "",
           "kind": "Number",
           "ruleRef": "SV-RANGE",
-          "sensorRef": "fc0d32b0-bfa2-582f-a57d-da965843453a"
+          "sensorRef": "2935f525-8060-5d1a-a032-d3e49009c5eb"
         }
       }
     }

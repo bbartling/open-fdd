@@ -158,9 +158,9 @@ _EXPECTED_CONSTANT_TOKENS: Final[tuple[str, ...]] = (
     "cmd",
     "command",
     "setpoint",
-    "occupied",
+    "occupancy_status",
     "occupancy",
-    "loop-enabled",
+    "operating_mode_status",
 )
 
 

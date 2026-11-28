@@ -1,16 +1,16 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Sensor-series input and output are keyed by the bound point UUID, not the role.
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
 base_proof AS (
   SELECT h.*,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN h.run_proof > 0.05 THEN 1 ELSE 0 END AS energized
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN h.operating_status > 0.05 THEN 1 ELSE 0 END AS energized
   FROM history h
 ),
 equipment_summary AS (

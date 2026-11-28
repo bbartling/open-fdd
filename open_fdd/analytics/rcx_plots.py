@@ -55,7 +55,7 @@ PRESETS: list[RcxPreset] = [
         "zone_comfort_rank",
         "Zones — comfort ranking (% time in band)",
         "Rank every zone-temp terminal by % of occupied time inside the comfort band.",
-        "zone-air-temp",
+        "zone_air_temperature",
         ZONE_TERMINAL_TYPES,
         "ranking",
         family="Zones / VAV",
@@ -64,7 +64,7 @@ PRESETS: list[RcxPreset] = [
         "zone_temps",
         "Zones — all space temps (timeseries)",
         "Space temperature for every zone-temp terminal (VAV, FCU, zone monitor, heat pump, baseboard).",
-        "zone-air-temp",
+        "zone_air_temperature",
         ZONE_TERMINAL_TYPES,
         "timeseries",
         family="Zones / VAV",
@@ -73,7 +73,7 @@ PRESETS: list[RcxPreset] = [
         "vav_flows",
         "Zones — all VAV airflow (timeseries)",
         "Zone airflow for zone terminals that model it.",
-        "zone-airflow",
+        "discharge_air_volume_flow_rate",
         ZONE_TERMINAL_TYPES,
         "timeseries",
         family="Zones / VAV",
@@ -82,7 +82,7 @@ PRESETS: list[RcxPreset] = [
         "vav_health_matrix",
         "Zones — VAV health (broken / comfort / rogue)",
         "Canonical vav_health_matrix_v1 cohort: three independent dimensions. Not a 60th FDD rule.",
-        "zone-air-temp",
+        "zone_air_temperature",
         ZONE_TERMINAL_TYPES,
         "ranking",
         family="Zones / VAV",
@@ -91,7 +91,7 @@ PRESETS: list[RcxPreset] = [
         "ahu_sat_reset_scatter",
         "AHU — SAT vs web dry-bulb (scatter)",
         "SAT / leave-air temp vs Open-Meteo dry bulb — look for SAT reset with outdoor air.",
-        "discharge-air-temp",
+        "discharge_air_temperature",
         ("AHU",),
         "scatter_oat",
         family="AHU / air",
@@ -100,7 +100,7 @@ PRESETS: list[RcxPreset] = [
         "ahu_dats",
         "AHU — all discharge air temps (timeseries)",
         "SAT / DAT for every AHU.",
-        "discharge-air-temp",
+        "discharge_air_temperature",
         ("AHU",),
         "timeseries",
         family="AHU / air",
@@ -109,7 +109,7 @@ PRESETS: list[RcxPreset] = [
         "ahu_mats",
         "AHU — all mixed air temps (timeseries)",
         "MAT across AHUs.",
-        "mixed-air-temp",
+        "mixed_air_temperature",
         ("AHU",),
         "timeseries",
         family="AHU / air",
@@ -118,7 +118,7 @@ PRESETS: list[RcxPreset] = [
         "ahu_rats",
         "AHU — all return air temps (timeseries)",
         "RAT across AHUs.",
-        "return-air-temp",
+        "return_air_temperature",
         ("AHU",),
         "timeseries",
         family="AHU / air",
@@ -127,7 +127,7 @@ PRESETS: list[RcxPreset] = [
         "ahu_dampers",
         "AHU — all OA dampers (timeseries)",
         "OA damper % across AHUs (preferred % companion for SAT/MAT/RAT views).",
-        "outside-air-damper",
+        "outdoor_air_intake_damper_position_command",
         ("AHU",),
         "timeseries",
         family="AHU / air",
@@ -136,7 +136,7 @@ PRESETS: list[RcxPreset] = [
         "ahu_cooling_valves",
         "AHU — all cooling valves (timeseries)",
         "Cooling valve % across AHUs — use with SAT/MAT temp charts (not fan command).",
-        "cooling-valve",
+        "cooling_valve_position_command",
         ("AHU",),
         "timeseries",
         family="AHU / air",
@@ -145,7 +145,7 @@ PRESETS: list[RcxPreset] = [
         "ahu_heating_valves",
         "AHU — all heating valves (timeseries)",
         "Heating valve % across AHUs — use with SAT/MAT temp charts (not fan command).",
-        "heating-valve",
+        "heating_valve_position_command",
         ("AHU",),
         "timeseries",
         family="AHU / air",
@@ -154,7 +154,7 @@ PRESETS: list[RcxPreset] = [
         "fan_speeds",
         "AHU — all fan speeds (timeseries)",
         "Fan command % across AHUs — pair with duct-static / FC1 pressure views, not SAT/MAT.",
-        "fan-cmd",
+        "supply_fan_command",
         ("AHU",),
         "timeseries",
         family="AHU / air",
@@ -163,7 +163,7 @@ PRESETS: list[RcxPreset] = [
         "duct_static_box",
         "AHU — duct static fan-on (box)",
         "Box plot of duct static while fan proven on — look for high fixed static (reset opportunity).",
-        "duct-static-pressure",
+        "discharge_air_static_pressure",
         ("AHU",),
         "box",
         filter_fan_on=True,
@@ -174,17 +174,17 @@ PRESETS: list[RcxPreset] = [
         "AHU — duct static + setpoint (timeseries)",
         "Duct static pressure over time per AHU, with the mapped setpoint as a companion trace — "
         "flat setpoint + high static while fan runs means a reset opportunity.",
-        "duct-static-pressure",
+        "discharge_air_static_pressure",
         ("AHU",),
         "timeseries",
         family="AHU / air",
-        overlay_role="duct-static-pressure-sp",
+        overlay_role="discharge_air_static_pressure_setpoint",
     ),
     RcxPreset(
         "hw_reset_scatter",
         "Boiler / HW — leave temp vs web dry-bulb (scatter)",
         "HW supply / leave temp vs Open-Meteo dry bulb (boiler / HW plant reset).",
-        "hot-water-supply-temp",
+        "supply_hot_water_temperature",
         ("BOILER",),
         "scatter_oat",
         family="Boiler / HW",
@@ -193,7 +193,7 @@ PRESETS: list[RcxPreset] = [
         "chw_reset_scatter",
         "Chiller / CHW — leave temp vs web dry-bulb (scatter)",
         "CHW supply / leave temp vs Open-Meteo dry bulb (chiller plant reset).",
-        "chilled-water-supply-temp",
+        "supply_chilled_water_temperature",
         ("CHW_PLANT", "CHILLER"),
         "scatter_oat",
         family="Chiller / CHW / tower",
@@ -202,10 +202,10 @@ PRESETS: list[RcxPreset] = [
         "cw_reset_scatter",
         "Tower / CW — leave temp vs wet-bulb + dry-bulb ref (scatter)",
         "CW supply vs wet-bulb (tower reset); dry-bulb shown as reference markers.",
-        "condenser-water-supply-temp",
+        "supply_condenser_water_temperature",
         ("CHW_PLANT", "CHILLER", "COOLING_TOWER"),
         "scatter_oat",
-        y_role_alt="web-outside-air-wetbulb",
+        y_role_alt="weather_service_air_wet_bulb_temperature",
         dry_bulb_ref=True,
         family="Chiller / CHW / tower",
     ),
@@ -214,22 +214,22 @@ PRESETS: list[RcxPreset] = [
         "Chiller / CHW — supply + return + ΔT (timeseries)",
         "CHW supply and return temps per chiller/plant with computed ΔT (return − supply) "
         "when both are mapped — low ΔT while pumps run is the classic low delta-T syndrome.",
-        "chilled-water-supply-temp",
+        "supply_chilled_water_temperature",
         ("CHW_PLANT", "CHILLER"),
         "timeseries",
         family="Chiller / CHW / tower",
-        pair_return_role="chilled-water-return-temp",
+        pair_return_role="return_chilled_water_temperature",
     ),
     RcxPreset(
         "cw_temps_ts",
         "Tower / CW — supply + return + ΔT (timeseries)",
         "Condenser/tower water supply and return temps per device with computed ΔT "
         "(return − supply) when both are mapped — watch tower approach and range.",
-        "condenser-water-supply-temp",
+        "supply_condenser_water_temperature",
         ("CHW_PLANT", "CHILLER", "COOLING_TOWER"),
         "timeseries",
         family="Chiller / CHW / tower",
-        pair_return_role="condenser-water-return-temp",
+        pair_return_role="return_condenser_water_temperature",
     ),
     RcxPreset(
         "meter_elec_cdd",
@@ -316,24 +316,24 @@ def _passes_equipment_types(
 def operating_mask(df: pd.DataFrame) -> tuple[pd.Series | None, str]:
     """Boolean mask when equipment looks running, plus proof role label.
 
-    AHU / fans: ``fan_status`` then ``fan_cmd``.
-    VAV / zones: ``zone_flow`` above a small activity threshold when fan roles absent.
+    AHU / fans: ``supply_fan_operating_status`` then ``supply_fan_command``.
+    VAV / zones: ``discharge_air_volume_flow_rate`` above a small activity threshold when fan roles absent.
     Returns ``(None, "")`` when no usable proof columns exist.
     """
-    for role in ("fan-status", "fan-cmd"):
+    for role in ("supply_fan_operating_status", "supply_fan_command"):
         if role in df.columns and df[role].notna().any():
             num = pd.to_numeric(df[role], errors="coerce")
             if num.notna().any():
                 scaled = num.where(num <= 1.5, num / 100.0)
                 return scaled.fillna(0) > 0.05, role
             return df[role].fillna(False).astype(bool), role
-    if "zone-airflow" in df.columns and df["zone-airflow"].notna().any():
-        flow = pd.to_numeric(df["zone-airflow"], errors="coerce")
+    if "discharge_air_volume_flow_rate" in df.columns and df["discharge_air_volume_flow_rate"].notna().any():
+        flow = pd.to_numeric(df["discharge_air_volume_flow_rate"], errors="coerce")
         if flow.notna().any():
             # CFM: treat near-zero as off; threshold scales with typical max when available
             p95 = float(flow.quantile(0.95)) if flow.notna().sum() >= 5 else float(flow.max())
             thr = max(10.0, 0.05 * p95) if np.isfinite(p95) else 10.0
-            return flow.fillna(0) > thr, "zone-airflow"
+            return flow.fillna(0) > thr, "discharge_air_volume_flow_rate"
     return None, ""
 
 
@@ -460,10 +460,10 @@ def fan_mode_summary_bundle(
     caption = ""
     if proof_labels:
         caption = "Operating proof: " + ", ".join(sorted(proof_labels))
-        if "zone-airflow" in proof_labels:
+        if "discharge_air_volume_flow_rate" in proof_labels:
             caption += " (VAV airflow used when fan roles absent)"
     else:
-        caption = "No fan_status / fan_cmd / zone_flow mapped — on/off slices empty"
+        caption = "No supply_fan_operating_status / supply_fan_command / discharge_air_volume_flow_rate mapped — on/off slices empty"
     return tables, caption
 
 
@@ -681,7 +681,7 @@ def zone_comfort_fail_ranking(
     for eq_id, raw in frames.items():
         mapped = apply_role_map(raw, eq_id, role_map)
         has_role = (
-            "zone-air-temp" in mapped.columns and mapped["zone-air-temp"].notna().sum() > 0
+            "zone_air_temperature" in mapped.columns and mapped["zone_air_temperature"].notna().sum() > 0
         )
         if not _passes_equipment_types(
             eq_id, raw, role_map, equipment_types, has_zone_role=has_role
@@ -689,7 +689,7 @@ def zone_comfort_fail_ranking(
             continue
         if not has_role:
             continue
-        zone = pd.to_numeric(mapped["zone-air-temp"], errors="coerce")
+        zone = pd.to_numeric(mapped["zone_air_temperature"], errors="coerce")
         if not isinstance(zone.index, pd.DatetimeIndex):
             continue
         occ = occupied_mask(zone.index, schedule).reindex(zone.index).fillna(False)
@@ -780,8 +780,8 @@ def collect_oat_scatter(
         if y_role not in mapped.columns or mapped[y_role].notna().sum() == 0:
             continue
         dry = prefer_web_oat(mapped, weather, prefer_web=True)
-        if x_prefer == "wetbulb" and weather is not None and "web-outside-air-wetbulb" in weather.columns:
-            oat = pd.to_numeric(weather["web-outside-air-wetbulb"], errors="coerce").reindex(mapped.index)
+        if x_prefer == "wetbulb" and weather is not None and "weather_service_air_wet_bulb_temperature" in weather.columns:
+            oat = pd.to_numeric(weather["weather_service_air_wet_bulb_temperature"], errors="coerce").reindex(mapped.index)
         else:
             oat = dry
         if oat is None:
@@ -870,7 +870,7 @@ def rcx_preset_coverage(
             row_count = int(rank["n_occupied"].sum()) if not rank.empty else 0
             outlier_count = int(rank["outlier"].sum()) if not rank.empty and "outlier" in rank.columns else 0
             if series_count == 0:
-                empty_reason = "no mapped zone_t on VAV during occupied hours"
+                empty_reason = "no mapped zone_air_temperature on VAV during occupied hours"
         elif preset.chart == "scatter_oat":
             x_pref = "wetbulb" if preset.id == "cw_reset_scatter" else "web"
             long_df = collect_oat_scatter(

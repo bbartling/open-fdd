@@ -23,11 +23,11 @@
             "equipment_id": "equipment-1",
             "hours": 165.0,
             "in_hours": 9.0,
-            "label": "equipment-1 \u00b7 fan-status",
+            "label": "equipment-1 \u00b7 supply_fan_operating_status",
             "motor_kind": "fan",
             "partial_week": false,
             "plant_group": "air",
-            "signal": "fan-status",
+            "signal": "supply_fan_operating_status",
             "week_label": "2026-03-02",
             "week_start": 1772431200000
           },
@@ -52,1005 +52,1005 @@
           "equipment_type": "AHU",
           "rows": [
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772431200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772434800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772438400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772442000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772445600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772449200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772452800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772456400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772460000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772463600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772467200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772470800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772474400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772478000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772481600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772485200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772488800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772492400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772496000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772499600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772503200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772506800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772510400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772514000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772517600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772521200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772524800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772528400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772532000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772535600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772539200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772542800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772546400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772550000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772553600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772557200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772560800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772564400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772568000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772571600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772575200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772578800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772582400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772586000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772589600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772593200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772596800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772600400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772604000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772607600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772614800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772618400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772622000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772625600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772629200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772632800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772636400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772640000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772643600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772647200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772650800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772654400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772658000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772661600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772665200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772668800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772672400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772676000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772679600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772683200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772686800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772690400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772694000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772697600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772701200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772704800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772708400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772712000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772715600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772719200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772722800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772726400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772730000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772733600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772737200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772740800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772744400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772748000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772751600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772755200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772758800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772762400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772766000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772769600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772773200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772776800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772780400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772784000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772787600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772791200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772794800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772798400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772802000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772805600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772809200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772812800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772816400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772820000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772823600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772827200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772830800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772834400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772838000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772841600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772845200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772848800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772852400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772856000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772859600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772863200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772866800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772870400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772874000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772877600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772881200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772884800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772888400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772892000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772895600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772899200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772902800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772906400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772910000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772913600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772917200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772920800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772924400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772928000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772931600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772935200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772938800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772942400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772946000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772949600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772953200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772956800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772960400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772964000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772967600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772971200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772974800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772978400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772982000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772985600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772989200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772992800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1772996400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1773000000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1773003600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1773007200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1773010800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1773014400000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1773018000000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1773021600000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1773025200000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1773028800000
             },
             {
-              "fan-cmd": 0.0,
-              "fan-status": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
+              "supply_fan_command": 0.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1773032400000
             }
           ]
@@ -1745,9 +1745,9 @@
       },
       "role_map": {
         "equipment-1": {
-          "fan-cmd": "fan-cmd",
-          "fan-status": "fan-status",
-          "outside-air-temp": "outside-air-temp"
+          "outdoor_air_intake_temperature": "outdoor_air_intake_temperature",
+          "supply_fan_command": "supply_fan_command",
+          "supply_fan_operating_status": "supply_fan_operating_status"
         },
         "equipment-2": {
           "hw-pump-cmd": "hw-pump-cmd"
@@ -1894,7 +1894,7 @@
             "equipment_type": "HP",
             "hours": 0.08,
             "proof_quality": "direct",
-            "proof_role": "compressor-status",
+            "proof_role": "compressor_operating_status",
             "runtime_hours": 0.08,
             "series_id": "equipment-2",
             "series_kind": "individual_device",
@@ -1912,7 +1912,7 @@
             "equipment_type": "HP",
             "hours": 0.25,
             "proof_quality": "direct",
-            "proof_role": "compressor-status",
+            "proof_role": "compressor_operating_status",
             "runtime_hours": 0.25,
             "series_id": "equipment-2",
             "series_kind": "individual_device",
@@ -1930,7 +1930,7 @@
             "equipment_type": "HP",
             "hours": 0.17,
             "proof_quality": "direct",
-            "proof_role": "compressor-status",
+            "proof_role": "compressor_operating_status",
             "runtime_hours": 0.17,
             "series_id": "equipment-2",
             "series_kind": "individual_device",
@@ -2054,80 +2054,80 @@
           "rows": [
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 8.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 8.0,
               "ts_ms": 1783296000000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 10.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 10.0,
               "ts_ms": 1783296300000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 12.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 12.0,
               "ts_ms": 1783296600000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 16.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 16.0,
               "ts_ms": 1783296900000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 18.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 18.0,
               "ts_ms": 1783297200000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 22.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 22.0,
               "ts_ms": 1783297500000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 26.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 26.0,
               "ts_ms": 1783297800000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 28.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 28.0,
               "ts_ms": 1783298100000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 30.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 30.0,
               "ts_ms": 1783298400000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 32.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 32.0,
               "ts_ms": 1783298700000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 34.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 34.0,
               "ts_ms": 1783299000000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 36.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 36.0,
               "ts_ms": 1783299300000
             },
             {
               "compressor-cmd": 100.0,
-              "compressor-status": 0.0,
-              "outside-air-temp": 38.0,
+              "compressor_operating_status": 0.0,
+              "outdoor_air_intake_temperature": 38.0,
               "ts_ms": 1783299600000
             }
           ]
@@ -2136,81 +2136,81 @@
           "equipment_type": "HP",
           "rows": [
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 0.0,
-              "outside-air-temp": 8.0,
+              "outdoor_air_intake_temperature": 8.0,
               "ts_ms": 1783296000000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 0.0,
-              "outside-air-temp": 10.0,
+              "outdoor_air_intake_temperature": 10.0,
               "ts_ms": 1783296300000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 0.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
               "ts_ms": 1783296600000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 0.0,
-              "outside-air-temp": 16.0,
+              "outdoor_air_intake_temperature": 16.0,
               "ts_ms": 1783296900000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 0.0,
-              "outside-air-temp": 18.0,
+              "outdoor_air_intake_temperature": 18.0,
               "ts_ms": 1783297200000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 0.0,
-              "outside-air-temp": 22.0,
+              "outdoor_air_intake_temperature": 22.0,
               "ts_ms": 1783297500000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 1.0,
-              "outside-air-temp": 26.0,
+              "outdoor_air_intake_temperature": 26.0,
               "ts_ms": 1783297800000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 1.0,
-              "outside-air-temp": 28.0,
+              "outdoor_air_intake_temperature": 28.0,
               "ts_ms": 1783298100000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 1.0,
-              "outside-air-temp": 30.0,
+              "outdoor_air_intake_temperature": 30.0,
               "ts_ms": 1783298400000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 1.0,
-              "outside-air-temp": 32.0,
+              "outdoor_air_intake_temperature": 32.0,
               "ts_ms": 1783298700000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 1.0,
-              "outside-air-temp": 34.0,
+              "outdoor_air_intake_temperature": 34.0,
               "ts_ms": 1783299000000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 1.0,
-              "outside-air-temp": 36.0,
+              "outdoor_air_intake_temperature": 36.0,
               "ts_ms": 1783299300000
             },
             {
-              "compressor-status": 1.0,
+              "compressor_operating_status": 1.0,
               "heat-pump-cooling-status": 1.0,
-              "outside-air-temp": 38.0,
+              "outdoor_air_intake_temperature": 38.0,
               "ts_ms": 1783299600000
             }
           ]
@@ -2221,79 +2221,79 @@
             {
               "compressor-stage-1": 0.0,
               "compressor-stage-2": 1.0,
-              "outside-air-temp": 8.0,
+              "outdoor_air_intake_temperature": 8.0,
               "ts_ms": 1783296000000
             },
             {
               "compressor-stage-1": 1.0,
               "compressor-stage-2": 0.0,
-              "outside-air-temp": 10.0,
+              "outdoor_air_intake_temperature": 10.0,
               "ts_ms": 1783296300000
             },
             {
               "compressor-stage-1": 0.0,
               "compressor-stage-2": 1.0,
-              "outside-air-temp": 12.0,
+              "outdoor_air_intake_temperature": 12.0,
               "ts_ms": 1783296600000
             },
             {
               "compressor-stage-1": 1.0,
               "compressor-stage-2": 0.0,
-              "outside-air-temp": 16.0,
+              "outdoor_air_intake_temperature": 16.0,
               "ts_ms": 1783296900000
             },
             {
               "compressor-stage-1": 0.0,
               "compressor-stage-2": 1.0,
-              "outside-air-temp": 18.0,
+              "outdoor_air_intake_temperature": 18.0,
               "ts_ms": 1783297200000
             },
             {
               "compressor-stage-1": 1.0,
               "compressor-stage-2": 0.0,
-              "outside-air-temp": 22.0,
+              "outdoor_air_intake_temperature": 22.0,
               "ts_ms": 1783297500000
             },
             {
               "compressor-stage-1": 0.0,
               "compressor-stage-2": 1.0,
-              "outside-air-temp": 26.0,
+              "outdoor_air_intake_temperature": 26.0,
               "ts_ms": 1783297800000
             },
             {
               "compressor-stage-1": 1.0,
               "compressor-stage-2": 0.0,
-              "outside-air-temp": 28.0,
+              "outdoor_air_intake_temperature": 28.0,
               "ts_ms": 1783298100000
             },
             {
               "compressor-stage-1": 0.0,
               "compressor-stage-2": 1.0,
-              "outside-air-temp": 30.0,
+              "outdoor_air_intake_temperature": 30.0,
               "ts_ms": 1783298400000
             },
             {
               "compressor-stage-1": 1.0,
               "compressor-stage-2": 0.0,
-              "outside-air-temp": 32.0,
+              "outdoor_air_intake_temperature": 32.0,
               "ts_ms": 1783298700000
             },
             {
               "compressor-stage-1": 0.0,
               "compressor-stage-2": 1.0,
-              "outside-air-temp": 34.0,
+              "outdoor_air_intake_temperature": 34.0,
               "ts_ms": 1783299000000
             },
             {
               "compressor-stage-1": 1.0,
               "compressor-stage-2": 0.0,
-              "outside-air-temp": 36.0,
+              "outdoor_air_intake_temperature": 36.0,
               "ts_ms": 1783299300000
             },
             {
               "compressor-stage-1": 0.0,
               "compressor-stage-2": 1.0,
-              "outside-air-temp": 38.0,
+              "outdoor_air_intake_temperature": 38.0,
               "ts_ms": 1783299600000
             }
           ]
@@ -2303,18 +2303,18 @@
       "role_map": {
         "equipment-1": {
           "compressor-cmd": "compressor-cmd",
-          "compressor-status": "compressor-status",
-          "outside-air-temp": "outside-air-temp"
+          "compressor_operating_status": "compressor_operating_status",
+          "outdoor_air_intake_temperature": "outdoor_air_intake_temperature"
         },
         "equipment-2": {
-          "compressor-status": "compressor-status",
+          "compressor_operating_status": "compressor_operating_status",
           "heat-pump-cooling-status": "heat-pump-cooling-status",
-          "outside-air-temp": "outside-air-temp"
+          "outdoor_air_intake_temperature": "outdoor_air_intake_temperature"
         },
         "equipment-3": {
           "compressor-stage-1": "compressor-stage-1",
           "compressor-stage-2": "compressor-stage-2",
-          "outside-air-temp": "outside-air-temp"
+          "outdoor_air_intake_temperature": "outdoor_air_intake_temperature"
         }
       },
       "tool": "mech_cooling_oat_bins"
@@ -2360,120 +2360,120 @@
           "equipment_type": "AHU",
           "rows": [
             {
-              "fan-status": 1.0,
-              "mixed-air-temp": null,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": null,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783296000000
             },
             {
-              "fan-status": 1.0,
-              "mixed-air-temp": 19.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": 19.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783296300000
             },
             {
-              "fan-status": 1.0,
-              "mixed-air-temp": 19.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": 19.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783296600000
             },
             {
-              "fan-status": 1.0,
-              "mixed-air-temp": 19.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": 19.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783296900000
             },
             {
-              "fan-status": 1.0,
-              "mixed-air-temp": null,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": null,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783297200000
             },
             {
-              "fan-status": 1.0,
-              "mixed-air-temp": 19.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": 19.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783297500000
             },
             {
-              "fan-status": 1.0,
-              "mixed-air-temp": 19.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": 19.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783297800000
             },
             {
-              "fan-status": 1.0,
-              "mixed-air-temp": 19.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": 19.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783298100000
             },
             {
-              "fan-status": 1.0,
-              "mixed-air-temp": null,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": null,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783298400000
             },
             {
-              "fan-status": 1.0,
-              "mixed-air-temp": 19.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": 19.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783298700000
             },
             {
-              "fan-status": 0.0,
-              "mixed-air-temp": 19.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": 19.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 0.0,
               "ts_ms": 1783299000000
             },
             {
-              "fan-status": 0.0,
-              "mixed-air-temp": 19.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": 19.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 0.0,
               "ts_ms": 1783299300000
             },
             {
-              "fan-status": 0.0,
-              "mixed-air-temp": null,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "mixed_air_temperature": null,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 0.0,
               "ts_ms": 1783299600000
             }
           ]
         }
       },
-      "id": "economizer-percent-damper-mat-holes",
+      "id": "economizer-percent-damper-mixed_air_temperature-holes",
       "role_map": {
         "equipment-1": {
-          "fan-status": "fan-status",
-          "mixed-air-temp": "mixed-air-temp",
-          "outside-air-damper": "outside-air-damper",
-          "outside-air-temp": "outside-air-temp",
-          "return-air-temp": "return-air-temp"
+          "mixed_air_temperature": "mixed_air_temperature",
+          "outdoor_air_intake_damper_position_command": "outdoor_air_intake_damper_position_command",
+          "outdoor_air_intake_temperature": "outdoor_air_intake_temperature",
+          "return_air_temperature": "return_air_temperature",
+          "supply_fan_operating_status": "supply_fan_operating_status"
         }
       },
       "tool": "economizer_free_cooling_diagnostics"
@@ -2509,106 +2509,106 @@
           "equipment_type": "AHU",
           "rows": [
             {
-              "fan-status": 1.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783296000000
             },
             {
-              "fan-status": 1.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783296300000
             },
             {
-              "fan-status": 1.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783296600000
             },
             {
-              "fan-status": 1.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783296900000
             },
             {
-              "fan-status": 1.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783297200000
             },
             {
-              "fan-status": 1.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783297500000
             },
             {
-              "fan-status": 1.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783297800000
             },
             {
-              "fan-status": 1.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783298100000
             },
             {
-              "fan-status": 1.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783298400000
             },
             {
-              "fan-status": 1.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 1.0,
               "ts_ms": 1783298700000
             },
             {
-              "fan-status": 0.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 0.0,
               "ts_ms": 1783299000000
             },
             {
-              "fan-status": 0.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 0.0,
               "ts_ms": 1783299300000
             },
             {
-              "fan-status": 0.0,
-              "outside-air-damper": 25.0,
-              "outside-air-temp": 10.0,
-              "return-air-temp": 22.0,
+              "outdoor_air_intake_damper_position_command": 25.0,
+              "outdoor_air_intake_temperature": 10.0,
+              "return_air_temperature": 22.0,
+              "supply_fan_operating_status": 0.0,
               "ts_ms": 1783299600000
             }
           ]
         }
       },
-      "id": "economizer-missing-mat",
+      "id": "economizer-missing-mixed_air_temperature",
       "role_map": {
         "equipment-1": {
-          "fan-status": "fan-status",
-          "outside-air-damper": "outside-air-damper",
-          "outside-air-temp": "outside-air-temp",
-          "return-air-temp": "return-air-temp"
+          "outdoor_air_intake_damper_position_command": "outdoor_air_intake_damper_position_command",
+          "outdoor_air_intake_temperature": "outdoor_air_intake_temperature",
+          "return_air_temperature": "return_air_temperature",
+          "supply_fan_operating_status": "supply_fan_operating_status"
         }
       },
       "tool": "economizer_free_cooling_diagnostics"
@@ -2630,151 +2630,151 @@
           "equipment_type": "AHU",
           "rows": [
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783296000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783296600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783297200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783297800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783298400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783299000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783299600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783300200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783300800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783301400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783302000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783302600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783303200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783303800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783304400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783305000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783305600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783306200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783306800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783307400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783308000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783308600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783309200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783309800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783310400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783311000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783311600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783312200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783312800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783313400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783314000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783314600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783315200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783315800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783316400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783317000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783317600000
             }
           ]
@@ -2786,7 +2786,7 @@
       },
       "role_map": {
         "equipment-1": {
-          "outside-air-temp": "outside-air-temp"
+          "outdoor_air_intake_temperature": "outdoor_air_intake_temperature"
         }
       },
       "tool": "bas_vs_web_oat_stats",
@@ -2862,151 +2862,151 @@
           "equipment_type": "AHU",
           "rows": [
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783296000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783296600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783297200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783297800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783298400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783299000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783299600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783300200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783300800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783301400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783302000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783302600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783303200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783303800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783304400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783305000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783305600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783306200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783306800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783307400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783308000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783308600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783309200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783309800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783310400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783311000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783311600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783312200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783312800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783313400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783314000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783314600000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783315200000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783315800000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783316400000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783317000000
             },
             {
-              "outside-air-temp": 21.5,
+              "outdoor_air_intake_temperature": 21.5,
               "ts_ms": 1783317600000
             }
           ]
@@ -3018,7 +3018,7 @@
       },
       "role_map": {
         "equipment-1": {
-          "outside-air-temp": "outside-air-temp"
+          "outdoor_air_intake_temperature": "outdoor_air_intake_temperature"
         }
       },
       "tool": "bas_vs_web_oat_stats",

@@ -195,19 +195,19 @@ test("fixture: two sites, same Haystack AHU-1, distinct uuids / siteRef / tz / d
   assert.deepEqual([A.siteRec.attrs.tz, B.siteRec.attrs.tz], ["America/Chicago", "America/New_York"]);
   const uuids = fx.records.points.map((r) => r.uuid);
   assert.equal(new Set(uuids).size, uuids.length, "no point uuid shared across sites");
-  for (const role of ["fan_status", "oa_t", "compressor_status"]) assert.notEqual(A.points[role].uuid, B.points[role].uuid);
-  assert.equal(A.points.oa_t.attrs.unit, "°C");
-  assert.equal(B.points.oa_t.attrs.unit, "°F");
-  assert.equal(A.points.fan_status.attrs.class, "discharge-run-sensor");
-  assert.equal(A.points.fan_status.attrs.kind, "Bool");
-  assert.equal(A.points.fan_cmd.attrs.unit, "%");
+  for (const role of ["supply_fan_operating_status", "outdoor_air_intake_temperature", "compressor_operating_status"]) assert.notEqual(A.points[role].uuid, B.points[role].uuid);
+  assert.equal(A.points.outdoor_air_intake_temperature.attrs.unit, "°C");
+  assert.equal(B.points.outdoor_air_intake_temperature.attrs.unit, "°F");
+  assert.equal(A.points.supply_fan_operating_status.attrs.class, "discharge-run-sensor");
+  assert.equal(A.points.supply_fan_operating_status.attrs.kind, "Bool");
+  assert.equal(A.points.supply_fan_command.attrs.unit, "%");
   assert.ok(A.points.occ.attrs.markers.split(",").includes("occ"));
   // imperial site: declared degF values convert to the SI series exactly
-  for (const role of ["oa_t", "mat", "rat"]) {
+  for (const role of ["outdoor_air_intake_temperature", "mixed_air_temperature", "return_air_temperature"]) {
     B.series[role].forEach(([, v], i) => { if (v != null) near(U.toSI(v, "°F").value, B.si[role][i], `${role} degF -> degC`, 1e-9); });
   }
-  assert.ok(B.series.oa_t.some(([, v]) => v > 45), "site-b stores Fahrenheit numbers");
-  assert.ok(A.series.oa_t.every(([, v]) => v < 25), "site-a stores Celsius numbers");
+  assert.ok(B.series.outdoor_air_intake_temperature.some(([, v]) => v > 45), "site-b stores Fahrenheit numbers");
+  assert.ok(A.series.outdoor_air_intake_temperature.every(([, v]) => v < 25), "site-a stores Celsius numbers");
   // models
   assert.equal(fx.model.points.filter((p) => p.siteRef === "site-a" && p.equipRef === "AHU-1").length, 9);
 });
@@ -226,11 +226,11 @@ test("fixture truth: planted events match their authored numbers", () => {
   assert.equal(ta.planted.pulse.samples, 14);
   near(ta.planted.pulse.hours, 70 / 60, "pulse hours");
   assert.equal(ta.planted.holiday.fanHours, 10);
-  // fan_status gap: 36 null samples; the 185 min interval over the 3600 s cap is dropped, so 3 h 5 min of running time is lost
+  // supply_fan_operating_status gap: 36 null samples; the 185 min interval over the 3600 s cap is dropped, so 3 h 5 min of running time is lost
   assert.equal(ta.planted.fanStatusGap.samples, 36);
   near(ta.weeks[2].inScheduleHours, 50 - 185 / 60, "gap week in-schedule hours");
   assert.equal(ta.planted.matGap.samples, 24);
-  // fault week: fan_status 0 for 90 min inside the schedule
+  // fault week: supply_fan_operating_status 0 for 90 min inside the schedule
   near(ta.weeks[3].inScheduleHours, 50 - 1.5, "fault week in-schedule hours");
   // site-b is exactly 07-17 Mon-Fri, no gaps
   for (const w of tb.weeks) near(w.runHours, 50, "site-b run hours");
@@ -260,8 +260,8 @@ test("fixture truth: schedule.js reproduces the fixture's after-hours split on t
     const occ = (ms) => S.occupied(sched, ms, site.tz);
     TRUTH[id].weeks.forEach((w, k) => {
       const inWeek = (ms) => ms >= w.startMs && ms < (site.weekStarts[k + 1] ?? site.endMs);
-      near(hoursOn(site.series.fan_status, { where: (ms) => inWeek(ms) && occ(ms) }), w.inScheduleHours, `${id} in-schedule week ${k}`);
-      near(hoursOn(site.series.fan_status, { where: (ms) => inWeek(ms) && !occ(ms) }), w.afterHoursHours, `${id} after-hours week ${k}`);
+      near(hoursOn(site.series.supply_fan_operating_status, { where: (ms) => inWeek(ms) && occ(ms) }), w.inScheduleHours, `${id} in-schedule week ${k}`);
+      near(hoursOn(site.series.supply_fan_operating_status, { where: (ms) => inWeek(ms) && !occ(ms) }), w.afterHoursHours, `${id} after-hours week ${k}`);
       near(S.weeklyScheduleHours(sched, w.startMs, site.tz), w.scheduleHours, `${id} schedule hours week ${k}`);
     });
   }
@@ -278,14 +278,14 @@ test("fixture truth: coarse display grids distort the short events, the fine gri
     const win = pickWindow(hours), end = A.endMs;
     const to = Math.ceil(end / (win * 1000)) * win * 1000, from = to - hours * 3600e3;
     const rs = (role) => new Map(resample(A.series[role], from, to, win, "AVERAGE"));
-    const comp = rs("compressor_status"), oat = rs("oa_t");
+    const comp = rs("compressor_operating_status"), oat = rs("outdoor_air_intake_temperature");
     const t = [...comp.keys()].sort((x, y) => x - y);
     return coolingBins(t, t.map((k) => comp.get(k)), t.map((k) => oat.get(k)), { capSec: Math.max(3600, 1.5 * win) });
   };
   near(TRUTH["site-a"].cooling.binHours[0], 1 / 3, "fine <10 bin");
   assert.ok(binsAt(672)[0] < 1e-9, "28 d display grid loses the event from the <10 bin: " + binsAt(672)[0]);
   // 2 h average of the fan pulse stretches it to a whole bucket (analog-style on-test: any average > 0.05 = on)
-  const pulse = A.series.fan_status;
+  const pulse = A.series.supply_fan_operating_status;
   const coarse = resample(pulse, A.weekStarts[0], A.weekStarts[1], 7200, "AVERAGE");
   const pulseDay = coarse.filter(([ms]) => ms >= wall(2026, 10, 14, 21, 0, "America/Chicago") && ms < wall(2026, 10, 15, 3, 0, "America/Chicago"));
   assert.ok(pulseDay.filter(([, v]) => v > 0.05).length * 2 > 70 / 60 + 0.5, "coarse buckets overstate the pulse");
@@ -299,7 +299,7 @@ test("fixture helpers: lane is 1 / 0 / null (never fault_pct > 0); rolling pct d
   assert.equal(at(f.clearedMs - 300e3), 1);
   assert.equal(at(f.clearedMs), 0);
   const gapStart = TRUTH["site-a"].planted.fanStatusGap.startMs;
-  assert.equal(at(gapStart), null, "fan_status null = not assessed, not ok");
+  assert.equal(at(gapStart), null, "supply_fan_operating_status null = not assessed, not ok");
   assert.equal(at(gapStart + 35 * 300e3), null);
   assert.equal(at(gapStart + 36 * 300e3), 0);
   assert.equal(lane.filter(([, v]) => v === null).length, 36);
@@ -316,17 +316,17 @@ test("fixture helpers: lane is 1 / 0 / null (never fault_pct > 0); rolling pct d
 
 test("fixture accessors: fetchSeries stub, fake sdk.http, schedules endpoint", async () => {
   const stub = fetchSeriesStub(fx, { nowMs: A.endMs });
-  const got = await stub([A.points.fan_status, B.points.fan_status].map((r) => ({ uuid: r.uuid })), 168, { windowSec: 300 });
-  assert.equal(got.get(A.points.fan_status.uuid).length, 168 * 12 - 0, "native 5 min, last 7 days; nulls dropped (gap is on 10-27, earlier)");
-  assert.notDeepEqual(got.get(A.points.fan_status.uuid), got.get(B.points.fan_status.uuid));
-  const coarse = await stub([{ uuid: A.points.oa_t.uuid }], 168);
-  assert.equal(coarse.get(A.points.oa_t.uuid)[1][0] - coarse.get(A.points.oa_t.uuid)[0][0], 1800e3, "pickWindow(168) = 30 min");
+  const got = await stub([A.points.supply_fan_operating_status, B.points.supply_fan_operating_status].map((r) => ({ uuid: r.uuid })), 168, { windowSec: 300 });
+  assert.equal(got.get(A.points.supply_fan_operating_status.uuid).length, 168 * 12 - 0, "native 5 min, last 7 days; nulls dropped (gap is on 10-27, earlier)");
+  assert.notDeepEqual(got.get(A.points.supply_fan_operating_status.uuid), got.get(B.points.supply_fan_operating_status.uuid));
+  const coarse = await stub([{ uuid: A.points.outdoor_air_intake_temperature.uuid }], 168);
+  assert.equal(coarse.get(A.points.outdoor_air_intake_temperature.uuid)[1][0] - coarse.get(A.points.outdoor_air_intake_temperature.uuid)[0][0], 1800e3, "pickWindow(168) = 30 min");
   const http = fakeSdkHttp(fx, { nowMs: A.endMs });
   const m = await http.post("/api/v1/point/query", { layer: "model" });
   assert.equal(m.data.points.filter((r) => r.pointType === "EQUIPMENT").length, 2);
   const pa = await http.post("/api/v1/point/query", { layer: "default", structuredQuery: { field: { property: "siteRef", text: "site-a" } } });
   assert.ok(pa.data.points.every((r) => r.attrs.siteRef === "site-a"));
-  const q = `uuids=${A.points.fan_status.uuid}&from=${new Date(A.endMs - 86400e3).toISOString()}&to=${new Date(A.endMs).toISOString()}&window=300s&method=AVERAGE`;
+  const q = `uuids=${A.points.supply_fan_operating_status.uuid}&from=${new Date(A.endMs - 86400e3).toISOString()}&to=${new Date(A.endMs).toISOString()}&window=300s&method=AVERAGE`;
   const d = await http.get("/api/v1/point/data?" + q);
   assert.equal(d.data.data[0].values.length, 288);
   assert.equal(typeof d.data.data[0].values[0].double, "number");

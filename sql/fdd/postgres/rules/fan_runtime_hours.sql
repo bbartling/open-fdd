@@ -1,7 +1,7 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- fan_runtime_hours.sql
--- Fan runtime integrates the forward delta while fan_cmd > 0.05.
+-- Fan runtime integrates the forward delta while supply_fan_command > 0.5.
 -- A gap longer than MAX_GAP_HOURS is unknown and is omitted from both totals.
 -- The last sample does not invent a trailing interval.
 
@@ -9,7 +9,7 @@ WITH ordered AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    fan_cmd AS fan_cmd,
+    supply_fan_command AS supply_fan_command,
     EXTRACT(EPOCH FROM (
       LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
       - timestamp_utc
@@ -19,7 +19,7 @@ WITH ordered AS (
 held AS (
   SELECT
     equipment_id,
-    fan_cmd,
+    supply_fan_command,
     CASE
       WHEN dt_seconds IS NULL OR dt_seconds <= 0.0 OR dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
       THEN 0.0
@@ -29,7 +29,7 @@ held AS (
 )
 SELECT
   equipment_id,
-  SUM(CASE WHEN fan_cmd > 0.05 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fan_runtime_hours,
-  SUM(CASE WHEN fan_cmd IS NOT NULL THEN held_seconds ELSE 0.0 END) / 3600.0 AS total_hours
+  SUM(CASE WHEN supply_fan_command > 0.5 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fan_runtime_hours,
+  SUM(CASE WHEN supply_fan_command IS NOT NULL THEN held_seconds ELSE 0.0 END) / 3600.0 AS total_hours
 FROM held
 GROUP BY equipment_id;

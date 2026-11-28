@@ -10,8 +10,8 @@ WITH modes AS (
     equipment_id,
     timestamp_utc,
     CASE
-      WHEN clg_valve_pct IS NOT NULL AND clg_valve_pct > {{MODE_VALVE_MIN}} THEN -1
-      WHEN htg_valve_pct IS NOT NULL AND htg_valve_pct > {{MODE_VALVE_MIN}} THEN 1
+      WHEN cooling_valve_position_command IS NOT NULL AND cooling_valve_position_command > {{MODE_VALVE_MIN}} THEN -1
+      WHEN heating_valve_position_command IS NOT NULL AND heating_valve_position_command > {{MODE_VALVE_MIN}} THEN 1
       ELSE 0
     END AS mode,
     EXTRACT(EPOCH FROM (

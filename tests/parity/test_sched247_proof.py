@@ -40,8 +40,8 @@ def duck():
 
     for case in CASES:
         con.executemany(
-            "INSERT INTO history (equipment_id, timestamp_utc, fan_status, fan_cmd) VALUES (?, ?, ?, ?)",
-            [(case["equipment_id"], datetime.fromtimestamp(r["ts"] / 1000, tz=timezone.utc), r["fan_status"], r["fan_cmd"])
+            "INSERT INTO history (equipment_id, timestamp_utc, supply_fan_operating_status, supply_fan_command) VALUES (?, ?, ?, ?)",
+            [(case["equipment_id"], datetime.fromtimestamp(r["ts"] / 1000, tz=timezone.utc), r["supply_fan_operating_status"], r["supply_fan_command"])
              for r in case["rows"]],
         )
     rule = PACK["rules"]["SCHED-247"]
@@ -58,7 +58,7 @@ def duck():
 def _pandas(case):
     df = pd.DataFrame(case["rows"])
     df.index = pd.to_datetime(df.pop("ts"), unit="ms", utc=True)
-    df = df.rename(columns={"fan_status": "fan-status", "fan_cmd": "fan-cmd"}).astype(float)
+    df = df.rename(columns={"supply_fan_operating_status": "supply_fan_operating_status", "supply_fan_command": "supply_fan_command"}).astype(float)
     df.attrs["equipment_id"] = case["equipment_id"]
     df.attrs["equipment_type"] = "ahu"
     return run_rule("SCHED-247", df, params=PARAMS)

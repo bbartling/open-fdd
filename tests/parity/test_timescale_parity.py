@@ -39,8 +39,8 @@ def summary(verdict) -> dict:
 
 
 def test_baseline_file_is_the_documented_verdict():
-    assert [d["verdict"] for d in _BASE] == [{"compared": 77, "matched": 61, "known_divergent": 16, "unexpected": 0},
-                                             {"compared": 77, "matched": 64, "known_divergent": 13, "unexpected": 0}]
+    assert [d["verdict"] for d in _BASE] == [{"compared": 77, "matched": 60, "known_divergent": 17, "unexpected": 0},
+                                             {"compared": 77, "matched": 62, "known_divergent": 15, "unexpected": 0}]
 
 
 def test_baseline_verdict_on_pglite(ds):
@@ -68,7 +68,7 @@ def test_core_rows_describe_the_dataset(ds):
     for _site, key, ts, value in samples:
         by_key.setdefault(key, {})[ts] = value
     for row in ds.history[:50]:
-        for column in ("sat", "oa_t", "fan_status"):
+        for column in ("discharge_air_temperature", "outdoor_air_intake_temperature", "supply_fan_operating_status"):
             v = row.get(column)
             assert (by_key.get(f"{row['equipment_id']}/{column}", {}).get(row["ts"])) == v
 

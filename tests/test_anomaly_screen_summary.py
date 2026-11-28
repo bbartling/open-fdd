@@ -30,16 +30,16 @@ def _folder(tmp_path):
     rng = np.random.default_rng(11)
     n = 3 * 288
     idx = pd.date_range("2026-01-05", periods=n, freq="5min", tz="UTC")
-    sat = 13 + rng.normal(0, 0.3, n)
+    discharge_air_temperature = 13 + rng.normal(0, 0.3, n)
     spike = int((pd.Timestamp("2026-01-07T03:00Z") - idx[0]) / pd.Timedelta(minutes=5))
-    sat[spike : spike + 3] = 25.0  # 03:00 UTC on Jan 7 is 21:00 on Jan 6 in Chicago
+    discharge_air_temperature[spike : spike + 3] = 25.0  # 03:00 UTC on Jan 7 is 21:00 on Jan 6 in Chicago
     folder = tmp_path / "AHU_1"
     folder.mkdir()
-    pd.DataFrame({"timestamp_utc": idx.strftime("%Y-%m-%dT%H:%M:%SZ"), "SAT": sat, "FAN": 1.0}).to_csv(
+    pd.DataFrame({"timestamp_utc": idx.strftime("%Y-%m-%dT%H:%M:%SZ"), "SAT": discharge_air_temperature, "FAN": 1.0}).to_csv(
         folder / "history_wide.csv", index=False
     )
     (folder / "column_map.json").write_text(
-        json.dumps({"equipType": "AHU", "points": {"sat": "SAT", "fan_status": "FAN"}}), encoding="utf-8"
+        json.dumps({"equipType": "AHU", "points": {"discharge_air_temperature": "SAT", "supply_fan_operating_status": "FAN"}}), encoding="utf-8"
     )
     return folder
 
@@ -67,7 +67,7 @@ def test_json_stdout_no_plots_and_local_days(tmp_path, capsys):
     assert sum(w["minutes"] for w in row["windows"]) == row["anomaly_minutes"]
     assert row["minutes_by_day"]["2026-01-06"] >= 15.0
     assert "2026-01-06" in printed["days_by_point"]["SAT"]
-    assert printed["flagged_points"] == ["SAT"] and printed["activity"]["proof_source"] == "fan-status"
+    assert printed["flagged_points"] == ["SAT"] and printed["activity"]["proof_source"] == "supply_fan_operating_status"
     assert "**America/Chicago**" in (out / "README.md").read_text(encoding="utf-8")
 
     utc = tmp_path / "utc"

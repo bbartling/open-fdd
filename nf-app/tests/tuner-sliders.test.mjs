@@ -67,7 +67,7 @@ test("every rule groups its controls: at most one duration, gates last, motor st
       assert.ok(groups[gates].keys.includes("require_run_proof"));
     }
   }
-  assert.deepEqual(rt.groupControls(tpls.FC2.controls).map((g) => g.id), ["duration", "thresholds", "tolerances", "gates"]);
+  assert.deepEqual(rt.groupControls(tpls.FC2.controls).map((g) => g.id), ["duration", "tolerances", "gates"]);
 });
 
 test("every shipped default survives snapToStep, including the 1.15 degF tolerances off the grid (#1726)", () => {
@@ -106,7 +106,7 @@ test("the panel renders grouped sliders and the motor-status checkbox after them
   await open("FC1");
   const html = panel();
   const at = (g) => html.indexOf(`data-group="${g}"`);
-  assert.ok(at("duration") >= 0 && at("thresholds") > at("duration") && at("gates") > at("thresholds"));
+  assert.ok(at("duration") >= 0 && at("tolerances") > at("duration") && at("gates") > at("tolerances"));
   for (const [key, ctrl] of Object.entries(tpls.FC1.controls)) {
     if (ctrl.kind === "boolean") assert.match(html, new RegExp(`type="checkbox" data-param-bool="${key}"`));
     else assert.match(html, new RegExp(`type="range"[^>]*data-param-range="${key}"[^>]*min="${ctrl.min}" max="${ctrl.max}" step="${ctrl.step}"`));

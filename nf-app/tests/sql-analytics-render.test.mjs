@@ -23,7 +23,7 @@ const plan = {
   gates: [["HP-1", "HP-1/mode"]],
   oats: [["CH-1", "CH-1/oat"]],
 };
-const roles = [["AHU-1", "fan", "AHU-1/f"], ["AHU-1", "oat", "AHU-1/o"], ["AHU-1", "damper", "AHU-1/d"]];
+const roles = [["AHU-1", "fan", "AHU-1/f"], ["AHU-1", "oat", "AHU-1/o"], ["AHU-1", "damper_position", "AHU-1/d"]];
 const pairs = [["AHU-1", "AHU-1/oat", "web", 5400000], ["AHU-2", "AHU-2/oat", "web", 1800000]];
 
 test("pyRepr matches Python repr for the floats the renderers emit", () => {

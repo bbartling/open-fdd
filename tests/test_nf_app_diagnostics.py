@@ -230,8 +230,8 @@ def test_computed_results_fresh_pass():
 
 
 def test_frozen_computed_results_with_fresh_raw_fail_and_name_the_stale_reasons():
-    pts = [raw_point(2), result_point(19 * 60, "stale", "required roles missing (fan_cmd)"),
-           result_point(19 * 60, "stale", "required roles missing (sat)", uuid="res-2"),
+    pts = [raw_point(2), result_point(19 * 60, "stale", "required roles missing (supply_fan_command)"),
+           result_point(19 * 60, "stale", "required roles missing (discharge_air_temperature)", uuid="res-2"),
            {"uuid": "tl", "attrs": {"markers": "point,his,fault_timeline", "ruleRef": "FC1", "fddKind": "fault-timeline",
                                     "fddTimelineThrough": iso(19 * 60)}, "latestValue": {"ts": iso(19 * 60)}}]
     lvl, text = sync.fdd_freshness(Pts(pts), 3600, NOW)

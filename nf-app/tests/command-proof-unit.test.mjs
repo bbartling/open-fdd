@@ -96,10 +96,10 @@ test("hook: the skip reason and the log carry the refusal", async () => {
     async close() {},
   });
   const logs = [];
-  const pack = { poll_seconds: STEP, contract: { history: ["equipment_id", "timestamp_utc", "sat", "sat_sp", "fan_cmd", "run_proof"]
+  const pack = { poll_seconds: STEP, contract: { history: ["equipment_id", "timestamp_utc", "discharge_air_temperature", "discharge_air_temperature_setpoint", "supply_fan_command", "operating_status"]
     .map((name) => ({ name, type: name === "equipment_id" ? "text" : name === "timestamp_utc" ? "timestamp" : "double" })) },
     rules: { "AHU-SATDEV": { sql: "-", output_columns: ["equipment_id", "fault_hours", "covered_hours", "fault_pct"] } } };
   const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: {}, pack, createEngine: engine(), now: NOW });
   assert.equal(summary.no_run_proof, 1, logs.join("\n"));
-  assert.ok(logs.some((l) => /run proof candidate AHU-1\/.* \(fan_cmd\) not used: .*analog output with no unit/.test(l)), logs.join("\n"));
+  assert.ok(logs.some((l) => /run proof candidate AHU-1\/.* \(supply_fan_command\) not used: .*analog output with no unit/.test(l)), logs.join("\n"));
 });

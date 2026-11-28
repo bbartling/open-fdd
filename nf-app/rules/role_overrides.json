@@ -1,631 +1,5 @@
 {
- "run_proof": {
-  "classes": [],
-  "markers": []
- },
- "_doc": "How each Open-FDD rule role (sql/fdd/role_map.json) is found on an NF site. A point fills a role if its NF class is in `classes`, or else it carries every Haystack marker in `markers`. Roles not listed here use the classes found automatically (role_map name + -sensor/-cmd/-status) and markers derived from the role_map name. Classes come from NF's ontology (nf_classes.json). Roles that the rules use but role_map.json lacks are defined here with a `name`. `run_proof` is never bound by class or marker: it is resolved from the model by sql/fdd/run_proof.json (own status, own command, feeding equipment).",
- "oa_damper_pct": {
-  "classes": [
-   "outside-damper-cmd",
-   "outside-damper-sensor"
-  ],
-  "markers": [
-   "outside",
-   "damper"
-  ]
- },
- "clg_valve_pct": {
-  "classes": [
-   "chilled-water-cool-valve-cmd",
-   "discharge-chilled-water-cool-valve-cmd"
-  ],
-  "markers": [
-   "cool",
-   "valve",
-   "cmd"
-  ]
- },
- "htg_valve_pct": {
-  "classes": [
-   "hot-water-heat-valve-cmd",
-   "discharge-hot-water-heat-valve-cmd",
-   "discharge-steam-heat-valve-cmd"
-  ],
-  "markers": [
-   "heat",
-   "valve",
-   "cmd"
-  ]
- },
- "fan_cmd": {
-  "classes": [
-   "discharge-run-cmd",
-   "run-cmd"
-  ],
-  "markers": [
-   "fan",
-   "run",
-   "cmd"
-  ]
- },
- "return_fan": {
-  "classes": [
-   "return-run-cmd"
-  ],
-  "markers": [
-   "return",
-   "fan",
-   "run",
-   "cmd"
-  ]
- },
- "fan_status": {
-  "classes": [
-   "discharge-run-sensor",
-   "run-sensor"
-  ],
-  "markers": [
-   "fan",
-   "run",
-   "sensor"
-  ]
- },
- "duct_static": {
-  "classes": [
-   "discharge-air-pressure-sensor"
-  ],
-  "markers": [
-   "discharge",
-   "air",
-   "pressure",
-   "sensor"
-  ]
- },
- "duct_static_sp": {
-  "classes": [
-   "discharge-air-pressure-sp"
-  ],
-  "markers": [
-   "discharge",
-   "air",
-   "pressure",
-   "sp"
-  ]
- },
- "static_reset_request": {
-  "classes": [],
-  "markers": [
-   "pressure",
-   "request"
-  ]
- },
- "cooling_coil_entering_temp": {
-  "classes": [],
-  "markers": [
-   "cool",
-   "entering",
-   "air",
-   "temp",
-   "sensor"
-  ]
- },
- "cooling_coil_leaving_temp": {
-  "classes": [],
-  "markers": [
-   "cool",
-   "leaving",
-   "air",
-   "temp",
-   "sensor"
-  ]
- },
- "heating_coil_entering_temp": {
-  "classes": [],
-  "markers": [
-   "heat",
-   "entering",
-   "air",
-   "temp",
-   "sensor"
-  ]
- },
- "heating_coil_leaving_temp": {
-  "classes": [],
-  "markers": [
-   "heat",
-   "leaving",
-   "air",
-   "temp",
-   "sensor"
-  ]
- },
- "chiller_status": {
-  "classes": [],
-  "markers": [
-   "chiller",
-   "run",
-   "sensor"
-  ]
- },
- "loop_enabled": {
-  "classes": [
-   "enable-sensor",
-   "enable-cmd"
-  ],
-  "markers": [
-   "enable"
-  ]
- },
- "zone_air_temp_sp": {
-  "classes": [
-   "zone-air-temp-effective-sp"
-  ],
-  "markers": [
-   "zone",
-   "air",
-   "temp",
-   "sp"
-  ]
- },
- "cooling_sp": {
-  "classes": [
-   "zone-air-temp-occ-cooling-sp"
-  ],
-  "markers": [
-   "zone",
-   "air",
-   "temp",
-   "cooling",
-   "sp"
-  ]
- },
- "heating_sp": {
-  "classes": [
-   "zone-air-temp-occ-heating-sp"
-  ],
-  "markers": [
-   "zone",
-   "air",
-   "temp",
-   "heating",
-   "sp"
-  ]
- },
- "zone_co2": {
-  "classes": [
-   "air-co2-concentration-sensor"
-  ],
-  "markers": [
-   "zone",
-   "air",
-   "co2",
-   "sensor"
-  ]
- },
- "zone_flow": {
-  "classes": [
-   "discharge-air-flow-sensor",
-   "air-flow-sensor"
-  ],
-  "markers": [
-   "air",
-   "flow",
-   "sensor"
-  ]
- },
- "zone_airflow_sp": {
-  "classes": [
-   "discharge-air-flow-sp",
-   "air-flow-sp"
-  ],
-  "markers": [
-   "air",
-   "flow",
-   "sp"
-  ]
- },
- "sa_h": {
-  "classes": [
-   "discharge-air-humidity-sensor"
-  ],
-  "markers": [
-   "discharge",
-   "air",
-   "humidity",
-   "sensor"
-  ]
- },
- "vav_total_flow": {
-  "classes": [],
-  "markers": [
-   "total",
-   "air",
-   "flow",
-   "sensor"
-  ]
- },
- "min_flow_sp": {
-  "classes": [],
-  "markers": [
-   "min",
-   "air",
-   "flow",
-   "sp"
-  ]
- },
- "chw_pump_status": {
-  "classes": [],
-  "markers": [
-   "chilled",
-   "water",
-   "pump",
-   "run",
-   "sensor"
-  ]
- },
- "compressor_status": {
-  "classes": [],
-  "markers": [
-   "compressor",
-   "run",
-   "sensor"
-  ]
- },
- "boiler_status": {
-  "classes": [],
-  "markers": [
-   "boiler",
-   "run",
-   "sensor"
-  ]
- },
- "reheat_valve_pct": {
-  "classes": [
-   "reheat-cmd"
-  ],
-  "markers": [
-   "reheat",
-   "cmd"
-  ]
- },
- "vav_discharge_t": {
-  "classes": [
-   "discharge-air-temp-sensor"
-  ],
-  "markers": [
-   "discharge",
-   "air",
-   "temp",
-   "sensor"
-  ]
- },
- "vav_inlet_t": {
-  "classes": [
-   "inlet-air-temp-sensor"
-  ],
-  "markers": [
-   "entering",
-   "air",
-   "temp",
-   "sensor"
-  ]
- },
- "ahu_sat": {
-  "classes": [
-   "discharge-air-temp-sensor"
-  ],
-  "markers": [
-   "discharge",
-   "air",
-   "temp",
-   "sensor"
-  ]
- },
- "chw_supply_t": {
-  "classes": [],
-  "markers": [
-   "chilled",
-   "water",
-   "leaving",
-   "temp",
-   "sensor"
-  ]
- },
- "chw_return_t": {
-  "classes": [],
-  "markers": [
-   "chilled",
-   "water",
-   "entering",
-   "temp",
-   "sensor"
-  ]
- },
- "chw_supply_sp": {
-  "classes": [],
-  "markers": [
-   "chilled",
-   "water",
-   "leaving",
-   "temp",
-   "sp"
-  ]
- },
- "hw_supply_t": {
-  "classes": [],
-  "markers": [
-   "hot",
-   "water",
-   "leaving",
-   "temp",
-   "sensor"
-  ]
- },
- "hw_return_t": {
-  "classes": [],
-  "markers": [
-   "hot",
-   "water",
-   "entering",
-   "temp",
-   "sensor"
-  ]
- },
- "chw_dp": {
-  "classes": [
-   "chilled-water-delta-pressure"
-  ],
-  "markers": [
-   "chilled",
-   "water",
-   "delta",
-   "pressure",
-   "sensor"
-  ]
- },
- "chw_dp_sp": {
-  "classes": [],
-  "markers": [
-   "chilled",
-   "water",
-   "delta",
-   "pressure",
-   "sp"
-  ]
- },
- "chw_flow": {
-  "classes": [
-   "chilled-water-delta-flow-sensor"
-  ],
-  "markers": [
-   "chilled",
-   "water",
-   "flow",
-   "sensor"
-  ]
- },
- "chw_pump_cmd": {
-  "classes": [],
-  "markers": [
-   "chilled",
-   "water",
-   "pump",
-   "run",
-   "cmd"
-  ]
- },
- "cw_pump_cmd": {
-  "classes": [],
-  "markers": [
-   "condenser",
-   "water",
-   "pump",
-   "run",
-   "cmd"
-  ]
- },
- "tower_fan_cmd": {
-  "classes": [],
-  "markers": [
-   "coolingTower",
-   "fan",
-   "run",
-   "cmd"
-  ]
- },
- "cw_supply_t": {
-  "classes": [],
-  "markers": [
-   "condenser",
-   "water",
-   "leaving",
-   "temp",
-   "sensor"
-  ]
- },
- "cw_return_t": {
-  "classes": [],
-  "markers": [
-   "condenser",
-   "water",
-   "entering",
-   "temp",
-   "sensor"
-  ]
- },
- "preheat_leave_t": {
-  "classes": [],
-  "markers": [
-   "preheat",
-   "leaving",
-   "air",
-   "temp",
-   "sensor"
-  ]
- },
- "web_oa_t": {
-  "classes": [],
-  "markers": [
-   "weather",
-   "outside",
-   "air",
-   "temp"
-  ]
- },
- "web_oa_dp": {
-  "classes": [],
-  "markers": [
-   "weather",
-   "outside",
-   "air",
-   "dewPoint"
-  ]
- },
- "web_wb_t": {
-  "classes": [],
-  "markers": [
-   "weather",
-   "outside",
-   "air",
-   "wetBulb"
-  ]
- },
- "web_oa_h": {
-  "classes": [],
-  "markers": [
-   "weather",
-   "outside",
-   "air",
-   "humidity"
-  ]
- },
- "chiller_power": {
-  "classes": [
-   "total-active-ac-elec-power-sensor"
-  ],
-  "markers": [
-   "elec",
-   "power",
-   "sensor"
-  ]
- },
- "chiller_amps": {
-  "classes": [
-   "avg-ac-elec-current-magnitude-sensor"
-  ],
-  "markers": [
-   "elec",
-   "current",
-   "sensor"
-  ]
- },
- "chiller_current": {
-  "classes": [
-   "avg-ac-elec-current-magnitude-sensor"
-  ],
-  "markers": [
-   "elec",
-   "current",
-   "sensor"
-  ]
- },
- "pump_status": {
-  "classes": [],
-  "markers": [
-   "pump",
-   "run",
-   "sensor"
-  ]
- },
- "occ_mode": {
-  "classes": [
-   "occupied-sensor"
-  ],
-  "markers": [
-   "occupied"
-  ]
- },
- "building_zone_load_satisfied": {
-  "classes": [],
-  "markers": [
-   "zone",
-   "load",
-   "satisfied"
-  ]
- },
- "building_ahu_load_satisfied": {
-  "classes": [],
-  "markers": [
-   "ahu",
-   "load",
-   "satisfied"
-  ]
- },
- "electric_kw": {
-  "name": "electric-power",
-  "classes": [
-   "total-active-ac-elec-power-sensor"
-  ],
-  "markers": [
-   "elec",
-   "power",
-   "sensor"
-  ]
- },
- "electric_kwh": {
-  "name": "electric-energy",
-  "classes": [],
-  "markers": [
-   "elec",
-   "energy",
-   "sensor"
-  ]
- },
- "kwh": {
-  "name": "electric-energy",
-  "classes": [],
-  "markers": [
-   "elec",
-   "energy",
-   "sensor"
-  ]
- },
- "clg_available": {
-  "name": "cooling-available",
-  "classes": [],
-  "markers": [
-   "cool",
-   "enable",
-   "sensor"
-  ]
- },
- "chiller_cmd": {
-  "name": "chiller-cmd",
-  "classes": [],
-  "markers": [
-   "chiller",
-   "run",
-   "cmd"
-  ]
- },
- "hw_reset_request_sum": {
-  "name": "hot-water-reset-request-sum",
-  "classes": [],
-  "markers": [
-   "hot",
-   "water",
-   "request"
-  ]
- },
- "chw_reset_request_sum": {
-  "name": "chilled-water-reset-request-sum",
-  "classes": [],
-  "markers": [
-   "chilled",
-   "water",
-   "request"
-  ]
- },
+ "_doc": "Equipment kinds for the catalog. Point bindings (classes, markers, forbid, equip_markers) come from roles/openfdd-roles.json; the catalog builder copies them. run_proof is resolved from sql/fdd/run_proof.json and is not a Haystack binding.",
  "_equipment_kinds": {
   "_doc": "Rule equipment_kinds (registry.yaml) -> Haystack equip markers. An equip has a kind if it carries any of the listed markers. A Haystack 4 conjunct (hot-water-plant) matches the literal tag or every part (hot, water, plant).",
   "ahu": [
@@ -679,5 +53,1088 @@
   "general": [
    "equip"
   ]
+ },
+ "air_handling_unit_discharge_air_temperature": {
+  "classes": [
+   "discharge-air-temp-sensor"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "equip_markers": [
+   "ahu"
+  ],
+  "binding_scope": "fed_by_air_handling_unit"
+ },
+ "air_handling_unit_load_satisfied_status": {
+  "markers": [
+   "ahu",
+   "load",
+   "sensor"
+  ],
+  "custom_markers": [
+   "satisfied"
+  ],
+  "binding_scope": "derived",
+  "classes": []
+ },
+ "boiler_operating_status": {
+  "markers": [
+   "boiler",
+   "run",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "chilled_water_pressure_delta": {
+  "classes": [
+   "chilled-water-delta-pressure"
+  ],
+  "markers": [
+   "chilled",
+   "water",
+   "delta",
+   "pressure",
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "chilled_water_pressure_delta_setpoint": {
+  "markers": [
+   "chilled",
+   "water",
+   "delta",
+   "pressure",
+   "sp"
+  ],
+  "forbid": [
+   "max",
+   "min"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "chilled_water_pump_command": {
+  "markers": [
+   "chilled",
+   "water",
+   "pump",
+   "run",
+   "cmd"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "chilled_water_pump_operating_status": {
+  "markers": [
+   "chilled",
+   "water",
+   "pump",
+   "run",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "chilled_water_reset_request_count": {
+  "markers": [
+   "chilled",
+   "water",
+   "sensor"
+  ],
+  "custom_markers": [
+   "request"
+  ],
+  "binding_scope": "derived",
+  "classes": []
+ },
+ "chilled_water_volume_flow_rate": {
+  "classes": [
+   "chilled-water-delta-flow-sensor"
+  ],
+  "markers": [
+   "chilled",
+   "water",
+   "flow",
+   "sensor"
+  ],
+  "forbid": [
+   "max",
+   "min"
+  ],
+  "binding_scope": "own"
+ },
+ "chiller_command": {
+  "markers": [
+   "chiller",
+   "run",
+   "cmd"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "chiller_electric_current": {
+  "classes": [
+   "avg-ac-elec-current-magnitude-sensor"
+  ],
+  "markers": [
+   "elec",
+   "current",
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "chiller_electric_power": {
+  "classes": [
+   "total-active-ac-elec-power-sensor"
+  ],
+  "markers": [
+   "elec",
+   "power",
+   "sensor"
+  ],
+  "equip_markers": [
+   "chiller"
+  ],
+  "binding_scope": "own"
+ },
+ "chiller_operating_status": {
+  "markers": [
+   "chiller",
+   "run",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "compressor_operating_status": {
+  "markers": [
+   "compressor",
+   "run",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "condenser_water_pump_command": {
+  "markers": [
+   "condenser",
+   "water",
+   "pump",
+   "run",
+   "cmd"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "cooling_coil_inlet_air_temperature": {
+  "markers": [
+   "cool",
+   "entering",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "forbid": [
+   "preheat",
+   "water"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "cooling_coil_outlet_air_temperature": {
+  "markers": [
+   "cool",
+   "leaving",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "forbid": [
+   "preheat",
+   "water"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "cooling_operating_mode_status": {
+  "markers": [
+   "cool",
+   "enable",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "cooling_tower_fan_command": {
+  "markers": [
+   "fan",
+   "run",
+   "cmd"
+  ],
+  "equip_markers": [
+   "coolingTower"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "cooling_valve_position_command": {
+  "classes": [
+   "chilled-water-cool-valve-cmd",
+   "discharge-chilled-water-cool-valve-cmd"
+  ],
+  "markers": [
+   "cool",
+   "valve",
+   "cmd"
+  ],
+  "binding_scope": "own"
+ },
+ "damper_position": {
+  "classes": [
+   "damper-sensor",
+   "discharge-damper-sensor"
+  ],
+  "markers": [
+   "damper",
+   "sensor"
+  ],
+  "forbid": [
+   "outside",
+   "return",
+   "exhaust",
+   "economizer",
+   "bypass"
+  ],
+  "binding_scope": "own"
+ },
+ "damper_position_command": {
+  "classes": [
+   "damper-cmd",
+   "discharge-damper-cmd"
+  ],
+  "markers": [
+   "damper",
+   "cmd"
+  ],
+  "forbid": [
+   "outside",
+   "return",
+   "exhaust",
+   "economizer",
+   "bypass"
+  ],
+  "binding_scope": "own"
+ },
+ "discharge_air_relative_humidity": {
+  "classes": [
+   "discharge-air-humidity-sensor"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "humidity",
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "discharge_air_static_pressure": {
+  "classes": [
+   "discharge-air-pressure-sensor"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "pressure",
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "discharge_air_static_pressure_reset_request_count": {
+  "markers": [
+   "pressure",
+   "sensor"
+  ],
+  "custom_markers": [
+   "request"
+  ],
+  "binding_scope": "derived",
+  "classes": []
+ },
+ "discharge_air_static_pressure_setpoint": {
+  "classes": [
+   "discharge-air-pressure-sp"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "pressure",
+   "sp"
+  ],
+  "forbid": [
+   "max",
+   "min"
+  ],
+  "binding_scope": "own"
+ },
+ "discharge_air_temperature": {
+  "classes": [
+   "discharge-air-temp-sensor"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "equip_forbid": [
+   "airTerminalUnit"
+  ],
+  "binding_scope": "own"
+ },
+ "discharge_air_temperature_setpoint": {
+  "classes": [
+   "discharge-air-temp-sp"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "temp",
+   "sp"
+  ],
+  "forbid": [
+   "max",
+   "min"
+  ],
+  "binding_scope": "own"
+ },
+ "discharge_air_volume_flow_rate": {
+  "classes": [
+   "discharge-air-flow-sensor",
+   "air-flow-sensor"
+  ],
+  "markers": [
+   "air",
+   "flow",
+   "sensor"
+  ],
+  "forbid": [
+   "max",
+   "min",
+   "total"
+  ],
+  "optional": [
+   "discharge"
+  ],
+  "binding_scope": "own"
+ },
+ "discharge_air_volume_flow_rate_minimum": {
+  "markers": [
+   "min",
+   "air",
+   "flow",
+   "sp"
+  ],
+  "forbid": [
+   "max"
+  ],
+  "optional": [
+   "discharge"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "discharge_air_volume_flow_rate_setpoint": {
+  "classes": [
+   "discharge-air-flow-sp",
+   "air-flow-sp"
+  ],
+  "markers": [
+   "air",
+   "flow",
+   "sp"
+  ],
+  "forbid": [
+   "max",
+   "min",
+   "total"
+  ],
+  "optional": [
+   "discharge"
+  ],
+  "binding_scope": "own"
+ },
+ "electric_energy": {
+  "classes": [
+   "total-net-ac-elec-active-energy-sensor"
+  ],
+  "markers": [
+   "elec",
+   "energy",
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "electric_power": {
+  "classes": [
+   "total-active-ac-elec-power-sensor"
+  ],
+  "markers": [
+   "elec",
+   "power",
+   "sensor"
+  ],
+  "forbid": [
+   "chiller",
+   "fan"
+  ],
+  "equip_forbid": [
+   "chiller"
+  ],
+  "binding_scope": "own"
+ },
+ "filter_air_pressure_delta": {
+  "markers": [
+   "filter",
+   "air",
+   "delta",
+   "pressure",
+   "sensor"
+  ],
+  "forbid": [
+   "water"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "heating_coil_inlet_air_temperature": {
+  "markers": [
+   "heat",
+   "entering",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "forbid": [
+   "preheat",
+   "water"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "heating_coil_outlet_air_temperature": {
+  "markers": [
+   "heat",
+   "leaving",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "forbid": [
+   "preheat",
+   "water"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "heating_valve_position_command": {
+  "classes": [
+   "hot-water-heat-valve-cmd",
+   "discharge-hot-water-heat-valve-cmd",
+   "discharge-steam-heat-valve-cmd"
+  ],
+  "markers": [
+   "heat",
+   "valve",
+   "cmd"
+  ],
+  "forbid": [
+   "reheat"
+  ],
+  "binding_scope": "own"
+ },
+ "hot_water_reset_request_count": {
+  "markers": [
+   "hot",
+   "water",
+   "sensor"
+  ],
+  "custom_markers": [
+   "request"
+  ],
+  "binding_scope": "derived",
+  "classes": []
+ },
+ "mixed_air_relative_humidity": {
+  "classes": [
+   "mixed-air-humidity-sensor"
+  ],
+  "markers": [
+   "mixed",
+   "air",
+   "humidity",
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "mixed_air_temperature": {
+  "classes": [
+   "mixed-air-temp-sensor"
+  ],
+  "markers": [
+   "mixed",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "occupancy_status": {
+  "classes": [
+   "occupied-sensor"
+  ],
+  "markers": [
+   "occupied"
+  ],
+  "forbid": [
+   "sp",
+   "cmd"
+  ],
+  "optional": [
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "operating_mode_status": {
+  "classes": [
+   "enable-sensor"
+  ],
+  "markers": [
+   "enable",
+   "sensor"
+  ],
+  "forbid": [
+   "cool",
+   "heat"
+  ],
+  "binding_scope": "own"
+ },
+ "operating_status": {
+  "binding_scope": "derived",
+  "classes": [],
+  "markers": []
+ },
+ "outdoor_air_intake_damper_position_command": {
+  "classes": [
+   "outside-damper-cmd"
+  ],
+  "markers": [
+   "outside",
+   "damper",
+   "cmd"
+  ],
+  "optional": [
+   "air"
+  ],
+  "binding_scope": "own"
+ },
+ "outdoor_air_intake_relative_humidity": {
+  "classes": [
+   "outside-air-humidity-sensor"
+  ],
+  "markers": [
+   "outside",
+   "air",
+   "humidity",
+   "sensor"
+  ],
+  "forbid": [
+   "weather"
+  ],
+  "binding_scope": "own"
+ },
+ "outdoor_air_intake_temperature": {
+  "classes": [
+   "outside-air-temp-sensor"
+  ],
+  "markers": [
+   "outside",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "forbid": [
+   "weather"
+  ],
+  "binding_scope": "own"
+ },
+ "preheat_heating_coil_outlet_air_temperature": {
+  "markers": [
+   "leaving",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "custom_markers": [
+   "preheat"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "pump_operating_status": {
+  "markers": [
+   "pump",
+   "run",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "return_air_relative_humidity": {
+  "classes": [
+   "return-air-humidity-sensor"
+  ],
+  "markers": [
+   "return",
+   "air",
+   "humidity",
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "return_air_temperature": {
+  "classes": [
+   "return-air-temp-sensor"
+  ],
+  "markers": [
+   "return",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "return_chilled_water_temperature": {
+  "markers": [
+   "chilled",
+   "water",
+   "entering",
+   "temp",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "return_condenser_water_temperature": {
+  "markers": [
+   "condenser",
+   "water",
+   "entering",
+   "temp",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "return_fan_command": {
+  "classes": [
+   "return-run-cmd"
+  ],
+  "markers": [
+   "return",
+   "fan",
+   "run",
+   "cmd"
+  ],
+  "binding_scope": "own"
+ },
+ "return_hot_water_temperature": {
+  "markers": [
+   "hot",
+   "water",
+   "entering",
+   "temp",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "supply_chilled_water_temperature": {
+  "markers": [
+   "chilled",
+   "water",
+   "leaving",
+   "temp",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "supply_chilled_water_temperature_setpoint": {
+  "markers": [
+   "chilled",
+   "water",
+   "leaving",
+   "temp",
+   "sp"
+  ],
+  "forbid": [
+   "max",
+   "min"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "supply_condenser_water_temperature": {
+  "markers": [
+   "condenser",
+   "water",
+   "leaving",
+   "temp",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "supply_fan_command": {
+  "classes": [
+   "discharge-run-cmd",
+   "run-cmd"
+  ],
+  "markers": [
+   "fan",
+   "run",
+   "cmd"
+  ],
+  "forbid": [
+   "return",
+   "exhaust",
+   "pump"
+  ],
+  "optional": [
+   "discharge"
+  ],
+  "equip_forbid": [
+   "coolingTower"
+  ],
+  "binding_scope": "own"
+ },
+ "supply_fan_electric_power": {
+  "markers": [
+   "fan",
+   "elec",
+   "power",
+   "sensor"
+  ],
+  "forbid": [
+   "return",
+   "exhaust",
+   "pump",
+   "chiller"
+  ],
+  "optional": [
+   "discharge"
+  ],
+  "equip_forbid": [
+   "chiller",
+   "coolingTower"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "supply_fan_operating_status": {
+  "classes": [
+   "discharge-run-sensor",
+   "run-sensor"
+  ],
+  "markers": [
+   "fan",
+   "run",
+   "sensor"
+  ],
+  "forbid": [
+   "return",
+   "exhaust",
+   "pump"
+  ],
+  "optional": [
+   "discharge"
+  ],
+  "equip_forbid": [
+   "coolingTower",
+   "boiler"
+  ],
+  "binding_scope": "own"
+ },
+ "supply_fan_speed_command": {
+  "classes": [
+   "discharge-vfd-speed-cmd",
+   "vfd-speed-cmd"
+  ],
+  "markers": [
+   "vfd",
+   "speed",
+   "cmd"
+  ],
+  "forbid": [
+   "return",
+   "exhaust",
+   "pump"
+  ],
+  "optional": [
+   "discharge",
+   "fan"
+  ],
+  "equip_forbid": [
+   "coolingTower"
+  ],
+  "binding_scope": "own"
+ },
+ "supply_hot_water_temperature": {
+  "markers": [
+   "hot",
+   "water",
+   "leaving",
+   "temp",
+   "sensor"
+  ],
+  "binding_scope": "own",
+  "classes": []
+ },
+ "terminal_unit_discharge_air_temperature": {
+  "classes": [
+   "discharge-air-temp-sensor"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "equip_markers": [
+   "airTerminalUnit"
+  ],
+  "binding_scope": "own"
+ },
+ "terminal_unit_discharge_air_total_volume_flow_rate": {
+  "markers": [
+   "total",
+   "air",
+   "flow",
+   "sensor"
+  ],
+  "forbid": [
+   "max",
+   "min"
+  ],
+  "binding_scope": "aggregate",
+  "classes": []
+ },
+ "terminal_unit_heating_valve_position_command": {
+  "classes": [
+   "reheat-cmd"
+  ],
+  "markers": [
+   "reheat",
+   "cmd"
+  ],
+  "equip_markers": [
+   "airTerminalUnit"
+  ],
+  "binding_scope": "own"
+ },
+ "terminal_unit_inlet_air_temperature": {
+  "classes": [
+   "inlet-air-temp-sensor"
+  ],
+  "markers": [
+   "inlet",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "alt_markers": [
+   [
+    "entering",
+    "air",
+    "temp",
+    "sensor"
+   ]
+  ],
+  "equip_markers": [
+   "airTerminalUnit"
+  ],
+  "binding_scope": "own"
+ },
+ "weather_service_air_dew_point_temperature": {
+  "markers": [
+   "weather",
+   "outside",
+   "air",
+   "dewPoint",
+   "sensor"
+  ],
+  "binding_scope": "weather",
+  "classes": []
+ },
+ "weather_service_air_relative_humidity": {
+  "markers": [
+   "weather",
+   "outside",
+   "air",
+   "humidity",
+   "sensor"
+  ],
+  "binding_scope": "weather",
+  "classes": []
+ },
+ "weather_service_air_temperature": {
+  "markers": [
+   "weather",
+   "outside",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "binding_scope": "weather",
+  "classes": []
+ },
+ "weather_service_air_wet_bulb_temperature": {
+  "markers": [
+   "weather",
+   "outside",
+   "air",
+   "wetBulb",
+   "sensor"
+  ],
+  "binding_scope": "weather",
+  "classes": []
+ },
+ "zone_air_co2": {
+  "classes": [
+   "air-co2-concentration-sensor"
+  ],
+  "markers": [
+   "zone",
+   "air",
+   "co2",
+   "sensor"
+  ],
+  "optional": [
+   "concentration"
+  ],
+  "binding_scope": "own"
+ },
+ "zone_air_relative_humidity": {
+  "classes": [
+   "zone-air-humidity-sensor"
+  ],
+  "markers": [
+   "zone",
+   "air",
+   "humidity",
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "zone_air_temperature": {
+  "classes": [
+   "zone-air-temp-sensor"
+  ],
+  "markers": [
+   "zone",
+   "air",
+   "temp",
+   "sensor"
+  ],
+  "binding_scope": "own"
+ },
+ "zone_air_temperature_setpoint": {
+  "classes": [
+   "zone-air-temp-effective-sp"
+  ],
+  "markers": [
+   "zone",
+   "air",
+   "temp",
+   "sp"
+  ],
+  "forbid": [
+   "cooling",
+   "heating",
+   "occ",
+   "unocc",
+   "standby",
+   "max",
+   "min"
+  ],
+  "optional": [
+   "effective"
+  ],
+  "binding_scope": "own"
+ },
+ "zone_cooling_air_temperature_setpoint": {
+  "classes": [
+   "zone-air-temp-occ-cooling-sp"
+  ],
+  "markers": [
+   "zone",
+   "air",
+   "temp",
+   "cooling",
+   "sp"
+  ],
+  "forbid": [
+   "heating",
+   "unocc",
+   "standby",
+   "effective",
+   "max",
+   "min"
+  ],
+  "optional": [
+   "occ"
+  ],
+  "binding_scope": "own"
+ },
+ "zone_heating_air_temperature_setpoint": {
+  "classes": [
+   "zone-air-temp-occ-heating-sp"
+  ],
+  "markers": [
+   "zone",
+   "air",
+   "temp",
+   "heating",
+   "sp"
+  ],
+  "forbid": [
+   "cooling",
+   "unocc",
+   "standby",
+   "effective",
+   "max",
+   "min"
+  ],
+  "optional": [
+   "occ"
+  ],
+  "binding_scope": "own"
+ },
+ "zone_load_satisfied_status": {
+  "markers": [
+   "zone",
+   "load",
+   "sensor"
+  ],
+  "custom_markers": [
+   "satisfied"
+  ],
+  "binding_scope": "derived",
+  "classes": []
  }
 }

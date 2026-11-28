@@ -59,7 +59,7 @@
     for (const d of O().DAYS) {
       const row = node("tr"); row.append(node("th", O().DAY_LABELS[d]));
       const controls = {};
-      for (const [key, type] of [["occupied", "checkbox"], ["start", "time"], ["end", "time"]]) {
+      for (const [key, type] of [["occupancy_status", "checkbox"], ["start", "time"], ["end", "time"]]) {
         const td = node("td"), input = node("input", null, { type, id: `occ-${d}-${key}` });
         input.setAttribute("aria-label", `${O().DAY_LABELS[d]} ${key}`);
         if (type === "checkbox") input.checked = st.calendar.days[d].occupied;

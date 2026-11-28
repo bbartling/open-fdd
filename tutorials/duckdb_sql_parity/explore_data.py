@@ -45,8 +45,8 @@ def main() -> None:
     print(result.to_string(index=False))
 
     # Plot measurable series individually, without mixing Pa and degrees C on one axis.
-    columns = [("sat", "Supply air temperature (°C)"),
-               ("duct_static", "Duct static pressure (Pa)")]
+    columns = [("discharge_air_temperature", "Supply air temperature (°C)"),
+               ("discharge_air_static_pressure", "Duct static pressure (Pa)")]
     fig, axes = plt.subplots(len(columns), 1, figsize=(12, 7), sharex=True)
     for ax, (field, label) in zip(axes, columns):
         if field not in df.columns:

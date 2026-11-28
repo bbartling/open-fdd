@@ -404,7 +404,7 @@ test("reheat discharge temps only for VAVs that have a reheat valve; positions v
   const r = await renderVav("vav_reheat_dats", model, data);
   assert.deepEqual(Array.from(r.rendered[0].option.series, (s) => s.name), ["VAV-1"], "VAV-2 has no reheat: not drawn");
   const p = await renderVav("vav_positions", model, data);
-  assert.deepEqual(Array.from(p.rendered[0].option.series, (s) => s.name).sort(), ["VAV-1 · damper", "VAV-1 · reheat valve"]);
+  assert.deepEqual(Array.from(p.rendered[0].option.series, (s) => s.name).sort(), ["VAV-1 · damper_position", "VAV-1 · reheat valve"]);
 });
 
 test("scatter plots: a hot-water / chilled-water scatter binds only where its role exists", () => {
@@ -483,9 +483,9 @@ const ahuModel = (unit) => fixture({
 }, unit);
 
 test("SAT reset scatter: points and fit in the display system; same fit whichever unit the NF point has", async () => {
-  const oat = [40, 50, 60], sat = [60, 57, 54];                      // -0.3 F per F
+  const oat = [40, 50, 60], discharge_air_temperature = [60, 57, 54];                      // -0.3 F per F
   const run = (conv, unit, sys) => renderPreset("ahu_sat_reset_scatter", ahuModel(unit),
-    new Map([["u-OAT", hours(oat, conv)], ["u-SAT", hours(sat, conv)]]), sys);
+    new Map([["u-OAT", hours(oat, conv)], ["u-SAT", hours(discharge_air_temperature, conv)]]), sys);
   const f = await run((x) => x, "°F", "imperial"), c = await run(F2C, "°C", "imperial"), si = await run(F2C, "°C", "si");
   const dataOf = (r) => r.rendered[0].option.series[0].data;
   dataOf(f).forEach(([x, y], i) => { near(x, dataOf(c)[i][0], 1e-9); near(y, dataOf(c)[i][1], 1e-9); });

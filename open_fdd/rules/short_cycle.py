@@ -16,8 +16,8 @@ from open_fdd.analytics.runtime_intervals import ELAPSED_MAX_GAP_SECONDS
 MECH_AMPS_MIN = 5.0       # A   (sql/fdd/runtime_defaults.json MECH_AMPS_MIN)
 MECH_POWER_KW_MIN = 1.0   # kW  (MECH_POWER_KW_MIN)
 #: proof candidates in order (Haystack role, on-threshold for analog proofs or None for a status read as a duty)
-PROOF_CANDIDATES = (("boiler-status", None), ("compressor-status", None), ("chiller-status", None),
-                    ("chiller-amps", MECH_AMPS_MIN), ("chiller-power", MECH_POWER_KW_MIN))
+PROOF_CANDIDATES = (("boiler_operating_status", None), ("compressor_operating_status", None), ("chiller_operating_status", None),
+                    ("chiller_electric_current", MECH_AMPS_MIN), ("chiller_electric_power", MECH_POWER_KW_MIN))
 OFF_MAX = 0.05
 FULL_MIN = 0.95
 WINDOW = "3600s"          # trailing hour (t - 3600 s, t]

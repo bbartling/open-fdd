@@ -1,6 +1,6 @@
 """#1636: one saved weekly occupancy calendar gives the same occupied samples in pandas
 (open_fdd.analytics.occupancy.occupied_mask) and in the FDD hook (nf-app/static/occupancy.js calendarSchedule +
-schedule.js occupied, which the hook writes as occ_mode for every engine)."""
+schedule.js occupied, which the hook writes as occupancy_status for every engine)."""
 from __future__ import annotations
 
 import json

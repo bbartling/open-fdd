@@ -35,30 +35,30 @@ def _series():
     web = pd.Series(curve(web_idx), index=web_idx)
     idx = pd.date_range(T0 + pd.Timedelta(minutes=3), periods=12 * 72, freq="5min")
     oat = curve(idx)
-    sat = pd.Series(np.clip(18 - 0.3 * oat, 12, 18) + rng.normal(0, 0.1, len(idx)), index=idx)
+    discharge_air_temperature = pd.Series(np.clip(18 - 0.3 * oat, 12, 18) + rng.normal(0, 0.1, len(idx)), index=idx)
     hws = pd.Series(np.clip(70 - 1.5 * oat, 50, 80) + rng.normal(0, 0.5, len(idx)), index=idx)
-    return web, {"sat": sat, "hws": hws}
+    return web, {"discharge_air_temperature": discharge_air_temperature, "hws": hws}
 
 
 def _core(web, ys):
-    points = [{"site_id": "local", "point_key": "web", "equipment_id": None, "role": "web_oa_t"},
-              {"site_id": "local", "point_key": "ahu/sat", "equipment_id": "AHU-1", "role": "sat"},
-              {"site_id": "local", "point_key": "blr/hws", "equipment_id": "BLR-1", "role": "hw_supply_t"}]
-    keys = {"sat": "ahu/sat", "hws": "blr/hws"}
+    points = [{"site_id": "local", "point_key": "web", "equipment_id": None, "role": "weather_service_air_temperature"},
+              {"site_id": "local", "point_key": "ahu/discharge_air_temperature", "equipment_id": "AHU-1", "role": "discharge_air_temperature"},
+              {"site_id": "local", "point_key": "blr/hws", "equipment_id": "BLR-1", "role": "supply_hot_water_temperature"}]
+    keys = {"discharge_air_temperature": "ahu/discharge_air_temperature", "hws": "blr/hws"}
     samples = [("local", "web", int(t), float(v)) for t, v in zip(_ms(web.index), web.to_numpy())]
     for name, s in ys.items():
         samples += [("local", keys[name], int(t), float(v)) for t, v in zip(_ms(s.index), s.to_numpy())]
     return points, samples
 
 
-PAIRS = [("ahu-sat", "AHU-1", "ahu/sat", "web", 5_400_000), ("blr-hws", "BLR-1", "blr/hws", "web", 5_400_000)]
+PAIRS = [("ahu-discharge_air_temperature", "AHU-1", "ahu/discharge_air_temperature", "web", 5_400_000), ("blr-hws", "BLR-1", "blr/hws", "web", 5_400_000)]
 
 
 def _check(got, web, ys, window=None):
     by = {}
     for r in got:
         by.setdefault(r["scatter_id"], []).append(r)
-    for sid, name in (("ahu-sat", "sat"), ("blr-hws", "hws")):
+    for sid, name in (("ahu-discharge_air_temperature", "discharge_air_temperature"), ("blr-hws", "hws")):
         y = ys[name]
         if window:
             y = y[(_ms(y.index) >= window[0]) & (_ms(y.index) < window[1])]
@@ -93,7 +93,7 @@ def test_matches_pandas(engine):
     _check(got, web, ys)
     assert {r["equipment_id"] for r in got} == {"AHU-1", "BLR-1"}
     # the outage leaves y samples unpaired (more than 90 min after the last web reading)
-    assert len([r for r in got if r["scatter_id"] == "ahu-sat"]) < len(ys["sat"])
+    assert len([r for r in got if r["scatter_id"] == "ahu-discharge_air_temperature"]) < len(ys["discharge_air_temperature"])
     win = (int(_ms([T0 + pd.Timedelta(hours=12)])[0]), int(_ms([T0 + pd.Timedelta(hours=40)])[0]))
     _check(_run(engine, points, samples, start_ms=win[0], end_ms=win[1]), web, ys, window=win)
 

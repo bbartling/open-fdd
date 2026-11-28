@@ -2,10 +2,10 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- fc1_duct_static_low.sql — FC1 duct static below SP at full fan + confirm
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
@@ -13,24 +13,21 @@ WITH rp AS (
 -- fan-restart holdoff and active-coverage floor (as pandas: the operational gate is not the run-proof gate).
 h AS (
   SELECT
-    run_proof,
+    operating_status,
     equipment_id,
     timestamp_utc,
-    duct_static,
-    duct_static_sp,
-    fan_cmd AS fan_cmd,
+    discharge_air_static_pressure,
+    discharge_air_static_pressure_setpoint,
+    supply_fan_command AS supply_fan_command,
         CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on,
-    -- Match pandas cookbook `_fan()`: prefer fan_status for the "full fan" gate.
+    -- Match pandas cookbook `_fan()`: prefer supply_fan_operating_status for the "full fan" gate.
     -- Synth-59 AHU_CASE_FC1 has status=1 with cmd=0.6 for most fault hours;
     -- cmd-only gating under-counts (1h vs 40h).
-    CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
-      ELSE fan_cmd
-    END AS fan_for_hi
+    supply_fan_speed_command AS fan_for_hi
   FROM history
 ),
 base AS (
@@ -38,15 +35,15 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN COALESCE(mode_stable, 1) = 0 THEN 0
-      WHEN duct_static IS NOT NULL AND duct_static_sp IS NOT NULL
-       AND duct_static < duct_static_sp - {{EPS_DSP}}
-       AND fan_for_hi >= 1.0 - {{EPS_VFD_SPD}}
+      WHEN discharge_air_static_pressure IS NOT NULL AND discharge_air_static_pressure_setpoint IS NOT NULL
+       AND discharge_air_static_pressure < discharge_air_static_pressure_setpoint - {{EPS_DSP}}
+       AND fan_for_hi >= 100.0 - {{EPS_VFD_SPD}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM (
   SELECT h.*,
     CASE

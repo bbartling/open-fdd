@@ -93,7 +93,7 @@ def change_point_monthly(
         period = str(r.get("period") or r.get("month") or "")
         if period not in base_set:
             continue
-        energy = r.get("energy", r.get("kwh", r.get("usage")))
+        energy = r.get("energy", r.get("electric_energy", r.get("usage")))
         dd = r.get("degree_days", r.get("dd", r.get("hdd", r.get("cdd"))))
         try:
             e = float(energy)
@@ -116,7 +116,7 @@ def change_point_monthly(
                 if period in rep_set
                 else "other"
             )
-            energy = float(r.get("energy", r.get("kwh", r.get("usage")) or 0.0))
+            energy = float(r.get("energy", r.get("electric_energy", r.get("usage")) or 0.0))
             dd = float(r.get("degree_days", r.get("dd", r.get("hdd", r.get("cdd"))) or 0.0))
             out.append(
                 {
@@ -154,7 +154,7 @@ def change_point_monthly(
             if period in rep_set
             else "other"
         )
-        energy = float(r.get("energy", r.get("kwh", r.get("usage")) or 0.0))
+        energy = float(r.get("energy", r.get("electric_energy", r.get("usage")) or 0.0))
         dd = float(r.get("degree_days", r.get("dd", r.get("hdd", r.get("cdd"))) or 0.0))
         predicted = savings = None
         if kind in ("reporting", "baseline") and dd == dd:

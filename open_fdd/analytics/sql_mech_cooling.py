@@ -44,17 +44,17 @@ def _ladder(et: str) -> tuple[list[Tier], tuple[str, ...]]:
     """(tiers, cooling-mode gate roles) for a canonical equipment type; ([], ()) when it is not a cooling device."""
     if et == "CHW_PLANT":
         return [
-            Tier(("chiller-status", "compressor-status"), "on", None, "chiller-status"),
-            Tier(("compressor-cmd", "dx-cool-cmd"), "on", None, "chiller-status"),
-            Tier(("chiller-amps",), "above", CHILLER_AMPS_MIN, "chiller-amps"),
-            Tier(("chiller-power",), "above", CHILLER_POWER_KW_MIN, "chiller_power"),
-            Tier(("compressor-power",), "above", CHILLER_POWER_KW_MIN, "chiller_power"),
-            Tier(("compressor-current",), "above", CHILLER_AMPS_MIN, "chiller-amps"),
+            Tier(("chiller_operating_status", "compressor_operating_status"), "on", None, "chiller_operating_status"),
+            Tier(("compressor-cmd", "dx-cool-cmd"), "on", None, "chiller_operating_status"),
+            Tier(("chiller_electric_current",), "above", CHILLER_AMPS_MIN, "chiller_electric_current"),
+            Tier(("chiller_electric_power",), "above", CHILLER_POWER_KW_MIN, "chiller_electric_power"),
+            Tier(("compressor-power",), "above", CHILLER_POWER_KW_MIN, "chiller_electric_power"),
+            Tier(("compressor-current",), "above", CHILLER_AMPS_MIN, "chiller_electric_current"),
         ], ()
     if et in {"AHU", "RTU", "HP"}:
         legacy = "heatpump" if et == "HP" else "ahu_dx"
         tiers = [
-            Tier(("compressor-status",), "on", None, legacy),
+            Tier(("compressor_operating_status",), "on", None, legacy),
             Tier(("compressor-cmd", "dx-cool-cmd"), "on", None, legacy),
             Tier((COMPRESSOR_STAGES,), "on", None, legacy, proof_role="compressor-stage"),
             Tier(("dx-cooling", "unit-cooling-status"), "on", None, legacy),
@@ -65,7 +65,7 @@ def _ladder(et: str) -> tuple[list[Tier], tuple[str, ...]]:
     if et == "VRF":
         return [
             Tier(("vrf-outdoor-compressor-status",), "on", None, "vrf-outdoor-compressor-status"),
-            Tier(("compressor-status",), "on", None, "vrf-outdoor-compressor-status"),
+            Tier(("compressor_operating_status",), "on", None, "vrf-outdoor-compressor-status"),
         ], ()
     return [], ()
 

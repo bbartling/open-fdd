@@ -18,15 +18,15 @@ def _ahu(n: int, seed: int = 0) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     idx = pd.date_range("2026-01-05", periods=n, freq="5min", tz="UTC")
     oat = 10 + 12 * np.sin(np.arange(n) / DAY * 2 * np.pi) + rng.normal(0, 0.3, n)
-    rat = 22 + rng.normal(0, 0.2, n)
+    return_air_temperature = 22 + rng.normal(0, 0.2, n)
     damper = np.clip(0.1 + 0.8 * (oat < 15) * (oat > 2), 0.1, 1.0)
-    mat = damper * oat + (1 - damper) * rat + rng.normal(0, 0.1, n)
-    valve = np.clip((mat - 13) / 10, 0, 1)
-    sat = mat - 10 * valve + rng.normal(0, 0.1, n)
+    mixed_air_temperature = damper * oat + (1 - damper) * return_air_temperature + rng.normal(0, 0.1, n)
+    valve = np.clip((mixed_air_temperature - 13) / 10, 0, 1)
+    discharge_air_temperature = mixed_air_temperature - 10 * valve + rng.normal(0, 0.1, n)
     return pd.DataFrame({
-        "discharge-air-temp": sat, "discharge-air-temp-sp": 13.0, "mixed-air-temp": mat, "return-air-temp": rat,
-        "outside-air-temp": oat, "outside-air-damper": damper, "cooling-valve": valve, "fan-cmd": 0.7 + 0.1 * valve,
-        "fan-status": 1.0, "occupied": 1.0,
+        "discharge_air_temperature": discharge_air_temperature, "discharge_air_temperature_setpoint": 13.0, "mixed_air_temperature": mixed_air_temperature, "return_air_temperature": return_air_temperature,
+        "outdoor_air_intake_temperature": oat, "outdoor_air_intake_damper_position_command": damper, "cooling_valve_position_command": valve, "supply_fan_command": 0.7 + 0.1 * valve,
+        "supply_fan_operating_status": 1.0, "occupancy_status": 1.0,
     }, index=idx)
 
 
@@ -56,7 +56,7 @@ def test_complete_inputs_are_all_assessed(tmp_path, capsys, method):
 def test_missing_inputs_are_unassessed_not_healthy(tmp_path, capsys, method):
     frame = _ahu(6 * DAY)
     later = frame.index >= pd.Timestamp("2026-01-08", tz="UTC")
-    frame.loc[later, ["mixed-air-temp", "discharge-air-temp"]] = np.nan  # sensors drop out after the cutoff
+    frame.loc[later, ["mixed_air_temperature", "discharge_air_temperature"]] = np.nan  # sensors drop out after the cutoff
     folder = _folder(tmp_path, frame)
     out = tmp_path / "out"
     assert main(["detect", str(folder), "--method", method, "--train-until", "2026-01-08", "--out", str(out)]) == 0

@@ -14,13 +14,13 @@ const hook = require("../hooks/analytics.js");
 const H = 3600000, T0 = Date.UTC(2026, 2, 2);   // a Monday
 
 function grid() {
-  const t = [], cols = { fan: [], oa_t: [], rat: [], mat: [], damper: [], sat: [], ch: [], bas: [], web: [] };
+  const t = [], cols = { fan: [], outdoor_air_intake_temperature: [], return_air_temperature: [], mixed_air_temperature: [], damper: [], discharge_air_temperature: [], ch: [], bas: [], web: [] };
   for (let i = 0; i < 12 * 24 * 9; i++) {
     const x = T0 + i * 300000, h = ((x - T0) / H) % 24, oat = 12 + 10 * Math.sin(((h - 9) / 24) * 2 * Math.PI);
     const on = h >= 6 && h < 18 ? 1 : 0, dmp = oat < 18 ? 80 : 20;
     t.push(x);
-    cols.fan.push(on); cols.oa_t.push(i % 3 ? null : oat); cols.rat.push(22); cols.mat.push(22 + (dmp / 100) * (oat - 22) + 0.3);
-    cols.damper.push(dmp); cols.sat.push(13); cols.ch.push(oat > 18 ? 1 : 0);
+    cols.fan.push(on); cols.outdoor_air_intake_temperature.push(i % 3 ? null : oat); cols.return_air_temperature.push(22); cols.mixed_air_temperature.push(22 + (dmp / 100) * (oat - 22) + 0.3);
+    cols.damper.push(dmp); cols.discharge_air_temperature.push(13); cols.ch.push(oat > 18 ? 1 : 0);
     cols.bas.push(oat + 0.7); cols.web.push(i % 12 ? null : oat);
   }
   return { t, cols };
@@ -38,7 +38,7 @@ const viaHook = wire.makeClient(async (args) => {
 test("wire: grid encode / decode is lossless and run-length compresses status columns", () => {
   const g = grid(), w = wire.encodeGrid(g);
   assert.deepEqual(w.t, { t0: T0, step: 300000, n: g.t.length });
-  assert.ok(w.cols.fan.length < 20 && w.cols.rat.length === 1);
+  assert.ok(w.cols.fan.length < 20 && w.cols.return_air_temperature.length === 1);
   assert.deepEqual(wire.decodeGrid(JSON.parse(JSON.stringify(w))), g);
   const odd = { t: [1, 2, 4], cols: { a: [1, null, NaN] } };
   assert.deepEqual(wire.decodeGrid(wire.encodeGrid(odd)), { t: [1, 2, 4], cols: { a: [1, null, null] } });
@@ -48,17 +48,17 @@ test("runtime / mech / econ / bas through the hook equal the in-process SQL", as
   const g = grid();
   const weekOf = (x) => x - ((x - T0) % (7 * 24 * H));
   const occ = (x) => { const h = ((x - T0) / H) % 24; return h >= 7 && h < 17; };
-  const rspecs = [{ key: "AHU-1", motor: "fan", oat: "oa_t", weekOf, occ }, { key: "AHU-2", motor: "ch", oat: null, weekOf }];
+  const rspecs = [{ key: "AHU-1", motor: "fan", oat: "outdoor_air_intake_temperature", weekOf, occ }, { key: "AHU-2", motor: "ch", oat: null, weekOf }];
   const direct = await SA.runtimeFromGrid("duckdb", g, rspecs);
   const remote = await viaHook.runtime(g, rspecs);
   assert.ok(remote instanceof Map && remote.get("AHU-1") instanceof Map);
   assert.deepEqual(remote, direct);
   assert.ok(direct.get("AHU-1").size === 2 && direct.get("AHU-1").get(T0).inHours > 0);
 
-  const mspecs = [{ key: "CH-1", proof: "ch", oat: "oa_t" }];
+  const mspecs = [{ key: "CH-1", proof: "ch", oat: "outdoor_air_intake_temperature" }];
   assert.deepEqual(await viaHook.mech(g, mspecs), await SA.mechFromGrid("duckdb", g, mspecs));
 
-  const eg = { t: g.t, cols: { fan: g.cols.fan, oa_t: g.cols.oa_t, rat: g.cols.rat, mat: g.cols.mat, damper: g.cols.damper, sat: g.cols.sat } };
+  const eg = { t: g.t, cols: { fan: g.cols.fan, outdoor_air_intake_temperature: g.cols.outdoor_air_intake_temperature, return_air_temperature: g.cols.return_air_temperature, mixed_air_temperature: g.cols.mixed_air_temperature, damper: g.cols.damper, discharge_air_temperature: g.cols.discharge_air_temperature } };
   const econ = await viaHook.econ(eg);
   assert.deepEqual(econ, await SA.econFromGrid("duckdb", eg));
   assert.ok(econ.rows.length > 0 && econ.summary.n > 0);

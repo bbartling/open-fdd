@@ -14,10 +14,10 @@
  * input = {
  *   historyColumns: [{ name, type: "double" | "text" }],      // columns present in `history` rows
  *   history:   [{ equipment_id, ts /* epoch ms *\/, <col>: number | string | null }],
- *   weather:   [{ ts, oa_t, web_oa_t, web_oa_dp }],
+ *   weather:   [{ ts, outdoor_air_intake_temperature, weather_service_air_temperature, weather_service_air_dew_point_temperature }],
  *   sensorHistory?: [{ equipment_id, series_id, sensor_role, unit, ts, value }],   // long-form sweep input (SI values)
  *   sweepSeries?: [{ equipment_id, series_id, sensor_role, unit, window_start, window_end }], // epoch ms; bound series fetched OK (#1673)
- *   utilityInterval?: [{ ts, kwh }], utilityMonthly?: [{ billing_period, kwh }]   // optional
+ *   utilityInterval?: [{ ts, electric_energy }], utilityMonthly?: [{ billing_period, electric_energy }]   // optional
  * }
  * Contract columns (pack.contract) that are not listed exist as typed NULL columns.
  * Rows come back as plain objects with numbers as JS numbers (NaN/NULL -> null).
@@ -31,23 +31,23 @@
 const normUnit = (v) => (v == null ? "" : String(v).replace(/[^a-zA-Z0-9]/g, "").toLowerCase());
 
 const QUANTITY = {
-  ahu_sat: "absolute_temperature", chw_return_t: "absolute_temperature", chw_supply_sp: "absolute_temperature",
-  chw_supply_t: "absolute_temperature", cooling_coil_entering_temp: "absolute_temperature",
-  cooling_coil_leaving_temp: "absolute_temperature", cooling_sp: "absolute_temperature", cw_return_t: "absolute_temperature",
-  cw_supply_t: "absolute_temperature", heating_coil_entering_temp: "absolute_temperature",
-  heating_coil_leaving_temp: "absolute_temperature", heating_sp: "absolute_temperature", hw_return_t: "absolute_temperature",
-  hw_supply_t: "absolute_temperature", mat: "absolute_temperature", oa_t: "absolute_temperature",
-  preheat_leave_t: "absolute_temperature", rat: "absolute_temperature", sat: "absolute_temperature",
-  sat_sp: "absolute_temperature", vav_discharge_t: "absolute_temperature", vav_inlet_t: "absolute_temperature",
-  web_oa_dp: "absolute_temperature", web_oa_t: "absolute_temperature", web_wb_t: "absolute_temperature",
-  zone_air_temp_sp: "absolute_temperature", zone_t: "absolute_temperature",
-  ma_h: "relative_humidity", oa_h: "relative_humidity", ra_h: "relative_humidity", sa_h: "relative_humidity",
-  web_oa_h: "relative_humidity", zone_rh: "relative_humidity",
-  chw_dp: "air_pressure", chw_dp_sp: "air_pressure", duct_static: "air_pressure", duct_static_sp: "air_pressure",
-  chw_flow: "volume_flow", min_flow_sp: "volume_flow", vav_total_flow: "volume_flow", zone_airflow_sp: "volume_flow", zone_flow: "volume_flow",
-  chiller_power: "power", electric_kw: "power", electric_kwh: "energy", kwh: "energy",
-  chiller_amps: "electric_current", chiller_current: "electric_current", zone_co2: "concentration",
-  chw_reset_request_sum: "count", hw_reset_request_sum: "count", static_reset_request: "count",
+  air_handling_unit_discharge_air_temperature: "absolute_temperature", return_chilled_water_temperature: "absolute_temperature", supply_chilled_water_temperature_setpoint: "absolute_temperature",
+  supply_chilled_water_temperature: "absolute_temperature", cooling_coil_inlet_air_temperature: "absolute_temperature",
+  cooling_coil_outlet_air_temperature: "absolute_temperature", zone_cooling_air_temperature_setpoint: "absolute_temperature", return_condenser_water_temperature: "absolute_temperature",
+  supply_condenser_water_temperature: "absolute_temperature", heating_coil_inlet_air_temperature: "absolute_temperature",
+  heating_coil_outlet_air_temperature: "absolute_temperature", zone_heating_air_temperature_setpoint: "absolute_temperature", return_hot_water_temperature: "absolute_temperature",
+  supply_hot_water_temperature: "absolute_temperature", mixed_air_temperature: "absolute_temperature", outdoor_air_intake_temperature: "absolute_temperature",
+  preheat_heating_coil_outlet_air_temperature: "absolute_temperature", return_air_temperature: "absolute_temperature", discharge_air_temperature: "absolute_temperature",
+  discharge_air_temperature_setpoint: "absolute_temperature", terminal_unit_discharge_air_temperature: "absolute_temperature", terminal_unit_inlet_air_temperature: "absolute_temperature",
+  weather_service_air_dew_point_temperature: "absolute_temperature", weather_service_air_temperature: "absolute_temperature", weather_service_air_wet_bulb_temperature: "absolute_temperature",
+  zone_air_temperature_setpoint: "absolute_temperature", zone_air_temperature: "absolute_temperature",
+  mixed_air_relative_humidity: "relative_humidity", outdoor_air_intake_relative_humidity: "relative_humidity", return_air_relative_humidity: "relative_humidity", discharge_air_relative_humidity: "relative_humidity",
+  weather_service_air_relative_humidity: "relative_humidity", zone_air_relative_humidity: "relative_humidity",
+  chilled_water_pressure_delta: "air_pressure", chilled_water_pressure_delta_setpoint: "air_pressure", discharge_air_static_pressure: "air_pressure", discharge_air_static_pressure_setpoint: "air_pressure",
+  chilled_water_volume_flow_rate: "volume_flow", discharge_air_volume_flow_rate_minimum: "volume_flow", terminal_unit_discharge_air_total_volume_flow_rate: "volume_flow", discharge_air_volume_flow_rate_setpoint: "volume_flow", discharge_air_volume_flow_rate: "volume_flow",
+  chiller_electric_power: "power", electric_power: "power", electric_energy: "energy",
+  chiller_electric_current: "electric_current", zone_air_co2: "concentration",
+  chilled_water_reset_request_count: "count", hot_water_reset_request_count: "count", discharge_air_static_pressure_reset_request_count: "count",
 };
 const quantityForRole = (role) => (role == null ? null : QUANTITY[String(role).trim()] || null);
 
@@ -74,7 +74,7 @@ const isExpectedConstantRole = (role) => {
   if (role == null || String(role).trim() === "") return 0;
   const n = normUnit(role);
   return n.endsWith("sp") || n.includes("setpoint") || n.includes("status") || n.endsWith("cmd") ||
-    n.includes("command") || n === "occmode" || n.includes("occupied") || n.includes("occupancy") ||
+    n.includes("command") || n === "occmode" || n.includes("occupancy_status") || n.includes("occupancy") ||
     n === "loopenabled" ? 1 : 0;
 };
 
@@ -215,15 +215,15 @@ async function createTimescale(pack, opts = {}) {
       return rows || sensorRows;
     },
     /**
-     * #1636: write a synthesized occ_mode (1 occupied / 0 not, from at(ms)) onto this equipment's session history rows,
-     * after load(). Only called when no occ_mode point is bound. Returns the number of rows updated.
+     * #1636: write a synthesized occupancy_status (1 occupied / 0 not, from at(ms)) onto this equipment's session history rows,
+     * after load(). Only called when no occupancy_status point is bound. Returns the number of rows updated.
      */
     async occupancy(equipId, at) {
       const res = await client.query("SELECT DISTINCT timestamp_utc FROM pg_temp.history WHERE equipment_id = $1", [equipId]);
       if (!res.rows.length) return 0;
       const ts = res.rows.map((r) => new Date(r.timestamp_utc));
       const upd = await client.query(
-        `UPDATE pg_temp.history h SET occ_mode = v.occ
+        `UPDATE pg_temp.history h SET occupancy_status = v.occ
          FROM unnest($2::timestamptz[], $3::float8[]) AS v(ts, occ)
          WHERE h.equipment_id = $1 AND h.timestamp_utc = v.ts`,
         [equipId, ts.map((d) => d.toISOString()), ts.map((d) => (at(d.getTime()) ? 1 : 0))]);

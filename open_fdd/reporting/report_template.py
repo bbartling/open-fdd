@@ -75,7 +75,7 @@ def _vav_ahu_figures() -> tuple[FigureSpec, ...]:
             "Outdoor, return, mixed, and supply air on the temperature axis. "
             "Damper percent is on the right axis. Fan running only.",
             "econ_temps",
-            ("outside-air-temp", "return-air-temp", "mixed-air-temp"),
+            ("outdoor_air_intake_temperature", "return_air_temperature", "mixed_air_temperature"),
             fan_on=True,
         ),
         FigureSpec(
@@ -83,16 +83,16 @@ def _vav_ahu_figures() -> tuple[FigureSpec, ...]:
             "BAS vs web outdoor-air temperature",
             "Building outdoor-air temperature and web outdoor-air temperature on one axis.",
             "bas_web",
-            ("outside-air-temp", "web-outside-air-temp"),
+            ("outdoor_air_intake_temperature", "weather_service_air_temperature"),
         ),
         FigureSpec(
             "ahu_sat_reset_scatter",
             "Supply air vs web outdoor temperature",
             "Supply air temperature against web outdoor air. Fan running only.",
             "oat_scatter",
-            ("discharge-air-temp", "web-outside-air-temp"),
-            any_roles=("fan-status", "fan-cmd"),
-            y_role="discharge-air-temp",
+            ("discharge_air_temperature", "weather_service_air_temperature"),
+            any_roles=("supply_fan_operating_status", "supply_fan_command"),
+            y_role="discharge_air_temperature",
             fan_on=True,
         ),
         FigureSpec(
@@ -100,9 +100,9 @@ def _vav_ahu_figures() -> tuple[FigureSpec, ...]:
             "Duct static while the fan runs",
             "Duct static pressure with the fan running.",
             "box",
-            ("duct-static-pressure",),
-            any_roles=("fan-status", "fan-cmd"),
-            y_role="duct-static-pressure",
+            ("discharge_air_static_pressure",),
+            any_roles=("supply_fan_operating_status", "supply_fan_command"),
+            y_role="discharge_air_static_pressure",
             fan_on=True,
         ),
     )

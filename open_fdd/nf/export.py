@@ -80,7 +80,7 @@ def csv_frames(
 
     A CSV has no model, so a column is matched to a role by its point name: the text after the
     equipment name equals (or ends with) a catalog role name or key (``discharge-air-temp``,
-    ``ahu_sat`` ...), or you pass ``column_roles={"AHU-1 SAT [°F]": "ahu_sat"}`` (SQL role keys or
+    ``air_handling_unit_discharge_air_temperature`` ...), or you pass ``column_roles={"AHU-1 SAT [°F]": "air_handling_unit_discharge_air_temperature"}`` (SQL role keys or
     pandas column names). The equipment is the label's prefix before that name. A unitless column
     whose values all lie in 0-1 is kept as a fraction/boolean role (it is the same in both).
     Everything else is dropped; the frame's ``attrs["skipped"]`` says why.
@@ -94,6 +94,11 @@ def csv_frames(
         for alias in (key, d.get("name", ""), column_for(key)):
             if alias:
                 by_name.setdefault(_norm(alias), key)
+    from open_fdd.role_vocab import legacy_to_role
+
+    for alias, role in legacy_to_role().items():
+        if role in cat["roles"]:
+            by_name.setdefault(_norm(alias), role)
     explicit = {_norm(k): v for k, v in (column_roles or {}).items()}
     names = sorted(by_name, key=len, reverse=True)
     groups: dict[str, dict[str, Any]] = {}

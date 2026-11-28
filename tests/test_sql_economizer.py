@@ -45,11 +45,11 @@ def _frames():
     idx = pd.date_range("2026-04-06", periods=12 * 24 * 7, freq="5min", tz="UTC")
     h = np.asarray(idx.hour + idx.minute / 60.0, dtype=float)
     oat = 12 + 10 * np.sin((h - 9) / 24 * 2 * np.pi) + rng.normal(0, 0.3, len(idx))
-    rat = 22 + rng.normal(0, 0.2, len(idx))
+    return_air_temperature = 22 + rng.normal(0, 0.2, len(idx))
     damper = np.clip(0.2 + 0.6 * (oat < 18), 0, 1)
-    mat = rat + damper * (oat - rat) + rng.normal(0, 0.4, len(idx))
+    mixed_air_temperature = return_air_temperature + damper * (oat - return_air_temperature) + rng.normal(0, 0.4, len(idx))
     fan = ((h >= 6) & (h < 20)).astype(float)
-    mat_holes = mat.copy()
+    mat_holes = mixed_air_temperature.copy()
     mat_holes[::7] = np.nan
 
     def frame(cols, et="AHU"):
@@ -58,15 +58,15 @@ def _frames():
         return df
 
     frames = {
-        "AHU-1": frame({"f": fan, "o": oat, "r": rat, "m": mat, "d": damper * 100}),
-        "AHU-2": frame({"f": fan * 100, "c": fan, "o": oat, "r": rat, "m": mat_holes, "d": damper}),
-        "RTU-1": frame({"f": fan, "o": oat, "r": rat, "m": mat}, "RTU"),
-        "VAV-1": frame({"f": fan, "o": oat, "r": rat, "m": mat}, "VAV"),
+        "AHU-1": frame({"f": fan, "o": oat, "r": return_air_temperature, "m": mixed_air_temperature, "d": damper * 100}),
+        "AHU-2": frame({"f": fan * 100, "c": fan, "o": oat, "r": return_air_temperature, "m": mat_holes, "d": damper}),
+        "RTU-1": frame({"f": fan, "o": oat, "r": return_air_temperature, "m": mixed_air_temperature}, "RTU"),
+        "VAV-1": frame({"f": fan, "o": oat, "r": return_air_temperature, "m": mixed_air_temperature}, "VAV"),
     }
-    base = {"fan-status": "f", "outside-air-temp": "o", "return-air-temp": "r", "mixed-air-temp": "m"}
+    base = {"supply_fan_operating_status": "f", "outdoor_air_intake_temperature": "o", "return_air_temperature": "r", "mixed_air_temperature": "m"}
     role_map = {
-        "AHU-1": {**base, "outside-air-damper": "d"},
-        "AHU-2": {**base, "fan-cmd": "c", "outside-air-damper": "d"},
+        "AHU-1": {**base, "outdoor_air_intake_damper_position_command": "d"},
+        "AHU-2": {**base, "supply_fan_command": "c", "outdoor_air_intake_damper_position_command": "d"},
         "RTU-1": dict(base),
         "VAV-1": dict(base),
     }
@@ -122,14 +122,14 @@ def _run(samples, roles, **kw):
 
 
 def test_median_damper_scale_and_identifiable_rules():
-    roles = [("A", "fan", "f"), ("A", "oat", "o"), ("A", "rat", "r"), ("A", "mat", "m"), ("A", "damper", "d")]
+    roles = [("A", "fan", "f"), ("A", "oat", "o"), ("A", "return_air_temperature", "r"), ("A", "mixed_air_temperature", "m"), ("A", "damper_position", "d")]
     oat = [30.0, 30.0, 30.0, 30.0, 24.0]  # the last sample is not identifiable (|30 - 20| ok, |24 - 20| < 5.56)
-    mat = [21.0, 23.0, 24.0, 28.0, 21.0]
+    mixed_air_temperature = [21.0, 23.0, 24.0, 28.0, 21.0]
     samples = []
     for i in range(5):
         t = T0 + i * H // 4
         samples += [("local", "f", t, 1.0), ("local", "o", t, oat[i]), ("local", "r", t, 20.0),
-                    ("local", "m", t, mat[i]), ("local", "d", t, 20.0)]  # max 20 > 1: the series is percent
+                    ("local", "m", t, mixed_air_temperature[i]), ("local", "d", t, 20.0)]  # max 20 > 1: the series is percent
     row = _run(samples, roles)[0]
     # damper 0.2: predicted MAT 22.0 when OAT 30; residuals -1, 1, 2, 6 -> median 1.5, MAE 2.5
     assert (row["n_fan_on"], row["n_identifiable"], row["n_resid"]) == (5, 4, 4)
@@ -140,7 +140,7 @@ def test_median_damper_scale_and_identifiable_rules():
 
 
 def test_fan_never_on_gives_no_row():
-    roles = [("A", "fan", "f"), ("A", "oat", "o"), ("A", "rat", "r"), ("A", "mat", "m")]
+    roles = [("A", "fan", "f"), ("A", "oat", "o"), ("A", "return_air_temperature", "r"), ("A", "mixed_air_temperature", "m")]
     samples = [("local", k, T0 + i * H, v) for i in range(3) for k, v in (("f", 0.0), ("o", 30.0), ("r", 20.0), ("m", 25.0))]
     assert _run(samples, roles) == []
 
@@ -191,9 +191,9 @@ def test_points_match_the_pandas_diagnostics_points():
         assert (g["d_mr"] is None) == pd.isna(w.delta_mr_f)
         if g["d_mr"] is not None:
             assert abs(g["d_mr"] - w.delta_mr_f) < 1e-9
-        assert (g["damper_pct"] is None) == pd.isna(w.damper_fb_pct)
-        if g["damper_pct"] is not None:
-            assert abs(g["damper_pct"] - w.damper_fb_pct) < 1e-9
+        assert (g["damper_position"] is None) == pd.isna(w.damper_fb_pct)
+        if g["damper_position"] is not None:
+            assert abs(g["damper_position"] - w.damper_fb_pct) < 1e-9
         frac = getattr(w, "oa_frac_temp_pct")
         assert (g["oa_frac_pct"] is None) == pd.isna(frac)
         if g["oa_frac_pct"] is not None:

@@ -126,32 +126,36 @@ def test_duckdb_and_sqlite_helper_equivalence():
     from adapters import DUCKDB_HELPERS_SQL
 
     cases = [
-        ("sat", "°C", 12.5),
-        ("sat", "degC", 12.5),
-        ("sat", "°F", 55.0),
-        ("sat", "", 12.5),
-        ("sat", None, 12.5),
-        ("oa_h", "%RH", 50.0),
-        ("oa_h", "%", 50.0),
-        ("oa_h", "percent_0_100", 50.0),  # #1669 canonical RH token
-        ("zone_rh", "fraction", 0.5),  # a 0-1 fraction is not %RH
-        ("duct_static", "Pa", 250.0),
-        ("duct_static", "inH2O", 1.0),
-        ("zone_flow", "L/s", 400.0),
-        ("zone_flow", "L/sec", 400.0),
-        ("zone_flow", "L-PER-SEC", 400.0),
-        ("zone_flow", "cfm", 800.0),
-        ("zone_flow", "FT3-PER-MIN", 800.0),
-        ("ra_h", "PERCENT_RH", 40.0),
-        ("chiller_power", "kW", 45.0),
-        ("kwh", "kWh", 120.0),
-        ("chiller_amps", "A", 32.0),
-        ("zone_co2", "ppm", 650.0),
-        ("static_reset_request", "count", 3.0),
-        ("sat_sp", "°C", 13.0),
-        ("fan_status", "", 1.0),
-        ("fan_cmd", "%", 80.0),
-        ("occ_mode", "", 1.0),
+        ("discharge_air_temperature", "°C", 12.5),
+        ("discharge_air_temperature", "degC", 12.5),
+        ("discharge_air_temperature", "°F", 55.0),
+        ("discharge_air_temperature", "", 12.5),
+        ("discharge_air_temperature", None, 12.5),
+        ("outdoor_air_intake_relative_humidity", "%RH", 50.0),
+        ("outdoor_air_intake_relative_humidity", "%", 50.0),
+        ("outdoor_air_intake_relative_humidity", "percent_0_100", 50.0),  # #1669 canonical RH token
+        ("zone_air_relative_humidity", "fraction", 0.5),  # a 0-1 fraction is not %RH
+        ("discharge_air_static_pressure", "Pa", 250.0),
+        ("discharge_air_static_pressure", "inH2O", 1.0),
+        ("discharge_air_volume_flow_rate", "L/s", 400.0),
+        ("discharge_air_volume_flow_rate", "L/sec", 400.0),
+        ("discharge_air_volume_flow_rate", "L-PER-SEC", 400.0),
+        ("discharge_air_volume_flow_rate", "cfm", 800.0),
+        ("discharge_air_volume_flow_rate", "FT3-PER-MIN", 800.0),
+        ("return_air_relative_humidity", "PERCENT_RH", 40.0),
+        ("chiller_electric_power", "kW", 45.0),
+        ("electric_energy", "kWh", 120.0),
+        ("chiller_electric_current", "A", 32.0),
+        ("zone_air_co2", "ppm", 650.0),
+        ("discharge_air_static_pressure_reset_request_count", "count", 3.0),
+        ("discharge_air_temperature_setpoint", "°C", 13.0),
+        ("supply_fan_operating_status", "", 1.0),
+        ("supply_fan_command", "%", 80.0),
+        ("occupancy_status", "", 1.0),
+        ("discharge_air_volume_flow_rate", "L/sec", 400.0),
+        ("discharge_air_volume_flow_rate", "L-PER-SEC", 400.0),
+        ("discharge_air_volume_flow_rate", "FT3-PER-MIN", 800.0),
+        ("return_air_relative_humidity", "PERCENT_RH", 40.0),
         ("unknown_role", "°C", 10.0),
     ]
     try_double_cases = [None, "", "  ", "12.5", " -3.25 ", "Occupied", "NaN", "Infinity", "abc"]
@@ -196,12 +200,12 @@ def test_duckdb_and_sqlite_helper_equivalence():
     assert math.isnan(nan) and inf == math.inf
     assert duck_sweep == sq_sweep
     by_case = dict(zip([(r, u) for r, u, _ in cases], duck_sweep))
-    assert by_case[("oa_h", "percent_0_100")] == (False, True, 50.0)
-    assert by_case[("zone_rh", "fraction")] == (False, False, None)
-    assert by_case[("zone_flow", "L-PER-SEC")] == (False, True, 400.0)
-    assert by_case[("zone_flow", "L/sec")] == (False, True, 400.0)
-    assert by_case[("zone_flow", "FT3-PER-MIN")] == (False, False, None)
-    assert by_case[("ra_h", "PERCENT_RH")] == (False, True, 40.0)
+    assert by_case[("outdoor_air_intake_relative_humidity", "percent_0_100")] == (False, True, 50.0)
+    assert by_case[("zone_air_relative_humidity", "fraction")] == (False, False, None)
+    assert by_case[("discharge_air_volume_flow_rate", "L-PER-SEC")] == (False, True, 400.0)
+    assert by_case[("discharge_air_volume_flow_rate", "L/sec")] == (False, True, 400.0)
+    assert by_case[("discharge_air_volume_flow_rate", "FT3-PER-MIN")] == (False, False, None)
+    assert by_case[("return_air_relative_humidity", "PERCENT_RH")] == (False, True, 40.0)
 
     if postgres_configured():
         import os
@@ -232,20 +236,20 @@ def _register_sqlite_udfs(db: sqlite3.Connection) -> None:
 
     qty_map = {
         **{r: "absolute_temperature" for r in (
-            "ahu_sat", "chw_return_t", "chw_supply_sp", "chw_supply_t", "cooling_coil_entering_temp",
-            "cooling_coil_leaving_temp", "cooling_sp", "cw_return_t", "cw_supply_t", "heating_coil_entering_temp",
-            "heating_coil_leaving_temp", "heating_sp", "hw_return_t", "hw_supply_t", "mat", "oa_t",
-            "preheat_leave_t", "rat", "sat", "sat_sp", "vav_discharge_t", "vav_inlet_t", "web_oa_dp",
-            "web_oa_t", "web_wb_t", "zone_air_temp_sp", "zone_t",
+            "air_handling_unit_discharge_air_temperature", "return_chilled_water_temperature", "supply_chilled_water_temperature_setpoint", "supply_chilled_water_temperature", "cooling_coil_inlet_air_temperature",
+            "cooling_coil_outlet_air_temperature", "zone_cooling_air_temperature_setpoint", "return_condenser_water_temperature", "supply_condenser_water_temperature", "heating_coil_inlet_air_temperature",
+            "heating_coil_outlet_air_temperature", "zone_heating_air_temperature_setpoint", "return_hot_water_temperature", "supply_hot_water_temperature", "mixed_air_temperature", "outdoor_air_intake_temperature",
+            "preheat_heating_coil_outlet_air_temperature", "return_air_temperature", "discharge_air_temperature", "discharge_air_temperature_setpoint", "terminal_unit_discharge_air_temperature", "terminal_unit_inlet_air_temperature", "weather_service_air_dew_point_temperature",
+            "weather_service_air_temperature", "weather_service_air_wet_bulb_temperature", "zone_air_temperature_setpoint", "zone_air_temperature",
         )},
-        **{r: "relative_humidity" for r in ("ma_h", "oa_h", "ra_h", "sa_h", "web_oa_h", "zone_rh")},
-        **{r: "air_pressure" for r in ("chw_dp", "chw_dp_sp", "duct_static", "duct_static_sp")},
-        **{r: "volume_flow" for r in ("chw_flow", "min_flow_sp", "vav_total_flow", "zone_airflow_sp", "zone_flow")},
-        **{r: "power" for r in ("chiller_power", "electric_kw")},
-        **{r: "energy" for r in ("electric_kwh", "kwh")},
-        **{r: "electric_current" for r in ("chiller_amps", "chiller_current")},
-        "zone_co2": "concentration",
-        **{r: "count" for r in ("chw_reset_request_sum", "hw_reset_request_sum", "static_reset_request")},
+        **{r: "relative_humidity" for r in ("mixed_air_relative_humidity", "outdoor_air_intake_relative_humidity", "return_air_relative_humidity", "discharge_air_relative_humidity", "weather_service_air_relative_humidity", "zone_air_relative_humidity")},
+        **{r: "air_pressure" for r in ("chilled_water_pressure_delta", "chilled_water_pressure_delta_setpoint", "discharge_air_static_pressure", "discharge_air_static_pressure_setpoint")},
+        **{r: "volume_flow" for r in ("chilled_water_volume_flow_rate", "discharge_air_volume_flow_rate_minimum", "terminal_unit_discharge_air_total_volume_flow_rate", "discharge_air_volume_flow_rate_setpoint", "discharge_air_volume_flow_rate")},
+        **{r: "power" for r in ("chiller_electric_power", "electric_power")},
+        **{r: "energy" for r in ("electric_energy", "electric_energy")},
+        **{r: "electric_current" for r in ("chiller_electric_current", "chiller_electric_current")},
+        "zone_air_co2": "concentration",
+        **{r: "count" for r in ("chilled_water_reset_request_count", "hot_water_reset_request_count", "discharge_air_static_pressure_reset_request_count")},
     }
 
     def quantity_for_sql_role(role):
@@ -280,7 +284,7 @@ def _register_sqlite_udfs(db: sqlite3.Connection) -> None:
             return 0
         nr = norm_unit(role)
         if (nr.endswith("sp") or "setpoint" in nr or "status" in nr or nr.endswith("cmd") or "command" in nr
-                or nr == "occmode" or "occupied" in nr or "occupancy" in nr or nr == "loopenabled"):
+                or nr == "occmode" or "occupancy_status" in nr or "occupancy" in nr or nr == "loopenabled"):
             return 1
         return 0
 

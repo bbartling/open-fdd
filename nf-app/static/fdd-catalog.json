@@ -62,8 +62,8 @@
   ]
  },
  "roles": {
-  "ahu_sat": {
-   "name": "ahu-discharge-air-temp",
+  "air_handling_unit_discharge_air_temperature": {
+   "name": "air_handling_unit_discharge_air_temperature",
    "classes": [
     "discharge-air-temp-sensor"
    ],
@@ -73,96 +73,39 @@
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
+   "equip_markers": [
+    "ahu"
+   ],
+   "binding_scope": "fed_by_air_handling_unit",
+   "scale": "DEG_C"
   },
-  "boiler_status": {
-   "name": "boiler-status",
+  "air_handling_unit_load_satisfied_status": {
+   "name": "air_handling_unit_load_satisfied_status",
+   "markers": [
+    "ahu",
+    "load",
+    "sensor"
+   ],
+   "custom_markers": [
+    "satisfied"
+   ],
+   "binding_scope": "derived",
    "classes": [],
+   "scale": "boolean"
+  },
+  "boiler_operating_status": {
+   "name": "boiler_operating_status",
    "markers": [
     "boiler",
     "run",
     "sensor"
    ],
+   "binding_scope": "own",
+   "classes": [],
    "scale": "boolean"
   },
-  "building_ahu_load_satisfied": {
-   "name": "building-ahu-load-satisfied",
-   "classes": [],
-   "markers": [
-    "ahu",
-    "load",
-    "satisfied"
-   ],
-   "scale": "boolean"
-  },
-  "building_zone_load_satisfied": {
-   "name": "building-zone-load-satisfied",
-   "classes": [],
-   "markers": [
-    "zone",
-    "load",
-    "satisfied"
-   ],
-   "scale": "boolean"
-  },
-  "chiller_amps": {
-   "name": "chiller-amps",
-   "classes": [
-    "avg-ac-elec-current-magnitude-sensor"
-   ],
-   "markers": [
-    "elec",
-    "current",
-    "sensor"
-   ],
-   "scale": "si:A"
-  },
-  "chiller_cmd": {
-   "name": "chiller-cmd",
-   "classes": [],
-   "markers": [
-    "chiller",
-    "run",
-    "cmd"
-   ],
-   "scale": "fraction"
-  },
-  "chiller_current": {
-   "name": "chiller-current",
-   "classes": [
-    "avg-ac-elec-current-magnitude-sensor"
-   ],
-   "markers": [
-    "elec",
-    "current",
-    "sensor"
-   ],
-   "scale": "si:A"
-  },
-  "chiller_power": {
-   "name": "chiller-power",
-   "classes": [
-    "total-active-ac-elec-power-sensor"
-   ],
-   "markers": [
-    "elec",
-    "power",
-    "sensor"
-   ],
-   "scale": "si:kW"
-  },
-  "chiller_status": {
-   "name": "chiller-status",
-   "classes": [],
-   "markers": [
-    "chiller",
-    "run",
-    "sensor"
-   ],
-   "scale": "boolean"
-  },
-  "chw_dp": {
-   "name": "chw-diff-pressure",
+  "chilled_water_pressure_delta": {
+   "name": "chilled_water_pressure_delta",
    "classes": [
     "chilled-water-delta-pressure"
    ],
@@ -173,11 +116,11 @@
     "pressure",
     "sensor"
    ],
-   "scale": "si:Pa"
+   "binding_scope": "own",
+   "scale": "PA"
   },
-  "chw_dp_sp": {
-   "name": "chw-diff-pressure-sp",
-   "classes": [],
+  "chilled_water_pressure_delta_setpoint": {
+   "name": "chilled_water_pressure_delta_setpoint",
    "markers": [
     "chilled",
     "water",
@@ -185,10 +128,56 @@
     "pressure",
     "sp"
    ],
-   "scale": "si:Pa"
+   "forbid": [
+    "max",
+    "min"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "PA"
   },
-  "chw_flow": {
-   "name": "chw-flow",
+  "chilled_water_pump_command": {
+   "name": "chilled_water_pump_command",
+   "markers": [
+    "chilled",
+    "water",
+    "pump",
+    "run",
+    "cmd"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "boolean"
+  },
+  "chilled_water_pump_operating_status": {
+   "name": "chilled_water_pump_operating_status",
+   "markers": [
+    "chilled",
+    "water",
+    "pump",
+    "run",
+    "sensor"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "boolean"
+  },
+  "chilled_water_reset_request_count": {
+   "name": "chilled_water_reset_request_count",
+   "markers": [
+    "chilled",
+    "water",
+    "sensor"
+   ],
+   "custom_markers": [
+    "request"
+   ],
+   "binding_scope": "derived",
+   "classes": [],
+   "scale": "NUM"
+  },
+  "chilled_water_volume_flow_rate": {
+   "name": "chilled_water_volume_flow_rate",
    "classes": [
     "chilled-water-delta-flow-sensor"
    ],
@@ -198,90 +187,149 @@
     "flow",
     "sensor"
    ],
-   "scale": "si:L/s"
+   "forbid": [
+    "max",
+    "min"
+   ],
+   "binding_scope": "own",
+   "scale": "L-PER-SEC"
   },
-  "chw_pump_cmd": {
-   "name": "chw-pump-cmd",
-   "classes": [],
+  "chiller_command": {
+   "name": "chiller_command",
    "markers": [
-    "chilled",
+    "chiller",
+    "run",
+    "cmd"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "boolean"
+  },
+  "chiller_electric_current": {
+   "name": "chiller_electric_current",
+   "classes": [
+    "avg-ac-elec-current-magnitude-sensor"
+   ],
+   "markers": [
+    "elec",
+    "current",
+    "sensor"
+   ],
+   "binding_scope": "own",
+   "scale": "A"
+  },
+  "chiller_electric_power": {
+   "name": "chiller_electric_power",
+   "classes": [
+    "total-active-ac-elec-power-sensor"
+   ],
+   "markers": [
+    "elec",
+    "power",
+    "sensor"
+   ],
+   "equip_markers": [
+    "chiller"
+   ],
+   "binding_scope": "own",
+   "scale": "KiloW"
+  },
+  "chiller_operating_status": {
+   "name": "chiller_operating_status",
+   "markers": [
+    "chiller",
+    "run",
+    "sensor"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "boolean"
+  },
+  "compressor_operating_status": {
+   "name": "compressor_operating_status",
+   "markers": [
+    "compressor",
+    "run",
+    "sensor"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "boolean"
+  },
+  "condenser_water_pump_command": {
+   "name": "condenser_water_pump_command",
+   "markers": [
+    "condenser",
     "water",
     "pump",
     "run",
     "cmd"
    ],
-   "scale": "fraction"
-  },
-  "chw_pump_status": {
-   "name": "chw-pump-status",
+   "binding_scope": "own",
    "classes": [],
-   "markers": [
-    "chilled",
-    "water",
-    "pump",
-    "run",
-    "sensor"
-   ],
    "scale": "boolean"
   },
-  "chw_reset_request_sum": {
-   "name": "chilled-water-reset-request-sum",
-   "classes": [],
+  "cooling_coil_inlet_air_temperature": {
+   "name": "cooling_coil_inlet_air_temperature",
    "markers": [
-    "chilled",
-    "water",
-    "request"
-   ],
-   "scale": "si:count"
-  },
-  "chw_return_t": {
-   "name": "chilled-water-return-temp",
-   "classes": [],
-   "markers": [
-    "chilled",
-    "water",
+    "cool",
     "entering",
+    "air",
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
-  },
-  "chw_supply_sp": {
-   "name": "chilled-water-supply-temp-sp",
-   "classes": [],
-   "markers": [
-    "chilled",
-    "water",
-    "leaving",
-    "temp",
-    "sp"
+   "forbid": [
+    "preheat",
+    "water"
    ],
-   "scale": "si:degC"
-  },
-  "chw_supply_t": {
-   "name": "chilled-water-supply-temp",
+   "binding_scope": "own",
    "classes": [],
+   "scale": "DEG_C"
+  },
+  "cooling_coil_outlet_air_temperature": {
+   "name": "cooling_coil_outlet_air_temperature",
    "markers": [
-    "chilled",
-    "water",
+    "cool",
     "leaving",
+    "air",
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
-  },
-  "clg_available": {
-   "name": "cooling-available",
+   "forbid": [
+    "preheat",
+    "water"
+   ],
+   "binding_scope": "own",
    "classes": [],
+   "scale": "DEG_C"
+  },
+  "cooling_operating_mode_status": {
+   "name": "cooling_operating_mode_status",
    "markers": [
     "cool",
     "enable",
     "sensor"
    ],
+   "binding_scope": "own",
+   "classes": [],
    "scale": "boolean"
   },
-  "clg_valve_pct": {
-   "name": "cooling-valve",
+  "cooling_tower_fan_command": {
+   "name": "cooling_tower_fan_command",
+   "markers": [
+    "fan",
+    "run",
+    "cmd"
+   ],
+   "equip_markers": [
+    "coolingTower"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "boolean"
+  },
+  "cooling_valve_position_command": {
+   "name": "cooling_valve_position_command",
    "classes": [
     "chilled-water-cool-valve-cmd",
     "discharge-chilled-water-cool-valve-cmd"
@@ -291,117 +339,65 @@
     "valve",
     "cmd"
    ],
-   "scale": "fraction"
+   "binding_scope": "own",
+   "scale": "PERCENT"
   },
-  "compressor_status": {
-   "name": "compressor-status",
-   "classes": [],
-   "markers": [
-    "compressor",
-    "run",
-    "sensor"
-   ],
-   "scale": "boolean"
-  },
-  "cooling_coil_entering_temp": {
-   "name": "cooling-coil-entering-temp",
-   "classes": [],
-   "markers": [
-    "cool",
-    "entering",
-    "air",
-    "temp",
-    "sensor"
-   ],
-   "scale": "si:degC"
-  },
-  "cooling_coil_leaving_temp": {
-   "name": "cooling-coil-leaving-temp",
-   "classes": [],
-   "markers": [
-    "cool",
-    "leaving",
-    "air",
-    "temp",
-    "sensor"
-   ],
-   "scale": "si:degC"
-  },
-  "cooling_sp": {
-   "name": "cooling-sp",
-   "classes": [
-    "zone-air-temp-occ-cooling-sp"
-   ],
-   "markers": [
-    "zone",
-    "air",
-    "temp",
-    "cooling",
-    "sp"
-   ],
-   "scale": "si:degC"
-  },
-  "cw_pump_cmd": {
-   "name": "cw-pump-cmd",
-   "classes": [],
-   "markers": [
-    "condenser",
-    "water",
-    "pump",
-    "run",
-    "cmd"
-   ],
-   "scale": "fraction"
-  },
-  "cw_return_t": {
-   "name": "condenser-water-return-temp",
-   "classes": [],
-   "markers": [
-    "condenser",
-    "water",
-    "entering",
-    "temp",
-    "sensor"
-   ],
-   "scale": "si:degC"
-  },
-  "cw_supply_t": {
-   "name": "condenser-water-supply-temp",
-   "classes": [],
-   "markers": [
-    "condenser",
-    "water",
-    "leaving",
-    "temp",
-    "sensor"
-   ],
-   "scale": "si:degC"
-  },
-  "damper_cmd": {
-   "name": "damper-cmd",
-   "classes": [
-    "damper-cmd"
-   ],
-   "markers": [
-    "damper",
-    "cmd"
-   ],
-   "scale": "fraction"
-  },
-  "damper_pct": {
-   "name": "damper",
+  "damper_position": {
+   "name": "damper_position",
    "classes": [
     "damper-sensor",
-    "damper-cmd"
+    "discharge-damper-sensor"
    ],
    "markers": [
     "damper",
     "sensor"
    ],
-   "scale": "fraction"
+   "forbid": [
+    "outside",
+    "return",
+    "exhaust",
+    "economizer",
+    "bypass"
+   ],
+   "binding_scope": "own",
+   "scale": "PERCENT"
   },
-  "duct_static": {
-   "name": "duct-static-pressure",
+  "damper_position_command": {
+   "name": "damper_position_command",
+   "classes": [
+    "damper-cmd",
+    "discharge-damper-cmd"
+   ],
+   "markers": [
+    "damper",
+    "cmd"
+   ],
+   "forbid": [
+    "outside",
+    "return",
+    "exhaust",
+    "economizer",
+    "bypass"
+   ],
+   "binding_scope": "own",
+   "scale": "PERCENT"
+  },
+  "discharge_air_relative_humidity": {
+   "name": "discharge_air_relative_humidity",
+   "classes": [
+    "discharge-air-humidity-sensor"
+   ],
+   "markers": [
+    "discharge",
+    "air",
+    "humidity",
+    "sensor"
+   ],
+   "binding_scope": "own",
+   "scale": "PERCENT_RH"
+  },
+  "discharge_air_static_pressure": {
+   "name": "discharge_air_static_pressure",
    "classes": [
     "discharge-air-pressure-sensor"
    ],
@@ -411,10 +407,24 @@
     "pressure",
     "sensor"
    ],
-   "scale": "si:Pa"
+   "binding_scope": "own",
+   "scale": "PA"
   },
-  "duct_static_sp": {
-   "name": "duct-static-pressure-sp",
+  "discharge_air_static_pressure_reset_request_count": {
+   "name": "discharge_air_static_pressure_reset_request_count",
+   "markers": [
+    "pressure",
+    "sensor"
+   ],
+   "custom_markers": [
+    "request"
+   ],
+   "binding_scope": "derived",
+   "classes": [],
+   "scale": "NUM"
+  },
+  "discharge_air_static_pressure_setpoint": {
+   "name": "discharge_air_static_pressure_setpoint",
    "classes": [
     "discharge-air-pressure-sp"
    ],
@@ -424,10 +434,125 @@
     "pressure",
     "sp"
    ],
-   "scale": "si:Pa"
+   "forbid": [
+    "max",
+    "min"
+   ],
+   "binding_scope": "own",
+   "scale": "PA"
   },
-  "electric_kw": {
-   "name": "electric-power",
+  "discharge_air_temperature": {
+   "name": "discharge_air_temperature",
+   "classes": [
+    "discharge-air-temp-sensor"
+   ],
+   "markers": [
+    "discharge",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "equip_forbid": [
+    "airTerminalUnit"
+   ],
+   "binding_scope": "own",
+   "scale": "DEG_C"
+  },
+  "discharge_air_temperature_setpoint": {
+   "name": "discharge_air_temperature_setpoint",
+   "classes": [
+    "discharge-air-temp-sp"
+   ],
+   "markers": [
+    "discharge",
+    "air",
+    "temp",
+    "sp"
+   ],
+   "forbid": [
+    "max",
+    "min"
+   ],
+   "binding_scope": "own",
+   "scale": "DEG_C"
+  },
+  "discharge_air_volume_flow_rate": {
+   "name": "discharge_air_volume_flow_rate",
+   "classes": [
+    "discharge-air-flow-sensor",
+    "air-flow-sensor"
+   ],
+   "markers": [
+    "air",
+    "flow",
+    "sensor"
+   ],
+   "forbid": [
+    "max",
+    "min",
+    "total"
+   ],
+   "optional": [
+    "discharge"
+   ],
+   "binding_scope": "own",
+   "scale": "L-PER-SEC"
+  },
+  "discharge_air_volume_flow_rate_minimum": {
+   "name": "discharge_air_volume_flow_rate_minimum",
+   "markers": [
+    "min",
+    "air",
+    "flow",
+    "sp"
+   ],
+   "forbid": [
+    "max"
+   ],
+   "optional": [
+    "discharge"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "L-PER-SEC"
+  },
+  "discharge_air_volume_flow_rate_setpoint": {
+   "name": "discharge_air_volume_flow_rate_setpoint",
+   "classes": [
+    "discharge-air-flow-sp",
+    "air-flow-sp"
+   ],
+   "markers": [
+    "air",
+    "flow",
+    "sp"
+   ],
+   "forbid": [
+    "max",
+    "min",
+    "total"
+   ],
+   "optional": [
+    "discharge"
+   ],
+   "binding_scope": "own",
+   "scale": "L-PER-SEC"
+  },
+  "electric_energy": {
+   "name": "electric_energy",
+   "classes": [
+    "total-net-ac-elec-active-energy-sensor"
+   ],
+   "markers": [
+    "elec",
+    "energy",
+    "sensor"
+   ],
+   "binding_scope": "own",
+   "scale": "KiloW-HR"
+  },
+  "electric_power": {
+   "name": "electric_power",
    "classes": [
     "total-active-ac-elec-power-sensor"
    ],
@@ -436,47 +561,34 @@
     "power",
     "sensor"
    ],
-   "scale": "si:kW"
+   "forbid": [
+    "chiller",
+    "fan"
+   ],
+   "equip_forbid": [
+    "chiller"
+   ],
+   "binding_scope": "own",
+   "scale": "KiloW"
   },
-  "electric_kwh": {
-   "name": "electric-energy",
-   "classes": [],
+  "filter_air_pressure_delta": {
+   "name": "filter_air_pressure_delta",
    "markers": [
-    "elec",
-    "energy",
+    "filter",
+    "air",
+    "delta",
+    "pressure",
     "sensor"
    ],
-   "scale": "si:kWh"
-  },
-  "fan_cmd": {
-   "name": "fan-cmd",
-   "classes": [
-    "discharge-run-cmd",
-    "run-cmd"
+   "forbid": [
+    "water"
    ],
-   "markers": [
-    "fan",
-    "run",
-    "cmd"
-   ],
-   "scale": "fraction"
-  },
-  "fan_status": {
-   "name": "fan-status",
-   "classes": [
-    "discharge-run-sensor",
-    "run-sensor"
-   ],
-   "markers": [
-    "fan",
-    "run",
-    "sensor"
-   ],
-   "scale": "boolean"
-  },
-  "heating_coil_entering_temp": {
-   "name": "heating-coil-entering-temp",
+   "binding_scope": "own",
    "classes": [],
+   "scale": "PA"
+  },
+  "heating_coil_inlet_air_temperature": {
+   "name": "heating_coil_inlet_air_temperature",
    "markers": [
     "heat",
     "entering",
@@ -484,11 +596,16 @@
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
-  },
-  "heating_coil_leaving_temp": {
-   "name": "heating-coil-leaving-temp",
+   "forbid": [
+    "preheat",
+    "water"
+   ],
+   "binding_scope": "own",
    "classes": [],
+   "scale": "DEG_C"
+  },
+  "heating_coil_outlet_air_temperature": {
+   "name": "heating_coil_outlet_air_temperature",
    "markers": [
     "heat",
     "leaving",
@@ -496,24 +613,16 @@
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
-  },
-  "heating_sp": {
-   "name": "heating-sp",
-   "classes": [
-    "zone-air-temp-occ-heating-sp"
+   "forbid": [
+    "preheat",
+    "water"
    ],
-   "markers": [
-    "zone",
-    "air",
-    "temp",
-    "heating",
-    "sp"
-   ],
-   "scale": "si:degC"
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "DEG_C"
   },
-  "htg_valve_pct": {
-   "name": "heating-valve",
+  "heating_valve_position_command": {
+   "name": "heating_valve_position_command",
    "classes": [
     "hot-water-heat-valve-cmd",
     "discharge-hot-water-heat-valve-cmd",
@@ -524,65 +633,28 @@
     "valve",
     "cmd"
    ],
-   "scale": "fraction"
+   "forbid": [
+    "reheat"
+   ],
+   "binding_scope": "own",
+   "scale": "PERCENT"
   },
-  "hw_reset_request_sum": {
-   "name": "hot-water-reset-request-sum",
-   "classes": [],
+  "hot_water_reset_request_count": {
+   "name": "hot_water_reset_request_count",
    "markers": [
     "hot",
     "water",
+    "sensor"
+   ],
+   "custom_markers": [
     "request"
    ],
-   "scale": "si:count"
-  },
-  "hw_return_t": {
-   "name": "hot-water-return-temp",
+   "binding_scope": "derived",
    "classes": [],
-   "markers": [
-    "hot",
-    "water",
-    "entering",
-    "temp",
-    "sensor"
-   ],
-   "scale": "si:degC"
+   "scale": "NUM"
   },
-  "hw_supply_t": {
-   "name": "hot-water-supply-temp",
-   "classes": [],
-   "markers": [
-    "hot",
-    "water",
-    "leaving",
-    "temp",
-    "sensor"
-   ],
-   "scale": "si:degC"
-  },
-  "kwh": {
-   "name": "electric-energy",
-   "classes": [],
-   "markers": [
-    "elec",
-    "energy",
-    "sensor"
-   ],
-   "scale": "si:kWh"
-  },
-  "loop_enabled": {
-   "name": "loop-enabled",
-   "classes": [
-    "enable-sensor",
-    "enable-cmd"
-   ],
-   "markers": [
-    "enable"
-   ],
-   "scale": "boolean"
-  },
-  "ma_h": {
-   "name": "mixed-air-humidity",
+  "mixed_air_relative_humidity": {
+   "name": "mixed_air_relative_humidity",
    "classes": [
     "mixed-air-humidity-sensor"
    ],
@@ -592,10 +664,11 @@
     "humidity",
     "sensor"
    ],
-   "scale": "percent_rh"
+   "binding_scope": "own",
+   "scale": "PERCENT_RH"
   },
-  "mat": {
-   "name": "mixed-air-temp",
+  "mixed_air_temperature": {
+   "name": "mixed_air_temperature",
    "classes": [
     "mixed-air-temp-sensor"
    ],
@@ -605,33 +678,68 @@
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
+   "binding_scope": "own",
+   "scale": "DEG_C"
   },
-  "min_flow_sp": {
-   "name": "min-flow-sp",
-   "classes": [],
-   "markers": [
-    "min",
-    "air",
-    "flow",
-    "sp"
-   ],
-   "scale": "si:L/s"
-  },
-  "oa_damper_pct": {
-   "name": "outside-air-damper",
+  "occupancy_status": {
+   "name": "occupancy_status",
    "classes": [
-    "outside-damper-cmd",
-    "outside-damper-sensor"
+    "occupied-sensor"
+   ],
+   "markers": [
+    "occupied"
+   ],
+   "forbid": [
+    "sp",
+    "cmd"
+   ],
+   "optional": [
+    "sensor"
+   ],
+   "binding_scope": "own",
+   "scale": "boolean"
+  },
+  "operating_mode_status": {
+   "name": "operating_mode_status",
+   "classes": [
+    "enable-sensor"
+   ],
+   "markers": [
+    "enable",
+    "sensor"
+   ],
+   "forbid": [
+    "cool",
+    "heat"
+   ],
+   "binding_scope": "own",
+   "scale": "boolean"
+  },
+  "operating_status": {
+   "name": "operating_status",
+   "binding_scope": "derived",
+   "classes": [],
+   "markers": [],
+   "scale": "boolean"
+  },
+  "outdoor_air_intake_damper_position_command": {
+   "name": "outdoor_air_intake_damper_position_command",
+   "classes": [
+    "outside-damper-cmd"
    ],
    "markers": [
     "outside",
-    "damper"
+    "damper",
+    "cmd"
    ],
-   "scale": "fraction"
+   "optional": [
+    "air"
+   ],
+   "binding_scope": "own",
+   "scale": "PERCENT"
   },
-  "oa_h": {
-   "name": "outside-air-humidity",
+  "outdoor_air_intake_relative_humidity": {
+   "name": "outdoor_air_intake_relative_humidity",
    "classes": [
     "outside-air-humidity-sensor"
    ],
@@ -641,10 +749,14 @@
     "humidity",
     "sensor"
    ],
-   "scale": "percent_rh"
+   "forbid": [
+    "weather"
+   ],
+   "binding_scope": "own",
+   "scale": "PERCENT_RH"
   },
-  "oa_t": {
-   "name": "outside-air-temp",
+  "outdoor_air_intake_temperature": {
+   "name": "outdoor_air_intake_temperature",
    "classes": [
     "outside-air-temp-sensor"
    ],
@@ -654,42 +766,40 @@
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
-  },
-  "occ_mode": {
-   "name": "occupied",
-   "classes": [
-    "occupied-sensor"
+   "forbid": [
+    "weather"
    ],
-   "markers": [
-    "occupied"
-   ],
-   "scale": "text"
+   "binding_scope": "own",
+   "scale": "DEG_C"
   },
-  "preheat_leave_t": {
-   "name": "preheat-leaving-temp",
-   "classes": [],
+  "preheat_heating_coil_outlet_air_temperature": {
+   "name": "preheat_heating_coil_outlet_air_temperature",
    "markers": [
-    "preheat",
     "leaving",
     "air",
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
-  },
-  "pump_status": {
-   "name": "pump-status",
+   "custom_markers": [
+    "preheat"
+   ],
+   "binding_scope": "own",
    "classes": [],
+   "scale": "DEG_C"
+  },
+  "pump_operating_status": {
+   "name": "pump_operating_status",
    "markers": [
     "pump",
     "run",
     "sensor"
    ],
+   "binding_scope": "own",
+   "classes": [],
    "scale": "boolean"
   },
-  "ra_h": {
-   "name": "return-air-humidity",
+  "return_air_relative_humidity": {
+   "name": "return_air_relative_humidity",
    "classes": [
     "return-air-humidity-sensor"
    ],
@@ -699,10 +809,11 @@
     "humidity",
     "sensor"
    ],
-   "scale": "percent_rh"
+   "binding_scope": "own",
+   "scale": "PERCENT_RH"
   },
-  "rat": {
-   "name": "return-air-temp",
+  "return_air_temperature": {
+   "name": "return_air_temperature",
    "classes": [
     "return-air-temp-sensor"
    ],
@@ -712,21 +823,37 @@
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
+   "binding_scope": "own",
+   "scale": "DEG_C"
   },
-  "reheat_valve_pct": {
-   "name": "reheat-valve",
-   "classes": [
-    "reheat-cmd"
-   ],
+  "return_chilled_water_temperature": {
+   "name": "return_chilled_water_temperature",
    "markers": [
-    "reheat",
-    "cmd"
+    "chilled",
+    "water",
+    "entering",
+    "temp",
+    "sensor"
    ],
-   "scale": "fraction"
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "DEG_C"
   },
-  "return_fan": {
-   "name": "return-fan-cmd",
+  "return_condenser_water_temperature": {
+   "name": "return_condenser_water_temperature",
+   "markers": [
+    "condenser",
+    "water",
+    "entering",
+    "temp",
+    "sensor"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "DEG_C"
+  },
+  "return_fan_command": {
+   "name": "return_fan_command",
    "classes": [
     "return-run-cmd"
    ],
@@ -736,75 +863,182 @@
     "run",
     "cmd"
    ],
-   "scale": "fraction"
-  },
-  "run_proof": {
-   "name": "run-proof",
-   "classes": [],
-   "markers": [],
+   "binding_scope": "own",
    "scale": "boolean"
   },
-  "sa_h": {
-   "name": "supply-air-humidity",
-   "classes": [
-    "discharge-air-humidity-sensor"
-   ],
+  "return_hot_water_temperature": {
+   "name": "return_hot_water_temperature",
    "markers": [
-    "discharge",
-    "air",
-    "humidity",
-    "sensor"
-   ],
-   "scale": "percent_rh"
-  },
-  "sat": {
-   "name": "discharge-air-temp",
-   "classes": [
-    "discharge-air-temp-sensor"
-   ],
-   "markers": [
-    "discharge",
-    "air",
+    "hot",
+    "water",
+    "entering",
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "DEG_C"
   },
-  "sat_sp": {
-   "name": "discharge-air-temp-sp",
-   "classes": [
-    "discharge-air-temp-sp"
-   ],
+  "supply_chilled_water_temperature": {
+   "name": "supply_chilled_water_temperature",
    "markers": [
-    "discharge",
-    "air",
+    "chilled",
+    "water",
+    "leaving",
+    "temp",
+    "sensor"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "DEG_C"
+  },
+  "supply_chilled_water_temperature_setpoint": {
+   "name": "supply_chilled_water_temperature_setpoint",
+   "markers": [
+    "chilled",
+    "water",
+    "leaving",
     "temp",
     "sp"
    ],
-   "scale": "si:degC"
-  },
-  "static_reset_request": {
-   "name": "vav-pressure-request-sum",
-   "classes": [],
-   "markers": [
-    "pressure",
-    "request"
+   "forbid": [
+    "max",
+    "min"
    ],
-   "scale": "si:count"
-  },
-  "tower_fan_cmd": {
-   "name": "tower-fan-cmd",
+   "binding_scope": "own",
    "classes": [],
+   "scale": "DEG_C"
+  },
+  "supply_condenser_water_temperature": {
+   "name": "supply_condenser_water_temperature",
    "markers": [
-    "coolingTower",
+    "condenser",
+    "water",
+    "leaving",
+    "temp",
+    "sensor"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "DEG_C"
+  },
+  "supply_fan_command": {
+   "name": "supply_fan_command",
+   "classes": [
+    "discharge-run-cmd",
+    "run-cmd"
+   ],
+   "markers": [
     "fan",
     "run",
     "cmd"
    ],
-   "scale": "fraction"
+   "forbid": [
+    "return",
+    "exhaust",
+    "pump"
+   ],
+   "optional": [
+    "discharge"
+   ],
+   "equip_forbid": [
+    "coolingTower"
+   ],
+   "binding_scope": "own",
+   "scale": "boolean"
   },
-  "vav_discharge_t": {
-   "name": "vav-discharge-air-temp",
+  "supply_fan_electric_power": {
+   "name": "supply_fan_electric_power",
+   "markers": [
+    "fan",
+    "elec",
+    "power",
+    "sensor"
+   ],
+   "forbid": [
+    "return",
+    "exhaust",
+    "pump",
+    "chiller"
+   ],
+   "optional": [
+    "discharge"
+   ],
+   "equip_forbid": [
+    "chiller",
+    "coolingTower"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "KiloW"
+  },
+  "supply_fan_operating_status": {
+   "name": "supply_fan_operating_status",
+   "classes": [
+    "discharge-run-sensor",
+    "run-sensor"
+   ],
+   "markers": [
+    "fan",
+    "run",
+    "sensor"
+   ],
+   "forbid": [
+    "return",
+    "exhaust",
+    "pump"
+   ],
+   "optional": [
+    "discharge"
+   ],
+   "equip_forbid": [
+    "coolingTower",
+    "boiler"
+   ],
+   "binding_scope": "own",
+   "scale": "boolean"
+  },
+  "supply_fan_speed_command": {
+   "name": "supply_fan_speed_command",
+   "classes": [
+    "discharge-vfd-speed-cmd",
+    "vfd-speed-cmd"
+   ],
+   "markers": [
+    "vfd",
+    "speed",
+    "cmd"
+   ],
+   "forbid": [
+    "return",
+    "exhaust",
+    "pump"
+   ],
+   "optional": [
+    "discharge",
+    "fan"
+   ],
+   "equip_forbid": [
+    "coolingTower"
+   ],
+   "binding_scope": "own",
+   "scale": "PERCENT"
+  },
+  "supply_hot_water_temperature": {
+   "name": "supply_hot_water_temperature",
+   "markers": [
+    "hot",
+    "water",
+    "leaving",
+    "temp",
+    "sensor"
+   ],
+   "binding_scope": "own",
+   "classes": [],
+   "scale": "DEG_C"
+  },
+  "terminal_unit_discharge_air_temperature": {
+   "name": "terminal_unit_discharge_air_temperature",
    "classes": [
     "discharge-air-temp-sensor"
    ],
@@ -814,104 +1048,122 @@
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
-  },
-  "vav_inlet_t": {
-   "name": "vav-inlet-air-temp",
-   "classes": [
-    "inlet-air-temp-sensor"
+   "equip_markers": [
+    "airTerminalUnit"
    ],
-   "markers": [
-    "entering",
-    "air",
-    "temp",
-    "sensor"
-   ],
-   "scale": "si:degC"
+   "binding_scope": "own",
+   "scale": "DEG_C"
   },
-  "vav_total_flow": {
-   "name": "vav-total-airflow",
-   "classes": [],
+  "terminal_unit_discharge_air_total_volume_flow_rate": {
+   "name": "terminal_unit_discharge_air_total_volume_flow_rate",
    "markers": [
     "total",
     "air",
     "flow",
     "sensor"
    ],
-   "scale": "si:L/s"
-  },
-  "web_oa_dp": {
-   "name": "web-outside-air-dewpoint",
-   "classes": [],
-   "markers": [
-    "weather",
-    "outside",
-    "air",
-    "dewPoint"
+   "forbid": [
+    "max",
+    "min"
    ],
-   "scale": "si:degC"
-  },
-  "web_oa_h": {
-   "name": "web-outside-air-humidity",
+   "binding_scope": "aggregate",
    "classes": [],
-   "markers": [
-    "weather",
-    "outside",
-    "air",
-    "humidity"
-   ],
-   "scale": "percent_rh"
+   "scale": "L-PER-SEC"
   },
-  "web_oa_t": {
-   "name": "web-outside-air-temp",
-   "classes": [],
-   "markers": [
-    "weather",
-    "outside",
-    "air",
-    "temp"
-   ],
-   "scale": "si:degC"
-  },
-  "web_wb_t": {
-   "name": "web-outside-air-wetbulb",
-   "classes": [],
-   "markers": [
-    "weather",
-    "outside",
-    "air",
-    "wetBulb"
-   ],
-   "scale": "si:degC"
-  },
-  "zone_air_temp_sp": {
-   "name": "zone-air-temp-sp",
+  "terminal_unit_heating_valve_position_command": {
+   "name": "terminal_unit_heating_valve_position_command",
    "classes": [
-    "zone-air-temp-effective-sp"
+    "reheat-cmd"
    ],
    "markers": [
-    "zone",
+    "reheat",
+    "cmd"
+   ],
+   "equip_markers": [
+    "airTerminalUnit"
+   ],
+   "binding_scope": "own",
+   "scale": "PERCENT"
+  },
+  "terminal_unit_inlet_air_temperature": {
+   "name": "terminal_unit_inlet_air_temperature",
+   "classes": [
+    "inlet-air-temp-sensor"
+   ],
+   "markers": [
+    "inlet",
     "air",
     "temp",
-    "sp"
+    "sensor"
    ],
-   "scale": "si:degC"
+   "alt_markers": [
+    [
+     "entering",
+     "air",
+     "temp",
+     "sensor"
+    ]
+   ],
+   "equip_markers": [
+    "airTerminalUnit"
+   ],
+   "binding_scope": "own",
+   "scale": "DEG_C"
   },
-  "zone_airflow_sp": {
-   "name": "zone-airflow-sp",
-   "classes": [
-    "discharge-air-flow-sp",
-    "air-flow-sp"
-   ],
+  "weather_service_air_dew_point_temperature": {
+   "name": "weather_service_air_dew_point_temperature",
    "markers": [
+    "weather",
+    "outside",
     "air",
-    "flow",
-    "sp"
+    "dewPoint",
+    "sensor"
    ],
-   "scale": "si:L/s"
+   "binding_scope": "weather",
+   "classes": [],
+   "scale": "DEG_C"
   },
-  "zone_co2": {
-   "name": "zone-co2",
+  "weather_service_air_relative_humidity": {
+   "name": "weather_service_air_relative_humidity",
+   "markers": [
+    "weather",
+    "outside",
+    "air",
+    "humidity",
+    "sensor"
+   ],
+   "binding_scope": "weather",
+   "classes": [],
+   "scale": "PERCENT_RH"
+  },
+  "weather_service_air_temperature": {
+   "name": "weather_service_air_temperature",
+   "markers": [
+    "weather",
+    "outside",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "binding_scope": "weather",
+   "classes": [],
+   "scale": "DEG_C"
+  },
+  "weather_service_air_wet_bulb_temperature": {
+   "name": "weather_service_air_wet_bulb_temperature",
+   "markers": [
+    "weather",
+    "outside",
+    "air",
+    "wetBulb",
+    "sensor"
+   ],
+   "binding_scope": "weather",
+   "classes": [],
+   "scale": "DEG_C"
+  },
+  "zone_air_co2": {
+   "name": "zone_air_co2",
    "classes": [
     "air-co2-concentration-sensor"
    ],
@@ -921,23 +1173,14 @@
     "co2",
     "sensor"
    ],
-   "scale": "si:ppm"
-  },
-  "zone_flow": {
-   "name": "zone-airflow",
-   "classes": [
-    "discharge-air-flow-sensor",
-    "air-flow-sensor"
+   "optional": [
+    "concentration"
    ],
-   "markers": [
-    "air",
-    "flow",
-    "sensor"
-   ],
-   "scale": "si:L/s"
+   "binding_scope": "own",
+   "scale": "PPM"
   },
-  "zone_rh": {
-   "name": "zone-air-humidity",
+  "zone_air_relative_humidity": {
+   "name": "zone_air_relative_humidity",
    "classes": [
     "zone-air-humidity-sensor"
    ],
@@ -947,10 +1190,11 @@
     "humidity",
     "sensor"
    ],
-   "scale": "percent_rh"
+   "binding_scope": "own",
+   "scale": "PERCENT_RH"
   },
-  "zone_t": {
-   "name": "zone-air-temp",
+  "zone_air_temperature": {
+   "name": "zone_air_temperature",
    "classes": [
     "zone-air-temp-sensor"
    ],
@@ -960,109 +1204,202 @@
     "temp",
     "sensor"
    ],
-   "scale": "si:degC"
+   "binding_scope": "own",
+   "scale": "DEG_C"
+  },
+  "zone_air_temperature_setpoint": {
+   "name": "zone_air_temperature_setpoint",
+   "classes": [
+    "zone-air-temp-effective-sp"
+   ],
+   "markers": [
+    "zone",
+    "air",
+    "temp",
+    "sp"
+   ],
+   "forbid": [
+    "cooling",
+    "heating",
+    "occ",
+    "unocc",
+    "standby",
+    "max",
+    "min"
+   ],
+   "optional": [
+    "effective"
+   ],
+   "binding_scope": "own",
+   "scale": "DEG_C"
+  },
+  "zone_cooling_air_temperature_setpoint": {
+   "name": "zone_cooling_air_temperature_setpoint",
+   "classes": [
+    "zone-air-temp-occ-cooling-sp"
+   ],
+   "markers": [
+    "zone",
+    "air",
+    "temp",
+    "cooling",
+    "sp"
+   ],
+   "forbid": [
+    "heating",
+    "unocc",
+    "standby",
+    "effective",
+    "max",
+    "min"
+   ],
+   "optional": [
+    "occ"
+   ],
+   "binding_scope": "own",
+   "scale": "DEG_C"
+  },
+  "zone_heating_air_temperature_setpoint": {
+   "name": "zone_heating_air_temperature_setpoint",
+   "classes": [
+    "zone-air-temp-occ-heating-sp"
+   ],
+   "markers": [
+    "zone",
+    "air",
+    "temp",
+    "heating",
+    "sp"
+   ],
+   "forbid": [
+    "cooling",
+    "unocc",
+    "standby",
+    "effective",
+    "max",
+    "min"
+   ],
+   "optional": [
+    "occ"
+   ],
+   "binding_scope": "own",
+   "scale": "DEG_C"
+  },
+  "zone_load_satisfied_status": {
+   "name": "zone_load_satisfied_status",
+   "markers": [
+    "zone",
+    "load",
+    "sensor"
+   ],
+   "custom_markers": [
+    "satisfied"
+   ],
+   "binding_scope": "derived",
+   "classes": [],
+   "scale": "boolean"
   }
  },
  "sensor_sweep_roles": {
   "SV-RANGE": [
-   "oa_t",
-   "mat",
-   "zone_t",
-   "rat",
-   "sat",
-   "chw_supply_t",
-   "chw_return_t",
-   "hw_supply_t",
-   "hw_return_t",
-   "oa_h",
-   "ra_h",
-   "zone_rh",
-   "ma_h",
-   "sa_h",
-   "duct_static",
-   "chw_flow",
-   "zone_flow",
-   "chw_dp",
-   "cw_supply_t",
-   "cw_return_t",
-   "chiller_power"
+   "outdoor_air_intake_temperature",
+   "mixed_air_temperature",
+   "zone_air_temperature",
+   "return_air_temperature",
+   "discharge_air_temperature",
+   "supply_chilled_water_temperature",
+   "return_chilled_water_temperature",
+   "supply_hot_water_temperature",
+   "return_hot_water_temperature",
+   "outdoor_air_intake_relative_humidity",
+   "return_air_relative_humidity",
+   "zone_air_relative_humidity",
+   "mixed_air_relative_humidity",
+   "discharge_air_relative_humidity",
+   "discharge_air_static_pressure",
+   "chilled_water_volume_flow_rate",
+   "discharge_air_volume_flow_rate",
+   "chilled_water_pressure_delta",
+   "supply_condenser_water_temperature",
+   "return_condenser_water_temperature",
+   "chiller_electric_power"
   ],
   "SV-FLATLINE": [
-   "oa_t",
-   "mat",
-   "zone_t",
-   "rat",
-   "sat",
-   "chw_supply_t",
-   "chw_return_t",
-   "hw_supply_t",
-   "hw_return_t",
-   "oa_h",
-   "ra_h",
-   "zone_rh",
-   "ma_h",
-   "sa_h"
+   "outdoor_air_intake_temperature",
+   "mixed_air_temperature",
+   "zone_air_temperature",
+   "return_air_temperature",
+   "discharge_air_temperature",
+   "supply_chilled_water_temperature",
+   "return_chilled_water_temperature",
+   "supply_hot_water_temperature",
+   "return_hot_water_temperature",
+   "outdoor_air_intake_relative_humidity",
+   "return_air_relative_humidity",
+   "zone_air_relative_humidity",
+   "mixed_air_relative_humidity",
+   "discharge_air_relative_humidity"
   ],
   "SV-SPIKE": [
-   "oa_t",
-   "mat",
-   "zone_t",
-   "rat",
-   "sat",
-   "chw_supply_t",
-   "chw_return_t",
-   "hw_supply_t",
-   "hw_return_t",
-   "oa_h",
-   "duct_static",
-   "cw_supply_t",
-   "cw_return_t"
+   "outdoor_air_intake_temperature",
+   "mixed_air_temperature",
+   "zone_air_temperature",
+   "return_air_temperature",
+   "discharge_air_temperature",
+   "supply_chilled_water_temperature",
+   "return_chilled_water_temperature",
+   "supply_hot_water_temperature",
+   "return_hot_water_temperature",
+   "outdoor_air_intake_relative_humidity",
+   "discharge_air_static_pressure",
+   "supply_condenser_water_temperature",
+   "return_condenser_water_temperature"
   ],
   "SV-STALE": [
-   "oa_t",
-   "mat",
-   "zone_t",
-   "rat",
-   "sat",
-   "chw_supply_t",
-   "chw_return_t",
-   "hw_supply_t",
-   "hw_return_t",
-   "oa_h",
-   "ra_h",
-   "zone_rh",
-   "ma_h",
-   "sa_h",
-   "duct_static",
-   "zone_flow"
+   "outdoor_air_intake_temperature",
+   "mixed_air_temperature",
+   "zone_air_temperature",
+   "return_air_temperature",
+   "discharge_air_temperature",
+   "supply_chilled_water_temperature",
+   "return_chilled_water_temperature",
+   "supply_hot_water_temperature",
+   "return_hot_water_temperature",
+   "outdoor_air_intake_relative_humidity",
+   "return_air_relative_humidity",
+   "zone_air_relative_humidity",
+   "mixed_air_relative_humidity",
+   "discharge_air_relative_humidity",
+   "discharge_air_static_pressure",
+   "discharge_air_volume_flow_rate"
   ],
   "SV-RATE": [
-   "oa_t",
-   "mat",
-   "zone_t",
-   "rat",
-   "sat"
+   "outdoor_air_intake_temperature",
+   "mixed_air_temperature",
+   "zone_air_temperature",
+   "return_air_temperature",
+   "discharge_air_temperature"
   ]
  },
- "run_proof": {
+ "operating_status": {
   "version": 1,
-  "role": "run_proof",
-  "column": "run-proof",
+  "role": "operating_status",
+  "column": "operating_status",
   "threshold": 0.05,
   "skip_reason": "no_run_proof",
   "own": {
    "status": [
-    "fan_status",
-    "pump_status",
-    "chw_pump_status",
-    "chiller_status",
-    "compressor_status"
+    "supply_fan_operating_status",
+    "pump_operating_status",
+    "chilled_water_pump_operating_status",
+    "chiller_operating_status",
+    "compressor_operating_status"
    ],
    "command": [
-    "fan_cmd",
-    "chw_pump_cmd",
-    "cw_pump_cmd",
-    "tower_fan_cmd"
+    "supply_fan_command",
+    "chilled_water_pump_command",
+    "condenser_water_pump_command",
+    "cooling_tower_fan_command"
    ]
   },
   "feeders": {
@@ -1097,18 +1434,18 @@
  "rules": [
   {
    "id": "FAN-RUNTIME-HOURS",
-   "description": "Fan running hours where fan_cmd > 5% (normalized 0-1)",
+   "description": "Fan running hours where supply_fan_command > 5% (normalized 0-1)",
    "sql_file": "fan_runtime_hours.sql",
    "priority": "P0",
    "equipment_kinds": [],
    "required_roles": [
-    "fan_cmd"
+    "supply_fan_command"
    ],
    "optional_roles": [],
    "unmapped_roles": [],
    "confirm_seconds": 0,
    "parameters": {},
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "measures the equipment runtime itself"
   },
   {
@@ -1123,10 +1460,10 @@
     "baseboard"
    ],
    "required_roles": [
-    "zone_t"
+    "zone_air_temperature"
    ],
    "optional_roles": [
-    "occ_mode"
+    "occupancy_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -1136,7 +1473,7 @@
     "require_occupied": 1.0,
     "confirm_seconds": 900
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "zone comfort band while occupied; independent of the air handler running"
   },
   {
@@ -1151,8 +1488,8 @@
     "baseboard"
    ],
    "required_roles": [
-    "zone_t",
-    "occ_mode"
+    "zone_air_temperature",
+    "occupancy_status"
    ],
    "optional_roles": [],
    "unmapped_roles": [],
@@ -1161,7 +1498,7 @@
     "setback_hi": 20.0,
     "confirm_seconds": 900
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "night setback runs while the air handler is off by design"
   },
   {
@@ -1171,7 +1508,7 @@
    "priority": "P0",
    "equipment_kinds": [],
    "required_roles": [
-    "zone_t"
+    "zone_air_temperature"
    ],
    "optional_roles": [],
    "unmapped_roles": [],
@@ -1180,7 +1517,7 @@
     "zone_t_lo": 20.0,
     "zone_t_hi": 24.444444444
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "zone statistic, not an equipment fault"
   },
   {
@@ -1190,7 +1527,7 @@
    "priority": "P0",
    "equipment_kinds": [],
    "required_roles": [
-    "zone_t"
+    "zone_air_temperature"
    ],
    "optional_roles": [],
    "unmapped_roles": [],
@@ -1199,7 +1536,7 @@
     "zone_t_lo": 20.0,
     "zone_t_hi": 24.444444444
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "zone comfort statistic, not an equipment fault"
   },
   {
@@ -1209,7 +1546,7 @@
    "priority": "P0",
    "equipment_kinds": [],
    "required_roles": [
-    "zone_t"
+    "zone_air_temperature"
    ],
    "optional_roles": [],
    "unmapped_roles": [],
@@ -1218,7 +1555,7 @@
     "zone_t_lo": 20.0,
     "zone_t_hi": 24.444444
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "aggregates fault flags of other rules"
   },
   {
@@ -1230,10 +1567,10 @@
     "ahu"
    ],
    "required_roles": [
-    "oa_t"
+    "outdoor_air_intake_temperature"
    ],
    "optional_roles": [
-    "web_oa_t"
+    "weather_service_air_temperature"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -1241,7 +1578,7 @@
     "oat_err": 2.777778,
     "confirm_seconds": 900
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "compares two outside-air sources; no running equipment is judged"
   },
   {
@@ -1253,29 +1590,28 @@
     "ahu"
    ],
    "required_roles": [
-    "sat",
-    "sat_sp",
-    "clg_valve_pct",
-    "oa_damper_pct"
+    "discharge_air_temperature",
+    "discharge_air_temperature_setpoint",
+    "cooling_valve_position_command",
+    "outdoor_air_intake_damper_position_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "eps_sat": 0.638888889,
-    "econ_min_pos": 0.05,
-    "econ_full_open": 0.9,
-    "clg_full_min": 0.9,
-    "oa_damper_econ_low": 0.05,
+    "econ_min_pos": 5.0,
+    "econ_full_open": 90.0,
+    "clg_full_min": 90.0,
+    "oa_damper_econ_low": 5.0,
     "confirm_seconds": 600
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "ECON-2",
@@ -1286,23 +1622,23 @@
     "ahu"
    ],
    "required_roles": [
-    "oa_t",
-    "oa_damper_pct"
+    "outdoor_air_intake_temperature",
+    "outdoor_air_intake_damper_position_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "require_run_proof": 1.0,
     "econ2_oat_hi": 17.222222,
-    "econ2_damper": 0.42,
+    "econ2_damper": 42.0,
     "confirm_seconds": 300
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC1",
@@ -1313,25 +1649,24 @@
     "ahu"
    ],
    "required_roles": [
-    "duct_static",
-    "duct_static_sp",
-    "fan_cmd"
+    "discharge_air_static_pressure",
+    "discharge_air_static_pressure_setpoint",
+    "supply_fan_speed_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "eps_dsp": 29.8608,
-    "eps_vfd_spd": 0.13,
+    "eps_vfd_spd": 13.0,
     "confirm_seconds": 300
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC2",
@@ -1342,28 +1677,27 @@
     "ahu"
    ],
    "required_roles": [
-    "mat",
-    "oa_t",
-    "rat",
-    "fan_cmd"
+    "mixed_air_temperature",
+    "outdoor_air_intake_temperature",
+    "return_air_temperature",
+    "supply_fan_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "eps_rat": 0.638888889,
     "eps_oat": 0.638888889,
     "eps_mat": 0.638888889,
     "mix_tol": 0.638888889,
     "confirm_seconds": 600
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC3",
@@ -1374,15 +1708,15 @@
     "ahu"
    ],
    "required_roles": [
-    "mat",
-    "oa_t",
-    "rat",
-    "fan_cmd"
+    "mixed_air_temperature",
+    "outdoor_air_intake_temperature",
+    "return_air_temperature",
+    "supply_fan_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
@@ -1392,10 +1726,9 @@
     "eps_oat": 0.638888889,
     "eps_mat": 0.638888889,
     "mix_tol": 0.638888889,
-    "fan_on_min": 0.01,
     "confirm_seconds": 600
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC7",
@@ -1406,25 +1739,24 @@
     "ahu"
    ],
    "required_roles": [
-    "sat",
-    "sat_sp",
-    "htg_valve_pct"
+    "discharge_air_temperature",
+    "discharge_air_temperature_setpoint",
+    "heating_valve_position_command"
    ],
    "optional_roles": [
-    "fan_cmd",
-    "fan_status",
-    "run_proof"
+    "supply_fan_command",
+    "supply_fan_operating_status",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "eps_sat": 0.638888889,
-    "htg_full_min": 0.9,
+    "htg_full_min": 90.0,
     "confirm_seconds": 600
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC8",
@@ -1435,31 +1767,30 @@
     "ahu"
    ],
    "required_roles": [
-    "sat",
-    "mat",
-    "oa_damper_pct",
-    "clg_valve_pct"
+    "discharge_air_temperature",
+    "mixed_air_temperature",
+    "outdoor_air_intake_damper_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "supply_tol": 0.638888889,
     "eps_sat": 0.638888889,
     "eps_mat": 0.638888889,
     "mix_tol": 0.638888889,
     "delta_supply_fan": 0.305555556,
-    "econ_min_pos": 0.05,
-    "clg_inactive_max": 0.1,
+    "econ_min_pos": 5.0,
+    "clg_inactive_max": 10.0,
     "confirm_seconds": 600
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC9",
@@ -1470,30 +1801,29 @@
     "ahu"
    ],
    "required_roles": [
-    "oa_t",
-    "sat_sp",
-    "oa_damper_pct",
-    "clg_valve_pct"
+    "outdoor_air_intake_temperature",
+    "discharge_air_temperature_setpoint",
+    "outdoor_air_intake_damper_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "eps_sat": 0.638888889,
     "eps_oat": 0.638888889,
     "mix_tol": 0.638888889,
     "delta_supply_fan": 0.305555556,
-    "econ_min_pos": 0.05,
-    "clg_inactive_max": 0.1,
+    "econ_min_pos": 5.0,
+    "clg_inactive_max": 10.0,
     "confirm_seconds": 600
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC10",
@@ -1504,29 +1834,28 @@
     "ahu"
    ],
    "required_roles": [
-    "mat",
-    "oa_t",
-    "oa_damper_pct",
-    "clg_valve_pct"
+    "mixed_air_temperature",
+    "outdoor_air_intake_temperature",
+    "outdoor_air_intake_damper_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "eps_oat": 0.638888889,
     "eps_mat": 0.638888889,
-    "econ_full_open": 0.9,
+    "econ_full_open": 90.0,
     "mix_tol": 0.638888889,
-    "clg_on_min": 0.01,
+    "clg_on_min": 1.0,
     "confirm_seconds": 600
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC11",
@@ -1537,30 +1866,29 @@
     "ahu"
    ],
    "required_roles": [
-    "oa_t",
-    "sat_sp",
-    "oa_damper_pct",
-    "clg_valve_pct"
+    "outdoor_air_intake_temperature",
+    "discharge_air_temperature_setpoint",
+    "outdoor_air_intake_damper_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "eps_sat": 0.638888889,
     "eps_oat": 0.638888889,
-    "econ_full_open": 0.9,
+    "econ_full_open": 90.0,
     "mix_tol": 0.638888889,
     "delta_supply_fan": 0.305555556,
-    "clg_on_min": 0.01,
+    "clg_on_min": 1.0,
     "confirm_seconds": 600
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC12",
@@ -1571,32 +1899,31 @@
     "ahu"
    ],
    "required_roles": [
-    "sat",
-    "mat",
-    "oa_damper_pct",
-    "clg_valve_pct"
+    "discharge_air_temperature",
+    "mixed_air_temperature",
+    "outdoor_air_intake_damper_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "supply_tol": 0.638888889,
     "eps_sat": 0.638888889,
     "eps_mat": 0.638888889,
-    "econ_full_open": 0.9,
+    "econ_full_open": 90.0,
     "mix_tol": 0.638888889,
     "delta_supply_fan": 0.305555556,
-    "clg_on_min": 0.01,
-    "econ_min_pos": 0.05,
+    "clg_on_min": 1.0,
+    "econ_min_pos": 5.0,
     "confirm_seconds": 600
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "ECON-1",
@@ -1607,23 +1934,23 @@
     "ahu"
    ],
    "required_roles": [
-    "fan_cmd",
-    "oa_damper_pct",
-    "oa_t"
+    "supply_fan_command",
+    "outdoor_air_intake_damper_position_command",
+    "outdoor_air_intake_temperature"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "require_run_proof": 1.0,
     "econ1_oat_min": 12.777778,
-    "econ1_damper_max": 0.05
+    "econ1_damper_max": 5.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "ECON-4",
@@ -1634,15 +1961,15 @@
     "ahu"
    ],
    "required_roles": [
-    "mat",
-    "rat",
-    "oa_t",
-    "fan_cmd"
+    "mixed_air_temperature",
+    "return_air_temperature",
+    "outdoor_air_intake_temperature",
+    "supply_fan_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
@@ -1652,7 +1979,7 @@
     "oat_rat_delta_min": 1.222222,
     "confirm_seconds": 600
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "SV-RANGE",
@@ -1671,31 +1998,31 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "oa_t",
-    "mat",
-    "zone_t",
-    "rat",
-    "sat",
-    "chw_supply_t",
-    "chw_return_t",
-    "hw_supply_t",
-    "hw_return_t",
-    "oa_h",
-    "ra_h",
-    "zone_rh",
-    "ma_h",
-    "sa_h",
-    "duct_static",
-    "fan_status",
-    "fan_cmd",
-    "pump_status",
-    "chw_pump_cmd",
-    "chiller_status",
-    "zone_flow",
-    "kwh",
-    "electric_kw",
-    "electric_kwh",
-    "run_proof"
+    "outdoor_air_intake_temperature",
+    "mixed_air_temperature",
+    "zone_air_temperature",
+    "return_air_temperature",
+    "discharge_air_temperature",
+    "supply_chilled_water_temperature",
+    "return_chilled_water_temperature",
+    "supply_hot_water_temperature",
+    "return_hot_water_temperature",
+    "outdoor_air_intake_relative_humidity",
+    "return_air_relative_humidity",
+    "zone_air_relative_humidity",
+    "mixed_air_relative_humidity",
+    "discharge_air_relative_humidity",
+    "discharge_air_static_pressure",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "pump_operating_status",
+    "chilled_water_pump_command",
+    "chiller_operating_status",
+    "discharge_air_volume_flow_rate",
+    "electric_energy",
+    "electric_power",
+    "electric_energy",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
@@ -1706,7 +2033,7 @@
     "range_scale_humidity": 1.0,
     "range_scale_pressure": 1.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "SV-FLATLINE",
@@ -1724,27 +2051,27 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "oa_t",
-    "mat",
-    "zone_t",
-    "rat",
-    "sat",
-    "chw_supply_t",
-    "chw_return_t",
-    "hw_supply_t",
-    "hw_return_t",
-    "oa_h",
-    "ra_h",
-    "zone_rh",
-    "ma_h",
-    "sa_h",
-    "fan_status",
-    "fan_cmd",
-    "pump_status",
-    "chw_pump_cmd",
-    "chiller_status",
-    "zone_flow",
-    "run_proof"
+    "outdoor_air_intake_temperature",
+    "mixed_air_temperature",
+    "zone_air_temperature",
+    "return_air_temperature",
+    "discharge_air_temperature",
+    "supply_chilled_water_temperature",
+    "return_chilled_water_temperature",
+    "supply_hot_water_temperature",
+    "return_hot_water_temperature",
+    "outdoor_air_intake_relative_humidity",
+    "return_air_relative_humidity",
+    "zone_air_relative_humidity",
+    "mixed_air_relative_humidity",
+    "discharge_air_relative_humidity",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "pump_operating_status",
+    "chilled_water_pump_command",
+    "chiller_operating_status",
+    "discharge_air_volume_flow_rate",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
@@ -1753,7 +2080,7 @@
     "flatline_tol": 0.055556,
     "flatline_hours": 1.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "SV-SPIKE",
@@ -1771,24 +2098,24 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "oa_t",
-    "mat",
-    "zone_t",
-    "rat",
-    "sat",
-    "chw_supply_t",
-    "chw_return_t",
-    "hw_supply_t",
-    "hw_return_t",
-    "oa_h",
-    "duct_static",
-    "fan_status",
-    "fan_cmd",
-    "pump_status",
-    "chw_pump_cmd",
-    "chiller_status",
-    "zone_flow",
-    "run_proof"
+    "outdoor_air_intake_temperature",
+    "mixed_air_temperature",
+    "zone_air_temperature",
+    "return_air_temperature",
+    "discharge_air_temperature",
+    "supply_chilled_water_temperature",
+    "return_chilled_water_temperature",
+    "supply_hot_water_temperature",
+    "return_hot_water_temperature",
+    "outdoor_air_intake_relative_humidity",
+    "discharge_air_static_pressure",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "pump_operating_status",
+    "chilled_water_pump_command",
+    "chiller_operating_status",
+    "discharge_air_volume_flow_rate",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
@@ -1800,7 +2127,7 @@
     "confirm_seconds": 300.0,
     "spike_scale": 1.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "SV-STALE",
@@ -1818,29 +2145,29 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "oa_t",
-    "mat",
-    "zone_t",
-    "rat",
-    "sat",
-    "chw_supply_t",
-    "chw_return_t",
-    "hw_supply_t",
-    "hw_return_t",
-    "oa_h",
-    "ra_h",
-    "zone_rh",
-    "ma_h",
-    "sa_h",
-    "duct_static",
-    "zone_flow"
+    "outdoor_air_intake_temperature",
+    "mixed_air_temperature",
+    "zone_air_temperature",
+    "return_air_temperature",
+    "discharge_air_temperature",
+    "supply_chilled_water_temperature",
+    "return_chilled_water_temperature",
+    "supply_hot_water_temperature",
+    "return_hot_water_temperature",
+    "outdoor_air_intake_relative_humidity",
+    "return_air_relative_humidity",
+    "zone_air_relative_humidity",
+    "mixed_air_relative_humidity",
+    "discharge_air_relative_humidity",
+    "discharge_air_static_pressure",
+    "discharge_air_volume_flow_rate"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 0,
    "parameters": {
     "stale_after_hours": 0.5
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "missing-data monitoring: a gap is a fault whether or not the motor runs (#1673)"
   },
   {
@@ -1859,12 +2186,12 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "oa_t",
-    "mat",
-    "zone_t",
-    "rat",
-    "sat",
-    "run_proof"
+    "outdoor_air_intake_temperature",
+    "mixed_air_temperature",
+    "zone_air_temperature",
+    "return_air_temperature",
+    "discharge_air_temperature",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
@@ -1874,7 +2201,7 @@
     "confirm_seconds": 600.0,
     "steady_fault_per_hour": 3.333333
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "PID-HUNT-1",
@@ -1891,14 +2218,14 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "oa_damper_pct",
-    "clg_valve_pct",
-    "htg_valve_pct",
-    "damper_pct",
-    "loop_enabled",
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "outdoor_air_intake_damper_position_command",
+    "cooling_valve_position_command",
+    "heating_valve_position_command",
+    "damper_position",
+    "operating_mode_status",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 0,
@@ -1911,7 +2238,7 @@
     "minimum_equivalent_cycles": 2.5,
     "minimum_reversals": 4.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC4",
@@ -1922,23 +2249,22 @@
     "ahu"
    ],
    "required_roles": [
-    "oa_damper_pct",
-    "clg_valve_pct",
-    "fan_cmd"
+    "outdoor_air_intake_damper_position_command",
+    "cooling_valve_position_command",
+    "supply_fan_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "run_proof"
+    "supply_fan_operating_status",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 3600,
    "parameters": {
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "confirm_seconds": 3600.0,
     "delta_os_max": 5.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC5",
@@ -1949,29 +2275,28 @@
     "ahu"
    ],
    "required_roles": [
-    "sat",
-    "mat",
-    "htg_valve_pct",
-    "fan_cmd"
+    "discharge_air_temperature",
+    "mixed_air_temperature",
+    "heating_valve_position_command",
+    "supply_fan_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "eps_sat": 0.638888889,
     "eps_mat": 0.638888889,
     "confirm_seconds": 600.0,
     "mix_tol": 0.638888889,
-    "htg_on_min": 0.01,
+    "htg_on_min": 1.0,
     "delta_supply_fan": 0.305555556
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC6",
@@ -1982,28 +2307,27 @@
     "ahu"
    ],
    "required_roles": [
-    "mat",
-    "rat",
-    "oa_t",
-    "fan_cmd",
-    "vav_total_flow"
+    "mixed_air_temperature",
+    "return_air_temperature",
+    "outdoor_air_intake_temperature",
+    "supply_fan_command",
+    "terminal_unit_discharge_air_total_volume_flow_rate"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "require_run_proof": 1.0,
     "oat_rat_delta_min": 2.777777778,
-    "fan_on_min": 0.01,
-    "eps_airflow": 0.15,
+    "eps_airflow": 15.0,
     "confirm_seconds": 600.0,
     "min_flow_design": 2359.735
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC14",
@@ -2014,34 +2338,33 @@
     "ahu"
    ],
    "required_roles": [
-    "clg_valve_pct"
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "cooling_coil_entering_temp",
-    "cooling_coil_leaving_temp",
-    "mat",
-    "sat",
-    "oa_damper_pct",
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "cooling_coil_inlet_air_temperature",
+    "cooling_coil_outlet_air_temperature",
+    "mixed_air_temperature",
+    "discharge_air_temperature",
+    "outdoor_air_intake_damper_position_command",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "clg_on_min": 0.01,
+    "clg_on_min": 1.0,
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
-    "htg_on_min": 0.01,
+    "htg_on_min": 1.0,
     "eps_cclt": 0.638888889,
     "eps_ccet": 0.638888889,
-    "econ_min_pos": 0.05,
+    "econ_min_pos": 5.0,
     "delta_supply_fan": 0.305555556,
-    "clg_inactive_max": 0.01,
+    "clg_inactive_max": 1.0,
     "confirm_seconds": 600.0,
     "mix_tol": 0.638888889
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "FC15",
@@ -2052,34 +2375,33 @@
     "ahu"
    ],
    "required_roles": [
-    "heating_coil_entering_temp",
-    "heating_coil_leaving_temp",
-    "oa_damper_pct",
-    "clg_valve_pct"
+    "heating_coil_inlet_air_temperature",
+    "heating_coil_outlet_air_temperature",
+    "outdoor_air_intake_damper_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "htg_valve_pct",
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "heating_valve_position_command",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "htg_on_min": 0.01,
+    "htg_on_min": 1.0,
     "require_run_proof": 1.0,
-    "fan_on_min": 0.01,
     "eps_hclt": 0.638888889,
     "eps_hcet": 0.638888889,
-    "econ_min_pos": 0.05,
-    "econ_full_open": 0.9,
+    "econ_min_pos": 5.0,
+    "econ_full_open": 90.0,
     "delta_supply_fan": 0.305555556,
-    "clg_on_min": 0.01,
-    "clg_inactive_max": 0.01,
+    "clg_on_min": 1.0,
+    "clg_inactive_max": 1.0,
     "confirm_seconds": 600.0,
     "mix_tol": 0.638888889
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "AHU-SATDEV",
@@ -2090,13 +2412,13 @@
     "ahu"
    ],
    "required_roles": [
-    "sat",
-    "sat_sp"
+    "discharge_air_temperature",
+    "discharge_air_temperature_setpoint"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
@@ -2105,7 +2427,7 @@
     "confirm_seconds": 600.0,
     "sat_dev_err": 2.777778
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "AHU-DUCTHI",
@@ -2116,13 +2438,13 @@
     "ahu"
    ],
    "required_roles": [
-    "duct_static",
-    "duct_static_sp",
-    "fan_cmd"
+    "discharge_air_static_pressure",
+    "discharge_air_static_pressure_setpoint",
+    "supply_fan_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd"
+    "supply_fan_operating_status",
+    "supply_fan_command"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
@@ -2131,7 +2453,7 @@
     "duct_high_margin": 62.21,
     "pressure_on_min": 49.768
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "evaluates when the fan is proven on OR the duct static itself shows pressure; a proof gate would hide high static with a failed status"
   },
   {
@@ -2143,22 +2465,22 @@
     "ahu"
    ],
    "required_roles": [
-    "htg_valve_pct",
-    "clg_valve_pct"
+    "heating_valve_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
-    "valve_open_pct": 0.1
+    "valve_open_pct": 10.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "ECON-3",
@@ -2169,15 +2491,15 @@
     "ahu"
    ],
    "required_roles": [
-    "oa_damper_pct",
-    "clg_valve_pct"
+    "outdoor_air_intake_damper_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "web_oa_t",
-    "web_oa_dp",
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "weather_service_air_temperature",
+    "weather_service_air_dew_point_temperature",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
@@ -2187,10 +2509,10 @@
     "econ3_db_min": 15.555556,
     "econ3_db_max": 22.222222,
     "econ3_dp_max": 15.555556,
-    "econ3_damper_hi": 0.9,
-    "clg_open_min": 0.01
+    "econ3_damper_hi": 90.0,
+    "clg_open_min": 1.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "ECON-5",
@@ -2201,15 +2523,15 @@
     "ahu"
    ],
    "required_roles": [
-    "preheat_leave_t",
-    "sat_sp",
-    "oa_t",
-    "htg_valve_pct"
+    "preheat_heating_coil_outlet_air_temperature",
+    "discharge_air_temperature_setpoint",
+    "outdoor_air_intake_temperature",
+    "heating_valve_position_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
@@ -2217,9 +2539,9 @@
     "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "preheat_over": 1.222222,
-    "htg_open_min": 0.01
+    "htg_open_min": 1.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "ECON-6",
@@ -2230,13 +2552,13 @@
     "ahu"
    ],
    "required_roles": [
-    "oa_damper_pct"
+    "outdoor_air_intake_damper_position_command"
    ],
    "optional_roles": [
-    "web_oa_t",
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "weather_service_air_temperature",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
@@ -2244,9 +2566,9 @@
     "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "econ6_oat_max": -3.888889,
-    "econ6_damper_max": 0.25
+    "econ6_damper_max": 25.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "ECON-7",
@@ -2257,19 +2579,19 @@
     "ahu"
    ],
    "required_roles": [
-    "oa_damper_pct",
-    "clg_valve_pct"
+    "outdoor_air_intake_damper_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "web_oa_t",
-    "web_oa_dp",
-    "fan_status",
-    "fan_cmd",
-    "run_proof",
-    "compressor_status",
-    "chiller_status",
-    "chiller_amps",
-    "chiller_power"
+    "weather_service_air_temperature",
+    "weather_service_air_dew_point_temperature",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status",
+    "compressor_operating_status",
+    "chiller_operating_status",
+    "chiller_electric_current",
+    "chiller_electric_power"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
@@ -2279,10 +2601,10 @@
     "econ7_db_min": 1.666667,
     "econ7_db_max": 22.222222,
     "econ7_dp_max": 15.555556,
-    "econ7_damper_min": 0.5,
-    "clg_open_min": 0.05
+    "econ7_damper_min": 50.0,
+    "clg_open_min": 5.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "MECH-OAT-1",
@@ -2295,13 +2617,13 @@
     "heatpump"
    ],
    "required_roles": [
-    "web_oa_t"
+    "weather_service_air_temperature"
    ],
    "optional_roles": [
-    "compressor_status",
-    "chiller_status",
-    "chiller_amps",
-    "chiller_power"
+    "compressor_operating_status",
+    "chiller_operating_status",
+    "chiller_electric_current",
+    "chiller_electric_power"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
@@ -2309,33 +2631,8 @@
     "confirm_seconds": 600.0,
     "mech_oat_max": 15.555556
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "needs cold-weather samples even when proof drops; carries its own mechanical-cooling proof"
-  },
-  {
-   "id": "HW-OAT-1",
-   "description": "Hot-water plant proven on above 18.3 °C web OAT",
-   "sql_file": "hw_oat_1.sql",
-   "priority": "P1",
-   "equipment_kinds": [
-    "boiler"
-   ],
-   "required_roles": [
-    "web_oa_t"
-   ],
-   "optional_roles": [
-    "pump_status",
-    "hw_supply_t"
-   ],
-   "unmapped_roles": [],
-   "confirm_seconds": 900,
-   "parameters": {
-    "confirm_seconds": 900.0,
-    "hw_oat_min": 18.333333,
-    "hw_on_min": 43.333333
-   },
-   "run_proof": "exempt",
-   "run_proof_note": "carries its own proven-on proof (hot-water pump status or supply temperature) and must see warm samples while that proof is off"
   },
   {
    "id": "CMD-1",
@@ -2346,8 +2643,8 @@
     "ahu"
    ],
    "required_roles": [
-    "fan_cmd",
-    "fan_status"
+    "supply_fan_command",
+    "supply_fan_operating_status"
    ],
    "optional_roles": [],
    "unmapped_roles": [],
@@ -2355,7 +2652,7 @@
    "parameters": {
     "confirm_seconds": 600.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "command versus status mismatch: the proof is the signal"
   },
   {
@@ -2367,25 +2664,25 @@
     "ahu"
    ],
    "required_roles": [
-    "mat",
-    "rat",
-    "oa_t",
-    "fan_cmd"
+    "mixed_air_temperature",
+    "return_air_temperature",
+    "outdoor_air_intake_temperature",
+    "supply_fan_command"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
-    "min_oa_frac": 0.15,
+    "min_oa_frac": 15.0,
     "oat_rat_guard": 1.222222
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "DMP-1",
@@ -2396,14 +2693,14 @@
     "ahu"
    ],
    "required_roles": [
-    "oa_damper_pct",
-    "oa_t",
-    "mat"
+    "outdoor_air_intake_damper_position_command",
+    "outdoor_air_intake_temperature",
+    "mixed_air_temperature"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -2412,7 +2709,7 @@
     "confirm_seconds": 900.0,
     "leak_delta": 1.111111
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "VLV-1",
@@ -2423,15 +2720,15 @@
     "ahu"
    ],
    "required_roles": [
-    "clg_valve_pct",
-    "sat",
-    "sat_sp",
-    "mat"
+    "cooling_valve_position_command",
+    "discharge_air_temperature",
+    "discharge_air_temperature_setpoint",
+    "mixed_air_temperature"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -2441,7 +2738,7 @@
     "sat_err": 1.111111,
     "mat_leak_delta": 1.111111
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "VAV-3",
@@ -2452,14 +2749,14 @@
     "vav"
    ],
    "required_roles": [
-    "oa_t",
-    "reheat_valve_pct",
-    "zone_flow"
+    "outdoor_air_intake_temperature",
+    "terminal_unit_heating_valve_position_command",
+    "discharge_air_volume_flow_rate"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
@@ -2467,10 +2764,10 @@
     "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "reheat_oat": 25.555555556,
-    "reheat_pct": 0.52,
+    "reheat_pct": 52.0,
     "flow_on_min": 11.798675
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "VAV-4",
@@ -2481,23 +2778,23 @@
     "vav"
    ],
    "required_roles": [
-    "damper_pct",
-    "zone_flow"
+    "damper_position",
+    "discharge_air_volume_flow_rate"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "require_run_proof": 1.0,
-    "full_open_pct": 0.975,
+    "full_open_pct": 97.5,
     "flow_on_min": 11.798675,
     "sustain_hours": 1.5
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "VAV-5",
@@ -2508,13 +2805,13 @@
     "vav"
    ],
    "required_roles": [
-    "zone_flow",
-    "damper_pct"
+    "discharge_air_volume_flow_rate",
+    "damper_position"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -2522,9 +2819,9 @@
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "flow_bias": 23.59735,
-    "damper_closed_max": 0.1
+    "damper_closed_max": 10.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "VAV-6",
@@ -2535,22 +2832,22 @@
     "vav"
    ],
    "required_roles": [
-    "oa_t",
-    "reheat_valve_pct"
+    "outdoor_air_intake_temperature",
+    "terminal_unit_heating_valve_position_command"
    ],
    "optional_roles": [
-    "clg_available",
-    "run_proof"
+    "cooling_operating_mode_status",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "require_run_proof": 1.0,
     "free_cool_oat": 18.333333333,
-    "reheat_pct": 0.25,
+    "reheat_pct": 25.0,
     "confirm_seconds": 900.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "VAV-REHEAT",
@@ -2561,26 +2858,26 @@
     "vav"
    ],
    "required_roles": [
-    "reheat_valve_pct",
-    "vav_discharge_t",
-    "vav_inlet_t",
-    "zone_flow"
+    "terminal_unit_heating_valve_position_command",
+    "terminal_unit_discharge_air_temperature",
+    "terminal_unit_inlet_air_temperature",
+    "discharge_air_volume_flow_rate"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
-    "reheat_cmd": 0.3,
+    "reheat_cmd": 30.0,
     "min_rise": 1.666666667,
     "flow_on_min": 11.798675
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "VAV-AHU-LEAVE",
@@ -2591,14 +2888,14 @@
     "vav"
    ],
    "required_roles": [
-    "vav_discharge_t",
-    "ahu_sat",
-    "zone_flow"
+    "terminal_unit_discharge_air_temperature",
+    "air_handling_unit_discharge_air_temperature",
+    "discharge_air_volume_flow_rate"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -2608,7 +2905,7 @@
     "delta": 4.444444444,
     "flow_on_min": 11.798675
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "VAV-7",
@@ -2619,13 +2916,13 @@
     "vav"
    ],
    "required_roles": [
-    "zone_flow"
+    "discharge_air_volume_flow_rate"
    ],
    "optional_roles": [
-    "min_flow_sp",
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "discharge_air_volume_flow_rate_minimum",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -2637,7 +2934,7 @@
     "fixed_flow_max_std": 7.079205,
     "fixed_flow_min_mean": 94.3894
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "RESET-1",
@@ -2648,13 +2945,13 @@
     "ahu"
    ],
    "required_roles": [
-    "sat_sp",
-    "oa_t"
+    "discharge_air_temperature_setpoint",
+    "outdoor_air_intake_temperature"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -2662,11 +2959,11 @@
     "require_run_proof": 1.0,
     "reset_err": 1.666667,
     "reset_sat_at_ref": 11.111111,
-    "reset_slope": 0.25,
+    "reset_slope": 25.0,
     "reset_oat_ref": 18.333333,
     "confirm_seconds": 900.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "CHW-NOLOAD-1",
@@ -2679,20 +2976,19 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "chiller_status",
-    "chiller_cmd",
-    "chw_pump_status",
-    "chw_pump_cmd",
-    "building_zone_load_satisfied",
-    "building_ahu_load_satisfied"
+    "chiller_operating_status",
+    "chiller_command",
+    "chilled_water_pump_operating_status",
+    "chilled_water_pump_command",
+    "zone_load_satisfied_status",
+    "air_handling_unit_load_satisfied_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 1800,
    "parameters": {
-    "confirm_seconds": 1800.0,
-    "load_sat_hi": 0.5
+    "confirm_seconds": 1800.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "no-load detection with its own mechanical-cooling proof and a 30 min confirmation that must see off samples"
   },
   {
@@ -2705,18 +3001,18 @@
     "chwPlant"
    ],
    "required_roles": [
-    "chw_supply_t",
-    "chw_return_t"
+    "supply_chilled_water_temperature",
+    "return_chilled_water_temperature"
    ],
    "optional_roles": [
-    "chw_pump_cmd",
-    "pump_status",
-    "chiller_status",
-    "chiller_current",
-    "chiller_amps",
-    "chiller_power",
-    "chw_flow",
-    "run_proof"
+    "chilled_water_pump_command",
+    "pump_operating_status",
+    "chiller_operating_status",
+    "chiller_electric_current",
+    "chiller_electric_current",
+    "chiller_electric_power",
+    "chilled_water_volume_flow_rate",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -2725,7 +3021,7 @@
     "confirm_seconds": 900.0,
     "min_dt": 2.222222
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "CHW-2",
@@ -2737,25 +3033,24 @@
     "chwPlant"
    ],
    "required_roles": [
-    "chw_dp",
-    "chw_dp_sp",
-    "chw_pump_cmd"
+    "chilled_water_pressure_delta",
+    "chilled_water_pressure_delta_setpoint",
+    "chilled_water_pump_command"
    ],
    "optional_roles": [
-    "pump_status",
-    "chiller_status",
-    "chw_flow",
-    "run_proof"
+    "pump_operating_status",
+    "chiller_operating_status",
+    "chilled_water_volume_flow_rate",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
-    "dp_margin": 15168.465,
-    "pump_hi": 0.87
+    "dp_margin": 15168.465
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "CHW-3",
@@ -2767,15 +3062,15 @@
     "chwPlant"
    ],
    "required_roles": [
-    "chw_supply_t",
-    "chw_supply_sp",
-    "chw_pump_cmd"
+    "supply_chilled_water_temperature",
+    "supply_chilled_water_temperature_setpoint",
+    "chilled_water_pump_command"
    ],
    "optional_roles": [
-    "pump_status",
-    "chiller_status",
-    "chw_flow",
-    "run_proof"
+    "pump_operating_status",
+    "chiller_operating_status",
+    "chilled_water_volume_flow_rate",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
@@ -2784,7 +3079,7 @@
     "confirm_seconds": 300.0,
     "sp_band": 1.222222
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "CHW-4",
@@ -2796,23 +3091,22 @@
     "chwPlant"
    ],
    "required_roles": [
-    "chw_flow",
-    "chw_pump_cmd"
+    "chilled_water_volume_flow_rate",
+    "chilled_water_pump_command"
    ],
    "optional_roles": [
-    "pump_status",
-    "chiller_status",
-    "run_proof"
+    "pump_operating_status",
+    "chiller_operating_status",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
-    "flow_hi": 69.39922,
-    "pump_hi": 0.87
+    "flow_hi": 69.39922
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "CW-OPT-1",
@@ -2825,15 +3119,15 @@
     "chwPlant"
    ],
    "required_roles": [
-    "cw_supply_t",
-    "web_wb_t"
+    "supply_condenser_water_temperature",
+    "weather_service_air_wet_bulb_temperature"
    ],
    "optional_roles": [
-    "pump_status",
-    "chiller_status",
-    "chw_flow",
-    "chw_pump_cmd",
-    "run_proof"
+    "pump_operating_status",
+    "chiller_operating_status",
+    "chilled_water_volume_flow_rate",
+    "chilled_water_pump_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -2843,7 +3137,7 @@
     "cw_approach": 3.888889,
     "cw_slack": 1.111111
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "CW-APR-1",
@@ -2856,26 +3150,25 @@
     "chwPlant"
    ],
    "required_roles": [
-    "cw_supply_t",
-    "web_wb_t",
-    "tower_fan_cmd"
+    "supply_condenser_water_temperature",
+    "weather_service_air_wet_bulb_temperature",
+    "cooling_tower_fan_command"
    ],
    "optional_roles": [
-    "pump_status",
-    "chiller_status",
-    "chw_flow",
-    "chw_pump_cmd",
-    "run_proof"
+    "pump_operating_status",
+    "chiller_operating_status",
+    "chilled_water_volume_flow_rate",
+    "chilled_water_pump_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
-    "approach_max": 4.444444,
-    "tower_fan_hi": 0.95
+    "approach_max": 4.444444
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "CW-FAN-1",
@@ -2888,16 +3181,16 @@
     "chwPlant"
    ],
    "required_roles": [
-    "cw_supply_t",
-    "web_wb_t",
-    "tower_fan_cmd"
+    "supply_condenser_water_temperature",
+    "weather_service_air_wet_bulb_temperature",
+    "cooling_tower_fan_command"
    ],
    "optional_roles": [
-    "pump_status",
-    "chiller_status",
-    "chw_flow",
-    "chw_pump_cmd",
-    "run_proof"
+    "pump_operating_status",
+    "chiller_operating_status",
+    "chilled_water_volume_flow_rate",
+    "chilled_water_pump_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -2905,10 +3198,9 @@
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "cw_approach": 3.888889,
-    "excess_beyond_approach": 2.777778,
-    "tower_fan_hi": 0.95
+    "excess_beyond_approach": 2.777778
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "HP-1",
@@ -2919,14 +3211,14 @@
     "heatpump"
    ],
    "required_roles": [
-    "sat",
-    "zone_t",
-    "fan_cmd"
+    "discharge_air_temperature",
+    "zone_air_temperature",
+    "supply_fan_command"
    ],
    "optional_roles": [
-    "compressor_status",
-    "fan_status",
-    "run_proof"
+    "compressor_operating_status",
+    "supply_fan_operating_status",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
@@ -2936,7 +3228,7 @@
     "min_sat": 29.444444,
     "zone_cold": 20.555556
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "WX-1",
@@ -2947,7 +3239,7 @@
     "weather"
    ],
    "required_roles": [
-    "oa_t"
+    "outdoor_air_intake_temperature"
    ],
    "optional_roles": [],
    "unmapped_roles": [],
@@ -2956,7 +3248,7 @@
     "confirm_seconds": 300.0,
     "spike_limit": 8.888889
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "weather-source sanity; no running equipment is judged"
   },
   {
@@ -2968,14 +3260,14 @@
     "ahu"
    ],
    "required_roles": [
-    "duct_static"
+    "discharge_air_static_pressure"
    ],
    "optional_roles": [
-    "duct_static_sp",
-    "static_reset_request",
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "discharge_air_static_pressure_setpoint",
+    "discharge_air_static_pressure_reset_request_count",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 1800,
@@ -2985,7 +3277,7 @@
     "duct_hi": 335.934,
     "request_lo": 1.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "TRIM-3",
@@ -2996,15 +3288,15 @@
     "boiler"
    ],
    "required_roles": [
-    "hw_supply_t",
-    "hw_reset_request_sum"
+    "supply_hot_water_temperature",
+    "hot_water_reset_request_count"
    ],
    "optional_roles": [
-    "pump_status",
-    "chiller_status",
-    "chw_flow",
-    "chw_pump_cmd",
-    "run_proof"
+    "pump_operating_status",
+    "chiller_operating_status",
+    "chilled_water_volume_flow_rate",
+    "chilled_water_pump_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 1800,
@@ -3014,7 +3306,7 @@
     "hwst_hi": 71.111111,
     "request_lo": 1.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "TRIM-4",
@@ -3026,15 +3318,15 @@
     "chwPlant"
    ],
    "required_roles": [
-    "chw_supply_t",
-    "chw_reset_request_sum"
+    "supply_chilled_water_temperature",
+    "chilled_water_reset_request_count"
    ],
    "optional_roles": [
-    "pump_status",
-    "chiller_status",
-    "chw_flow",
-    "chw_pump_cmd",
-    "run_proof"
+    "pump_operating_status",
+    "chiller_operating_status",
+    "chilled_water_volume_flow_rate",
+    "chilled_water_pump_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 1800,
@@ -3044,11 +3336,11 @@
     "chw_lo": 7.222222,
     "request_lo": 1.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "SCHED-1",
-   "description": "Excess / wasted unoccupied fan runtime when the zone is already in the comfort band (optimal-start / schedule misconfig signal). Without zone_t, falls back to unoccupied + fan_on (pandas sched1 base).",
+   "description": "Excess / wasted unoccupied fan runtime when the zone is already in the comfort band (optimal-start / schedule misconfig signal). Without zone_air_temperature, falls back to unoccupied + fan_on (pandas sched1 base).",
    "sql_file": "sched1_unoccupied_runtime.sql",
    "priority": "P0",
    "equipment_kinds": [
@@ -3056,11 +3348,11 @@
     "zone_other"
    ],
    "required_roles": [
-    "occ_mode",
-    "fan_status"
+    "occupancy_status",
+    "supply_fan_operating_status"
    ],
    "optional_roles": [
-    "zone_t"
+    "zone_air_temperature"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 1800,
@@ -3069,7 +3361,7 @@
     "comfort_low": 21.111111,
     "comfort_high": 23.888889
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "runtime outside the schedule: the proof is the signal"
   },
   {
@@ -3087,18 +3379,18 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "fan_status",
-    "pump_status",
-    "chiller_status",
-    "fan_cmd"
+    "supply_fan_operating_status",
+    "pump_operating_status",
+    "chiller_operating_status",
+    "supply_fan_command"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 3600,
    "parameters": {
     "confirm_seconds": 3600.0,
-    "always_on_pct": 0.95
+    "always_on_pct": 95.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "always-on detection: the proof is the signal and off samples must be seen"
   },
   {
@@ -3112,17 +3404,17 @@
     "ahu"
    ],
    "required_roles": [
-    "zone_air_temp_sp"
+    "zone_air_temperature_setpoint"
    ],
    "optional_roles": [
-    "zone_t"
+    "zone_air_temperature"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 0,
    "parameters": {
-    "null_fraction": 0.9
+    "null_fraction": 90.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
@@ -3136,25 +3428,25 @@
     "ahu"
    ],
    "required_roles": [
-    "sat",
-    "zone_t",
-    "htg_valve_pct"
+    "discharge_air_temperature",
+    "zone_air_temperature",
+    "heating_valve_position_command"
    ],
    "optional_roles": [
-    "clg_valve_pct",
-    "damper_cmd",
-    "damper_pct",
-    "zone_co2",
-    "fan_status",
-    "fan_cmd"
+    "cooling_valve_position_command",
+    "damper_position_command",
+    "damper_position",
+    "zone_air_co2",
+    "supply_fan_operating_status",
+    "supply_fan_command"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "valve_open": 0.8,
+    "valve_open": 80.0,
     "coil_delta": 3.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
@@ -3168,24 +3460,24 @@
     "ahu"
    ],
    "required_roles": [
-    "sat",
-    "zone_t",
-    "clg_valve_pct",
-    "htg_valve_pct"
+    "discharge_air_temperature",
+    "zone_air_temperature",
+    "cooling_valve_position_command",
+    "heating_valve_position_command"
    ],
    "optional_roles": [
-    "damper_cmd",
-    "damper_pct",
-    "zone_co2",
-    "fan_status",
-    "fan_cmd"
+    "damper_position_command",
+    "damper_position",
+    "zone_air_co2",
+    "supply_fan_operating_status",
+    "supply_fan_command"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "valve_open": 0.8
+    "valve_open": 80.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
@@ -3199,24 +3491,24 @@
     "ahu"
    ],
    "required_roles": [
-    "sat",
-    "zone_t",
-    "htg_valve_pct",
-    "clg_valve_pct"
+    "discharge_air_temperature",
+    "zone_air_temperature",
+    "heating_valve_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "damper_cmd",
-    "damper_pct",
-    "zone_co2",
-    "fan_status",
-    "fan_cmd"
+    "damper_position_command",
+    "damper_position",
+    "zone_air_co2",
+    "supply_fan_operating_status",
+    "supply_fan_command"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "pass_delta": 3.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
@@ -3230,24 +3522,24 @@
     "ahu"
    ],
    "required_roles": [
-    "sat",
-    "zone_t",
-    "htg_valve_pct",
-    "clg_valve_pct"
+    "discharge_air_temperature",
+    "zone_air_temperature",
+    "heating_valve_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [
-    "damper_cmd",
-    "damper_pct",
-    "zone_co2",
-    "fan_status",
-    "fan_cmd"
+    "damper_position_command",
+    "damper_position",
+    "zone_air_co2",
+    "supply_fan_operating_status",
+    "supply_fan_command"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "pass_delta": 3.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
@@ -3261,25 +3553,25 @@
     "ahu"
    ],
    "required_roles": [
-    "damper_cmd",
-    "damper_pct"
+    "damper_position_command",
+    "damper_position"
    ],
    "optional_roles": [
-    "sat",
-    "zone_t",
-    "htg_valve_pct",
-    "clg_valve_pct",
-    "zone_co2",
-    "fan_status",
-    "fan_cmd"
+    "discharge_air_temperature",
+    "zone_air_temperature",
+    "heating_valve_position_command",
+    "cooling_valve_position_command",
+    "zone_air_co2",
+    "supply_fan_operating_status",
+    "supply_fan_command"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "command_min": 0.15,
-    "position_error": 0.15
+    "command_min": 15.0,
+    "position_error": 15.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
@@ -3293,25 +3585,25 @@
     "ahu"
    ],
    "required_roles": [
-    "zone_co2",
-    "damper_cmd"
+    "zone_air_co2",
+    "damper_position_command"
    ],
    "optional_roles": [
-    "sat",
-    "zone_t",
-    "htg_valve_pct",
-    "clg_valve_pct",
-    "damper_pct",
-    "fan_status",
-    "fan_cmd"
+    "discharge_air_temperature",
+    "zone_air_temperature",
+    "heating_valve_position_command",
+    "cooling_valve_position_command",
+    "damper_position",
+    "supply_fan_operating_status",
+    "supply_fan_command"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "co2_high_ppm": 1000,
-    "damper_low": 0.1
+    "damper_low": 10.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
@@ -3325,8 +3617,8 @@
     "ahu"
    ],
    "required_roles": [
-    "cooling_sp",
-    "heating_sp"
+    "zone_cooling_air_temperature_setpoint",
+    "zone_heating_air_temperature_setpoint"
    ],
    "optional_roles": [],
    "unmapped_roles": [],
@@ -3334,7 +3626,7 @@
    "parameters": {
     "deadband": 1
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
@@ -3348,17 +3640,17 @@
     "ahu"
    ],
    "required_roles": [
-    "htg_valve_pct",
-    "clg_valve_pct"
+    "heating_valve_position_command",
+    "cooling_valve_position_command"
    ],
    "optional_roles": [],
    "unmapped_roles": [],
    "confirm_seconds": 0,
    "parameters": {
-    "mode_valve_min": 0.1,
+    "mode_valve_min": 10.0,
     "mode_changes": 4
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
@@ -3373,15 +3665,15 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "kwh",
-    "electric_kw"
+    "electric_energy",
+    "electric_power"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 0,
    "parameters": {
     "util_pct_err": 10.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "utility meter data, no running equipment"
   },
   {
@@ -3396,15 +3688,15 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "kwh",
-    "electric_kw"
+    "electric_energy",
+    "electric_power"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 0,
    "parameters": {
     "util_interval_mae": 5.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "utility meter data, no running equipment"
   },
   {
@@ -3417,33 +3709,58 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "htg_valve_pct",
-    "reheat_valve_pct",
-    "clg_valve_pct",
-    "heating_coil_entering_temp",
-    "heating_coil_leaving_temp",
-    "cooling_coil_entering_temp",
-    "cooling_coil_leaving_temp",
-    "mat",
-    "sat",
-    "vav_inlet_t",
-    "vav_discharge_t",
-    "zone_t",
-    "zone_flow",
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "heating_valve_position_command",
+    "terminal_unit_heating_valve_position_command",
+    "cooling_valve_position_command",
+    "heating_coil_inlet_air_temperature",
+    "heating_coil_outlet_air_temperature",
+    "cooling_coil_inlet_air_temperature",
+    "cooling_coil_outlet_air_temperature",
+    "mixed_air_temperature",
+    "discharge_air_temperature",
+    "terminal_unit_inlet_air_temperature",
+    "terminal_unit_discharge_air_temperature",
+    "zone_air_temperature",
+    "discharge_air_volume_flow_rate",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "confirm_seconds": 900.0,
-    "valve_open": 0.8,
-    "valve_shut": 0.05,
+    "valve_open": 80.0,
+    "valve_shut": 5.0,
     "min_dt": 3.0,
     "require_run_proof": 1.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
+  },
+  {
+   "id": "HW-OAT-1",
+   "description": "Hot-water plant proven on above 18.3 °C web OAT",
+   "sql_file": "hw_oat_1.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "boiler"
+   ],
+   "required_roles": [
+    "weather_service_air_temperature"
+   ],
+   "optional_roles": [
+    "pump_operating_status",
+    "supply_hot_water_temperature"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "confirm_seconds": 900.0,
+    "hw_oat_min": 18.333333,
+    "hw_on_min": 43.333333
+   },
+   "operating_status": "exempt",
+   "run_proof_note": "carries its own proven-on proof (hot-water pump status or supply temperature) and must see warm samples while that proof is off"
   },
   {
    "id": "SHORT-CYCLE",
@@ -3458,11 +3775,11 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "boiler_status",
-    "compressor_status",
-    "chiller_status",
-    "chiller_amps",
-    "chiller_power"
+    "boiler_operating_status",
+    "compressor_operating_status",
+    "chiller_operating_status",
+    "chiller_electric_current",
+    "chiller_electric_power"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 0,
@@ -3471,7 +3788,7 @@
     "min_on_seconds": 600.0,
     "min_short_cycles": 3.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "the run status is the signal: starts and on-times are counted from it"
   },
   {
@@ -3483,14 +3800,14 @@
     "ahu"
    ],
    "required_roles": [
-    "mat",
-    "oa_t",
-    "rat"
+    "mixed_air_temperature",
+    "outdoor_air_intake_temperature",
+    "return_air_temperature"
    ],
    "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
@@ -3499,7 +3816,7 @@
     "mix_band": 1.111111,
     "require_run_proof": 1.0
    },
-   "run_proof": "gated"
+   "operating_status": "gated"
   },
   {
    "id": "XS-COPY",
@@ -3513,11 +3830,11 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "rat",
-    "sat",
-    "mat",
-    "zone_t",
-    "vav_discharge_t"
+    "return_air_temperature",
+    "discharge_air_temperature",
+    "mixed_air_temperature",
+    "zone_air_temperature",
+    "terminal_unit_discharge_air_temperature"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 7200,
@@ -3526,7 +3843,7 @@
     "copy_tol": 0.02,
     "change_min": 1.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "a copied or wrongly bound signal is a mapping fault whether or not the unit runs"
   },
   {
@@ -3541,12 +3858,12 @@
    ],
    "required_roles": [],
    "optional_roles": [
-    "zone_co2",
-    "duct_static",
-    "zone_flow",
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
+    "zone_air_co2",
+    "discharge_air_static_pressure",
+    "discharge_air_volume_flow_rate",
+    "supply_fan_operating_status",
+    "supply_fan_command",
+    "operating_status"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 0,
@@ -3557,7 +3874,7 @@
     "static_round": 25.0,
     "flow_round": 50.0
    },
-   "run_proof": "exempt",
+   "operating_status": "exempt",
    "run_proof_note": "CO2 is judged on every sample; fan-dependent roles count only their own fan-on samples"
   }
  ]

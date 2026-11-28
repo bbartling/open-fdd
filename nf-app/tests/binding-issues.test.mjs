@@ -47,21 +47,21 @@ test("#1537: measured duct static pressure never fills the duct static setpoint 
     pt("u-foreign", "AHU-9 DSP SP", ["discharge", "air", "pressure", "sp"], { equipRef: "AHU-9", siteRef: "site-b" }),
   ] };
   const { out } = rolesOf(ahu, model);
-  assert.deepEqual(out.duct_static_sp, ["u-dsp-sp", "u-dsp-sp2"], "only tagged setpoints, class match first");
-  assert.ok(!out.duct_static_sp.includes("u-dsp") && !out.duct_static_sp.includes("u-bogus"));
-  assert.ok(!out.duct_static_sp.includes("u-foreign"));
-  assert.equal(out.duct_static[0], "u-dsp", "the measured DSP is the duct static sensor");
+  assert.deepEqual(out.discharge_air_static_pressure_setpoint, ["u-dsp-sp", "u-dsp-sp2"], "only tagged setpoints, class match first");
+  assert.ok(!out.discharge_air_static_pressure_setpoint.includes("u-dsp") && !out.discharge_air_static_pressure_setpoint.includes("u-bogus"));
+  assert.ok(!out.discharge_air_static_pressure_setpoint.includes("u-foreign"));
+  assert.equal(out.discharge_air_static_pressure[0], "u-dsp", "the measured DSP is the duct static sensor");
 });
 
 test("#1537: names never decide a role — tags do", () => {
   const ahu = equip("AHU-1", "equip,ahu");
   const model = { sites: [], equips: [ahu], devices: [], points: [
-    pt("u-sat-named-sp", "SAT_SP", ["discharge", "air", "temp", "sensor"], { equipRef: "AHU-1" }),
-    pt("u-sat-sp", "whatever", ["discharge", "air", "temp", "sp"], { equipRef: "AHU-1" }),
+    pt("u-discharge_air_temperature-named-sp", "SAT_SP", ["discharge", "air", "temp", "sensor"], { equipRef: "AHU-1" }),
+    pt("u-discharge_air_temperature-sp", "whatever", ["discharge", "air", "temp", "sp"], { equipRef: "AHU-1" }),
   ] };
   const { out } = rolesOf(ahu, model);
-  assert.deepEqual(out.sat_sp, ["u-sat-sp"]);
-  assert.deepEqual(out.sat, ["u-sat-named-sp"]);
+  assert.deepEqual(out.discharge_air_temperature_setpoint, ["u-discharge_air_temperature-sp"]);
+  assert.deepEqual(out.discharge_air_temperature, ["u-discharge_air_temperature-named-sp"]);
 });
 
 test("#1538: equipment membership comes from the current equipRef binding, not key syntax", () => {
@@ -69,8 +69,8 @@ test("#1538: equipment membership comes from the current equipRef binding, not k
   const b = equip("AHU.2", "equip,ahu");   // dotted equip id
   const model = { sites: [], equips: [a, b], devices: [], points: [
     // URI-like / dotted / opaque uuids and names that "look like" another equip
-    pt("urn:nf:AHU.2:sat", "AHU.2 SAT", ["discharge", "air", "temp", "sensor"], { equipRef: "AHU-1" }),
-    pt("AHU-1.sat.x", "AHU-1 SAT", ["discharge", "air", "temp", "sensor"], { equipRef: "AHU.2" }),
+    pt("urn:nf:AHU.2:discharge_air_temperature", "AHU.2 SAT", ["discharge", "air", "temp", "sensor"], { equipRef: "AHU-1" }),
+    pt("AHU-1.discharge_air_temperature.x", "AHU-1 SAT", ["discharge", "air", "temp", "sensor"], { equipRef: "AHU.2" }),
     // two keys, one role, same equip
     pt("k1", "MAT A", ["mixed", "air", "temp", "sensor"], { equipRef: "AHU-1" }),
     pt("k2", "MAT B", ["mixed", "air", "temp", "sensor"], { equipRef: "AHU-1" }),
@@ -78,10 +78,10 @@ test("#1538: equipment membership comes from the current equipRef binding, not k
     pt("k-wrong-site", "OAT", ["outside", "air", "temp", "sensor"], { equipRef: "AHU-1", siteRef: "site-b" }),
   ] };
   const ra = rolesOf(a, model).out, rb = rolesOf(b, model).out;
-  assert.deepEqual(ra.sat, ["urn:nf:AHU.2:sat"], "bound by equipRef, not by the key's text");
-  assert.deepEqual(rb.sat, ["AHU-1.sat.x"]);
-  assert.deepEqual([...ra.mat].sort(), ["k1", "k2"], "two keys share one role");
-  assert.ok(!(ra.oa_t || []).includes("k-wrong-site"), "other site's point never binds");
+  assert.deepEqual(ra.discharge_air_temperature, ["urn:nf:AHU.2:discharge_air_temperature"], "bound by equipRef, not by the key's text");
+  assert.deepEqual(rb.discharge_air_temperature, ["AHU-1.discharge_air_temperature.x"]);
+  assert.deepEqual([...ra.mixed_air_temperature].sort(), ["k1", "k2"], "two keys share one role");
+  assert.ok(!(ra.outdoor_air_intake_temperature || []).includes("k-wrong-site"), "other site's point never binds");
 });
 
 test("#1538: an equip with no points is still listed, with what it is missing", () => {
@@ -96,8 +96,8 @@ test("#1538: reassigning a point (equipRef change) moves it", () => {
   const a = equip("AHU-1", "equip,ahu"), b = equip("AHU-2", "equip,ahu");
   const p = pt("u-move", "SAT", ["discharge", "air", "temp", "sensor"], { equipRef: "AHU-1" });
   const model = { sites: [], equips: [a, b], devices: [], points: [p] };
-  assert.deepEqual(rolesOf(a, model).out.sat, ["u-move"]);
+  assert.deepEqual(rolesOf(a, model).out.discharge_air_temperature, ["u-move"]);
   p.equipRef = "AHU-2";
-  assert.equal((rolesOf(a, model).out.sat || []).length, 0);
-  assert.deepEqual(rolesOf(b, model).out.sat, ["u-move"]);
+  assert.equal((rolesOf(a, model).out.discharge_air_temperature || []).length, 0);
+  assert.deepEqual(rolesOf(b, model).out.discharge_air_temperature, ["u-move"]);
 });

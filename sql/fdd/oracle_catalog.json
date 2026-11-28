@@ -387,7 +387,7 @@
     ],
     "required_roles": [],
     "optional_roles": [
-      "loop-enabled"
+      "operating_mode_status"
     ],
     "equation": "Rolling 1h total variation of any 0\u2013100% control output (dampers, valves, fan speeds, heat/cool cmds) with span \u226520%, TV \u2265500 %\u00b7pts, \u22652.5 equivalent cycles, \u22654 reversals \u2014 suspected loop hunting (not proof of bad PID alone).",
     "summary": "Flags control outputs that oscillate enough to suggest loop hunting.",
@@ -475,9 +475,9 @@
       "ahu"
     ],
     "required_roles": [
-      "duct-static-pressure",
-      "duct-static-pressure-sp",
-      "fan-cmd"
+      "discharge_air_static_pressure",
+      "discharge_air_static_pressure_setpoint",
+      "supply_fan_command"
     ],
     "optional_roles": [],
     "equation": "DSP < DSPSP \u2212 \u03b5DSP AND VFDSPD \u2265 100% \u2212 \u03b5VFDSPD.",
@@ -556,10 +556,10 @@
       "ahu"
     ],
     "required_roles": [
-      "mixed-air-temp",
-      "outside-air-temp",
-      "return-air-temp",
-      "fan-cmd"
+      "mixed_air_temperature",
+      "outdoor_air_intake_temperature",
+      "return_air_temperature",
+      "supply_fan_command"
     ],
     "optional_roles": [],
     "equation": "MATavg + \u03b5MAT < min(RATavg \u2212 \u03b5RAT, OATavg \u2212 \u03b5OAT).",
@@ -648,10 +648,10 @@
       "ahu"
     ],
     "required_roles": [
-      "mixed-air-temp",
-      "outside-air-temp",
-      "return-air-temp",
-      "fan-cmd"
+      "mixed_air_temperature",
+      "outdoor_air_intake_temperature",
+      "return_air_temperature",
+      "supply_fan_command"
     ],
     "optional_roles": [],
     "equation": "MATavg \u2212 \u03b5MAT > max(RATavg + \u03b5RAT, OATavg + \u03b5OAT).",
@@ -740,9 +740,9 @@
       "ahu"
     ],
     "required_roles": [
-      "outside-air-damper",
-      "cooling-valve",
-      "fan-cmd"
+      "outdoor_air_intake_damper_position_command",
+      "cooling_valve_position_command",
+      "supply_fan_command"
     ],
     "optional_roles": [],
     "equation": "\u0394OS > \u0394OSmax during the prior 60-minute moving window.",
@@ -791,10 +791,10 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "mixed-air-temp",
-      "fan-cmd",
-      "heating-valve"
+      "discharge_air_temperature",
+      "mixed_air_temperature",
+      "supply_fan_command",
+      "heating_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "SATavg + \u03b5SAT \u2264 MATavg \u2212 \u03b5MAT + \u0394TSF while heating is commanded.",
@@ -893,10 +893,10 @@
       "ahu"
     ],
     "required_roles": [
-      "mixed-air-temp",
-      "outside-air-temp",
-      "return-air-temp",
-      "vav-total-airflow"
+      "mixed_air_temperature",
+      "outdoor_air_intake_temperature",
+      "return_air_temperature",
+      "terminal_unit_discharge_air_total_volume_flow_rate"
     ],
     "optional_roles": [],
     "equation": "|RATavg\u2212OATavg| \u2265 \u0394Tmin AND |estimated OA% \u2212 design min OA%| > \u03b5F.",
@@ -995,10 +995,10 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "discharge-air-temp-sp",
-      "fan-cmd",
-      "heating-valve"
+      "discharge_air_temperature",
+      "discharge_air_temperature_setpoint",
+      "supply_fan_command",
+      "heating_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "SATavg < SATSP \u2212 \u03b5SAT AND HC \u2265 full-heating threshold.",
@@ -1077,10 +1077,10 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "mixed-air-temp",
-      "outside-air-damper",
-      "cooling-valve"
+      "discharge_air_temperature",
+      "mixed_air_temperature",
+      "outdoor_air_intake_damper_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "|SATavg \u2212 \u0394TSF \u2212 MATavg| > \u221a(\u03b5SAT\u00b2 + \u03b5MAT\u00b2) in OS#2.",
@@ -1189,10 +1189,10 @@
       "ahu"
     ],
     "required_roles": [
-      "outside-air-temp",
-      "discharge-air-temp-sp",
-      "outside-air-damper",
-      "cooling-valve"
+      "outdoor_air_intake_temperature",
+      "discharge_air_temperature_setpoint",
+      "outdoor_air_intake_damper_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "OATavg \u2212 \u03b5OAT > SATSP \u2212 \u0394TSF + \u03b5SAT in OS#2.",
@@ -1291,10 +1291,10 @@
       "ahu"
     ],
     "required_roles": [
-      "mixed-air-temp",
-      "outside-air-temp",
-      "outside-air-damper",
-      "cooling-valve"
+      "mixed_air_temperature",
+      "outdoor_air_intake_temperature",
+      "outdoor_air_intake_damper_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "|MATavg \u2212 OATavg| > \u221a(\u03b5MAT\u00b2 + \u03b5OAT\u00b2) in OS#3.",
@@ -1383,10 +1383,10 @@
       "ahu"
     ],
     "required_roles": [
-      "outside-air-temp",
-      "discharge-air-temp-sp",
-      "outside-air-damper",
-      "cooling-valve"
+      "outdoor_air_intake_temperature",
+      "discharge_air_temperature_setpoint",
+      "outdoor_air_intake_damper_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "OATavg + \u03b5OAT < SATSP \u2212 \u0394TSF \u2212 \u03b5SAT in OS#3.",
@@ -1485,10 +1485,10 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "mixed-air-temp",
-      "outside-air-damper",
-      "cooling-valve"
+      "discharge_air_temperature",
+      "mixed_air_temperature",
+      "outdoor_air_intake_damper_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "SATavg \u2212 \u03b5SAT \u2212 \u0394TSF \u2265 MATavg + \u03b5MAT in OS#3/OS#4.",
@@ -1607,10 +1607,10 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "discharge-air-temp-sp",
-      "outside-air-damper",
-      "cooling-valve"
+      "discharge_air_temperature",
+      "discharge_air_temperature_setpoint",
+      "outdoor_air_intake_damper_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "SATavg > SATSP + \u03b5SAT AND CC \u2265 full-cooling threshold in OS#3/OS#4.",
@@ -1699,10 +1699,10 @@
       "ahu"
     ],
     "required_roles": [
-      "cooling-coil-entering-temp",
-      "cooling-coil-leaving-temp",
-      "outside-air-damper",
-      "cooling-valve"
+      "cooling_coil_inlet_air_temperature",
+      "cooling_coil_outlet_air_temperature",
+      "outdoor_air_intake_damper_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "Cooling-coil \u0394T \u2265 \u221a(\u03b5CCET\u00b2 + \u03b5CCLT\u00b2) + \u0394TSF while coil should be inactive.",
@@ -1811,10 +1811,10 @@
       "ahu"
     ],
     "required_roles": [
-      "heating-coil-entering-temp",
-      "heating-coil-leaving-temp",
-      "outside-air-damper",
-      "cooling-valve"
+      "heating_coil_inlet_air_temperature",
+      "heating_coil_outlet_air_temperature",
+      "outdoor_air_intake_damper_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "Heating-coil \u0394T \u2265 \u221a(\u03b5HCET\u00b2 + \u03b5HCLT\u00b2) + \u0394TSF while coil should be inactive.",
@@ -1933,8 +1933,8 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "discharge-air-temp-sp"
+      "discharge_air_temperature",
+      "discharge_air_temperature_setpoint"
     ],
     "optional_roles": [],
     "equation": "|SAT \u2212 SAT SP| > 5\u00b0F.",
@@ -1973,8 +1973,8 @@
       "ahu"
     ],
     "required_roles": [
-      "duct-static-pressure",
-      "duct-static-pressure-sp"
+      "discharge_air_static_pressure",
+      "discharge_air_static_pressure_setpoint"
     ],
     "optional_roles": [],
     "equation": "Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catches high static with fan-status off).",
@@ -2023,8 +2023,8 @@
       "ahu"
     ],
     "required_roles": [
-      "heating-valve",
-      "cooling-valve"
+      "heating_valve_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "Heating valve > 10% AND cooling valve > 10% at once.",
@@ -2063,8 +2063,8 @@
       "ahu"
     ],
     "required_roles": [
-      "outside-air-temp",
-      "web-outside-air-temp"
+      "outdoor_air_intake_temperature",
+      "weather_service_air_temperature"
     ],
     "optional_roles": [],
     "equation": "BAS OAT sensor differs from Open-Meteo dry bulb by more than 5\u00b0F.",
@@ -2103,9 +2103,9 @@
       "ahu"
     ],
     "required_roles": [
-      "fan-cmd",
-      "outside-air-damper",
-      "outside-air-temp"
+      "supply_fan_command",
+      "outdoor_air_intake_damper_position_command",
+      "outdoor_air_intake_temperature"
     ],
     "optional_roles": [],
     "equation": "Fan on, OA damper < 5%, OAT > 55\u00b0F (should be economizing).",
@@ -2144,8 +2144,8 @@
       "ahu"
     ],
     "required_roles": [
-      "outside-air-temp",
-      "outside-air-damper"
+      "outdoor_air_intake_temperature",
+      "outdoor_air_intake_damper_position_command"
     ],
     "optional_roles": [],
     "equation": "OAT > 63\u00b0F AND OA damper > 42% (should be at minimum).",
@@ -2194,13 +2194,13 @@
       "ahu"
     ],
     "required_roles": [
-      "outside-air-damper",
-      "cooling-valve"
+      "outdoor_air_intake_damper_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [
-      "web-outside-air-temp",
-      "web-outside-air-dewpoint",
-      "web-outside-air-humidity"
+      "weather_service_air_temperature",
+      "weather_service_air_dew_point_temperature",
+      "weather_service_air_relative_humidity"
     ],
     "equation": "Web free-cooling opportunity: 60\u00b0F \u2264 dry-bulb < 72\u00b0F AND dewpoint < 60\u00b0F (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults \u2014 not code limits.",
     "summary": "Flags mechanical cooling during web free-cool weather when the OA damper is not fully integrated.",
@@ -2268,10 +2268,10 @@
       "ahu"
     ],
     "required_roles": [
-      "mixed-air-temp",
-      "return-air-temp",
-      "outside-air-temp",
-      "fan-cmd"
+      "mixed_air_temperature",
+      "return_air_temperature",
+      "outdoor_air_intake_temperature",
+      "supply_fan_command"
     ],
     "optional_roles": [],
     "equation": "Fan on, |RAT\u2212OAT| > 2.2\u00b0F, estimated OA fraction < 21%.",
@@ -2310,10 +2310,10 @@
       "ahu"
     ],
     "required_roles": [
-      "preheat-leaving-temp",
-      "discharge-air-temp-sp",
-      "outside-air-temp",
-      "heating-valve"
+      "preheat_heating_coil_outlet_air_temperature",
+      "discharge_air_temperature_setpoint",
+      "outdoor_air_intake_temperature",
+      "heating_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "Preheat leaving air > 1.2\u00b0C above target while preheat active.",
@@ -2352,10 +2352,10 @@
       "ahu"
     ],
     "required_roles": [
-      "outside-air-damper"
+      "outdoor_air_intake_damper_position_command"
     ],
     "optional_roles": [
-      "web-outside-air-temp"
+      "weather_service_air_temperature"
     ],
     "equation": "Web dry-bulb < 25\u00b0F AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.",
     "summary": "Flags an AHU economizing above min-OA when web outdoor air is below freezing (25\u00b0F).",
@@ -2403,14 +2403,14 @@
       "ahu"
     ],
     "required_roles": [
-      "outside-air-damper"
+      "outdoor_air_intake_damper_position_command"
     ],
     "optional_roles": [
-      "web-outside-air-temp",
-      "web-outside-air-dewpoint",
-      "web-outside-air-humidity",
-      "cooling-valve",
-      "compressor-status",
+      "weather_service_air_temperature",
+      "weather_service_air_dew_point_temperature",
+      "weather_service_air_relative_humidity",
+      "cooling_valve_position_command",
+      "compressor_operating_status",
       "dx-cool-cmd"
     ],
     "equation": "Economizer-OK web weather: dew point < 60\u00b0F AND dry-bulb < 72\u00b0F (above a 35\u00b0F freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 60\u00b0F DB (MECH-OAT-1) and mech + integrated economizer in the 60\u201372\u00b0F band (ECON-3). All thresholds are imperial sliders.",
@@ -2482,10 +2482,10 @@
     ],
     "required_roles": [],
     "optional_roles": [
-      "web-outside-air-temp",
-      "compressor-status",
-      "chiller-status",
-      "chw-pump-status",
+      "weather_service_air_temperature",
+      "compressor_operating_status",
+      "chiller_operating_status",
+      "chilled_water_pump_operating_status",
       "dx-cool-cmd"
     ],
     "equation": "Proven DX/chiller mechanical cooling while web dry-bulb < 15.6\u00b0C. Uses compressor/chiller/pump/amps/power proof \u2014 not AHU cooling-valve alone. Below 60\u00b0F is outside the free-cool + integrated economizer band.",
@@ -2525,11 +2525,11 @@
     ],
     "required_roles": [],
     "optional_roles": [
-      "chiller-status",
-      "chw-pump-status",
-      "compressor-status",
-      "building-zone-load-satisfied",
-      "building-ahu-load-satisfied"
+      "chiller_operating_status",
+      "chilled_water_pump_operating_status",
+      "compressor_operating_status",
+      "zone_load_satisfied_status",
+      "air_handling_unit_load_satisfied_status"
     ],
     "equation": "Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU SAT within sat_band of setpoint. Default confirm 30 min.",
     "summary": "Flags a chiller running while mapped zones or AHU SAT show the building is satisfied.",
@@ -2589,10 +2589,10 @@
       "ahu"
     ],
     "required_roles": [
-      "zone-air-temp-sp"
+      "zone_air_temperature_setpoint"
     ],
     "optional_roles": [
-      "zone-air-temp"
+      "zone_air_temperature"
     ],
     "equation": "Own zone setpoint is present while zone temperature is null for at least 90% of the window.",
     "summary": "Own zone setpoint is present while zone temperature is null for at least 90% of the window.",
@@ -2632,13 +2632,13 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "zone-air-temp",
-      "heating-valve"
+      "discharge_air_temperature",
+      "zone_air_temperature",
+      "heating_valve_position_command"
     ],
     "optional_roles": [
-      "fan-status",
-      "fan-cmd"
+      "supply_fan_operating_status",
+      "supply_fan_command"
     ],
     "equation": "Fan on and heating valve \u226580%, but discharge air is less than 5.4\u00b0F above zone temperature.",
     "summary": "Fan on and heating valve \u226580%, but discharge air is less than 5.4\u00b0F above zone temperature.",
@@ -2688,14 +2688,14 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "zone-air-temp",
-      "cooling-valve",
-      "heating-valve"
+      "discharge_air_temperature",
+      "zone_air_temperature",
+      "cooling_valve_position_command",
+      "heating_valve_position_command"
     ],
     "optional_roles": [
-      "fan-status",
-      "fan-cmd"
+      "supply_fan_operating_status",
+      "supply_fan_command"
     ],
     "equation": "Fan on, cooling valve \u226580%, and heating shut, but discharge air is not below zone temperature.",
     "summary": "Fan on, cooling valve \u226580%, and heating shut, but discharge air is not below zone temperature.",
@@ -2735,14 +2735,14 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "zone-air-temp",
-      "heating-valve",
-      "cooling-valve"
+      "discharge_air_temperature",
+      "zone_air_temperature",
+      "heating_valve_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [
-      "fan-status",
-      "fan-cmd"
+      "supply_fan_operating_status",
+      "supply_fan_command"
     ],
     "equation": "Fan on and both valves shut, but discharge air exceeds zone temperature by more than 5.4\u00b0F.",
     "summary": "Fan on and both valves shut, but discharge air exceeds zone temperature by more than 5.4\u00b0F.",
@@ -2782,14 +2782,14 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "zone-air-temp",
-      "heating-valve",
-      "cooling-valve"
+      "discharge_air_temperature",
+      "zone_air_temperature",
+      "heating_valve_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [
-      "fan-status",
-      "fan-cmd"
+      "supply_fan_operating_status",
+      "supply_fan_command"
     ],
     "equation": "Fan on and both valves shut, but zone temperature exceeds discharge air by more than 5.4\u00b0F.",
     "summary": "Fan on and both valves shut, but zone temperature exceeds discharge air by more than 5.4\u00b0F.",
@@ -2829,12 +2829,12 @@
       "ahu"
     ],
     "required_roles": [
-      "damper-cmd",
-      "damper"
+      "damper_position_command",
+      "damper_position"
     ],
     "optional_roles": [
-      "fan-status",
-      "fan-cmd"
+      "supply_fan_operating_status",
+      "supply_fan_command"
     ],
     "equation": "Fan on and damper command \u226515%, but feedback is more than 15 percentage points below command.",
     "summary": "Fan on and damper command \u226515%, but feedback is more than 15 percentage points below command.",
@@ -2884,12 +2884,12 @@
       "ahu"
     ],
     "required_roles": [
-      "zone-co2",
-      "damper-cmd"
+      "zone_air_co2",
+      "damper_position_command"
     ],
     "optional_roles": [
-      "fan-status",
-      "fan-cmd"
+      "supply_fan_operating_status",
+      "supply_fan_command"
     ],
     "equation": "Fan on and valid CO\u2082 exceeds 1000 ppm while damper command remains below 10%.",
     "summary": "Fan on and valid CO\u2082 exceeds 1000 ppm while damper command remains below 10%.",
@@ -2939,8 +2939,8 @@
       "ahu"
     ],
     "required_roles": [
-      "cooling-sp",
-      "heating-sp"
+      "zone_cooling_air_temperature_setpoint",
+      "zone_heating_air_temperature_setpoint"
     ],
     "optional_roles": [],
     "equation": "Pass-through cooling setpoint minus heating setpoint is less than 1\u00b0C.",
@@ -2981,8 +2981,8 @@
       "ahu"
     ],
     "required_roles": [
-      "heating-valve",
-      "cooling-valve"
+      "heating_valve_position_command",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "At least four heating/cooling valve mode changes occur in the analysis window.",
@@ -3034,10 +3034,10 @@
       "baseboard"
     ],
     "required_roles": [
-      "zone-air-temp"
+      "zone_air_temperature"
     ],
     "optional_roles": [
-      "occupied",
+      "occupancy_status",
       "occ-mode"
     ],
     "equation": "Zone temp outside zone_lo\u2013zone_hi (default 70\u201375\u00b0F) during occupied hours when an occupancy column or Overview calendar is set (require_occupied, default on). Unoccupied setback stays on VAV-2.",
@@ -3099,8 +3099,8 @@
       "baseboard"
     ],
     "required_roles": [
-      "zone-air-temp",
-      "occupied"
+      "zone_air_temperature",
+      "occupancy_status"
     ],
     "optional_roles": [
       "occ-mode"
@@ -3141,8 +3141,8 @@
       "vav"
     ],
     "required_roles": [
-      "outside-air-temp",
-      "reheat-valve"
+      "outdoor_air_intake_temperature",
+      "terminal_unit_heating_valve_position_command"
     ],
     "optional_roles": [],
     "equation": "Air flowing AND OAT > 78\u00b0F AND reheat valve > 52%.",
@@ -3201,7 +3201,7 @@
       "vav"
     ],
     "required_roles": [
-      "damper"
+      "damper_position"
     ],
     "optional_roles": [],
     "equation": "Air flowing AND damper > 97.5% sustained across the window.",
@@ -3260,8 +3260,8 @@
       "vav"
     ],
     "required_roles": [
-      "zone-airflow",
-      "damper"
+      "discharge_air_volume_flow_rate",
+      "damper_position"
     ],
     "optional_roles": [],
     "equation": "Airflow > 50 cfm while damper < 10% (implausible flow).",
@@ -3290,11 +3290,11 @@
       "vav"
     ],
     "required_roles": [
-      "outside-air-temp",
-      "reheat-valve"
+      "outdoor_air_intake_temperature",
+      "terminal_unit_heating_valve_position_command"
     ],
     "optional_roles": [
-      "cooling-available"
+      "cooling_operating_mode_status"
     ],
     "equation": "OAT < 65\u00b0F AND reheat valve > 25% (optional cooling-available must be true when mapped).",
     "summary": "Flags reheat while outdoor air is cool enough for free cooling.",
@@ -3342,9 +3342,9 @@
       "vav"
     ],
     "required_roles": [
-      "reheat-valve",
-      "vav-discharge-air-temp",
-      "vav-inlet-air-temp"
+      "terminal_unit_heating_valve_position_command",
+      "terminal_unit_discharge_air_temperature",
+      "terminal_unit_inlet_air_temperature"
     ],
     "optional_roles": [],
     "equation": "Air flowing AND reheat valve > 30% AND box discharge temp rises < 3\u00b0F above duct inlet (air from AHU) \u2014 stuck or failed reheat valve/coil.",
@@ -3403,11 +3403,11 @@
       "vav"
     ],
     "required_roles": [
-      "vav-discharge-air-temp",
-      "ahu-discharge-air-temp"
+      "terminal_unit_discharge_air_temperature",
+      "air_handling_unit_discharge_air_temperature"
     ],
     "optional_roles": [],
-    "equation": "Air flowing AND |VAV discharge \u2212 parent AHU SAT| > band. Needs package topology (vav_to_ahu) so ahu_sat is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.",
+    "equation": "Air flowing AND |VAV discharge \u2212 parent AHU SAT| > band. Needs package topology (vav_to_ahu) so air_handling_unit_discharge_air_temperature is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.",
     "summary": "Flags VAV discharge far from the parent AHU SAT when topology feeds are known.",
     "confirm_seconds": 900,
     "sensor_sweep": false,
@@ -3453,11 +3453,11 @@
       "vav"
     ],
     "required_roles": [
-      "zone-airflow"
+      "discharge_air_volume_flow_rate"
     ],
     "optional_roles": [],
-    "equation": "Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR min_flow_sp itself is excessively high.",
-    "summary": "Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR min_flow_sp itself is excessively high.",
+    "equation": "Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR discharge_air_volume_flow_rate_minimum itself is excessively high.",
+    "summary": "Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR discharge_air_volume_flow_rate_minimum itself is excessively high.",
     "confirm_seconds": 900,
     "sensor_sweep": false,
     "control_output_sweep": false,
@@ -3522,8 +3522,8 @@
       "chiller"
     ],
     "required_roles": [
-      "chilled-water-supply-temp",
-      "chilled-water-return-temp"
+      "supply_chilled_water_temperature",
+      "return_chilled_water_temperature"
     ],
     "optional_roles": [],
     "equation": "Pump on AND (CHWR \u2212 CHWS) < 4\u00b0F.",
@@ -3562,9 +3562,9 @@
       "chiller"
     ],
     "required_roles": [
-      "chw-diff-pressure",
-      "chw-diff-pressure-sp",
-      "chw-pump-cmd"
+      "chilled_water_pressure_delta",
+      "chilled_water_pressure_delta_setpoint",
+      "chilled_water_pump_command"
     ],
     "optional_roles": [],
     "equation": "Pump \u2265 87% AND CHW DP < DP SP \u2212 2.2.",
@@ -3613,9 +3613,9 @@
       "chiller"
     ],
     "required_roles": [
-      "chilled-water-supply-temp",
-      "chilled-water-supply-temp-sp",
-      "chw-pump-cmd"
+      "supply_chilled_water_temperature",
+      "supply_chilled_water_temperature_setpoint",
+      "chilled_water_pump_command"
     ],
     "optional_roles": [],
     "equation": "Pump on AND |CHWS \u2212 CHWS SP| > 2.2\u00b0F.",
@@ -3654,8 +3654,8 @@
       "chiller"
     ],
     "required_roles": [
-      "chw-flow",
-      "chw-pump-cmd"
+      "chilled_water_volume_flow_rate",
+      "chilled_water_pump_command"
     ],
     "optional_roles": [],
     "equation": "Pump \u2265 87% AND CHW flow > 1100 gpm.",
@@ -3704,9 +3704,9 @@
       "heatpump"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "zone-air-temp",
-      "fan-cmd"
+      "discharge_air_temperature",
+      "zone_air_temperature",
+      "supply_fan_command"
     ],
     "optional_roles": [],
     "equation": "Fan on, zone < 69\u00b0F, discharge SAT < 85\u00b0F.",
@@ -3755,7 +3755,7 @@
       "weather"
     ],
     "required_roles": [
-      "outside-air-temp"
+      "outdoor_air_intake_temperature"
     ],
     "optional_roles": [],
     "equation": "OAT sample-to-sample jump > 16\u00b0F.",
@@ -3795,7 +3795,7 @@
       "cooling_tower"
     ],
     "required_roles": [
-      "condenser-water-supply-temp"
+      "supply_condenser_water_temperature"
     ],
     "optional_roles": [],
     "equation": "CW supply significantly colder than web wet-bulb + design approach (Stull WB) \u2014 tower over-cooling / not optimized.",
@@ -3845,13 +3845,13 @@
       "cooling_tower"
     ],
     "required_roles": [
-      "condenser-water-supply-temp"
+      "supply_condenser_water_temperature"
     ],
     "optional_roles": [
-      "tower-fan-cmd",
-      "cw-fan-cmd",
-      "fan-cmd",
-      "web-outside-air-wetbulb"
+      "cooling_tower_fan_command",
+      "cooling_tower_fan_command",
+      "supply_fan_command",
+      "weather_service_air_wet_bulb_temperature"
     ],
     "equation": "At full tower fan speed, leaving CW \u2212 web wet-bulb exceeds approach_max (default 8\u00b0F, typically 5\u201310\u00b0F). Suspect OA\u2192wet-bulb / CW sensor mismatch or cooling-tower performance degradation.",
     "summary": "Flags high CW\u2013wet-bulb approach at full tower fan \u2014 sensor mismatch or tower degradation.",
@@ -3900,13 +3900,13 @@
       "cooling_tower"
     ],
     "required_roles": [
-      "condenser-water-supply-temp"
+      "supply_condenser_water_temperature"
     ],
     "optional_roles": [
-      "tower-fan-cmd",
-      "cw-fan-cmd",
-      "fan-cmd",
-      "web-outside-air-wetbulb"
+      "cooling_tower_fan_command",
+      "cooling_tower_fan_command",
+      "supply_fan_command",
+      "weather_service_air_wet_bulb_temperature"
     ],
     "equation": "Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fans are chasing a CW temp that is theoretically hard/impossible \u2014 excess fan energy.",
     "summary": "Flags full-speed tower fans while CW is well above theoretical WB+approach \u2014 excess fan energy.",
@@ -3964,8 +3964,8 @@
       "ahu"
     ],
     "required_roles": [
-      "duct-static-pressure",
-      "vav-pressure-request-sum"
+      "discharge_air_static_pressure",
+      "discharge_air_static_pressure_reset_request_count"
     ],
     "optional_roles": [],
     "equation": "Duct static high (> 1.35 in.w.c.) while VAV pressure requests are low.",
@@ -4014,7 +4014,7 @@
       "boiler"
     ],
     "required_roles": [
-      "hot-water-supply-temp",
+      "supply_hot_water_temperature",
       "hw-reset-request-sum"
     ],
     "optional_roles": [],
@@ -4064,7 +4064,7 @@
       "chiller"
     ],
     "required_roles": [
-      "chilled-water-supply-temp",
+      "supply_chilled_water_temperature",
       "chw-reset-request-sum"
     ],
     "optional_roles": [],
@@ -4114,13 +4114,13 @@
       "ahu"
     ],
     "required_roles": [
-      "occupied",
-      "fan-status"
+      "occupancy_status",
+      "supply_fan_operating_status"
     ],
     "optional_roles": [
-      "zone-air-temp"
+      "zone_air_temperature"
     ],
-    "equation": "Fan running while occupancy is unoccupied (Overview calendar \u2192 occ_mode). When zone_t is mapped, also require zone inside comfort_low\u2026comfort_high (defaults 21.1\u201323.9\u00b0C; synced from Overview zone band).",
+    "equation": "Fan running while occupancy is unoccupied (Overview calendar \u2192 occupancy_status). When zone_air_temperature is mapped, also require zone inside comfort_low\u2026comfort_high (defaults 21.1\u201323.9\u00b0C; synced from Overview zone band).",
     "summary": "Flags fan runtime during unoccupied hours from the Overview calendar.",
     "confirm_seconds": 1800,
     "sensor_sweep": false,
@@ -4171,19 +4171,19 @@
     ],
     "required_roles": [],
     "optional_roles": [
-      "fan-status",
-      "pump-status",
-      "chw-pump-status",
+      "supply_fan_operating_status",
+      "pump_operating_status",
+      "chilled_water_pump_operating_status",
       "hw-pump-status",
-      "chiller-status",
-      "compressor-status",
-      "tower-fan-cmd",
-      "cw-fan-cmd",
-      "fan-cmd",
-      "chw-pump-cmd",
+      "chiller_operating_status",
+      "compressor_operating_status",
+      "cooling_tower_fan_command",
+      "cooling_tower_fan_command",
+      "supply_fan_command",
+      "chilled_water_pump_command",
       "hw-pump-cmd",
-      "duct-static-pressure",
-      "chw-diff-pressure"
+      "discharge_air_static_pressure",
+      "chilled_water_pressure_delta"
     ],
     "equation": "Ranked proof (status/current > command) is on for \u2265 always_on_pct of the window. Pressure is inferred runtime only and does not trip this rule ID.",
     "summary": "Flags fans or pumps that stay on for nearly the entire analysis window (24/7 runtime).",
@@ -4231,12 +4231,12 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp-sp",
-      "outside-air-temp"
+      "discharge_air_temperature_setpoint",
+      "outdoor_air_intake_temperature"
     ],
     "optional_roles": [
-      "fan-status",
-      "fan-cmd"
+      "supply_fan_operating_status",
+      "supply_fan_command"
     ],
     "equation": "Fan on AND |SAT SP \u2212 (52 + 0.25\u00d7(OAT\u221265))| > 3\u00b0F.",
     "summary": "Flags SAT setpoint that is not tracking the outdoor-air reset curve.",
@@ -4304,8 +4304,8 @@
       "ahu"
     ],
     "required_roles": [
-      "fan-cmd",
-      "fan-status"
+      "supply_fan_command",
+      "supply_fan_operating_status"
     ],
     "optional_roles": [],
     "equation": "Fan command and proven status disagree.",
@@ -4334,10 +4334,10 @@
       "ahu"
     ],
     "required_roles": [
-      "mixed-air-temp",
-      "return-air-temp",
-      "outside-air-temp",
-      "fan-status"
+      "mixed_air_temperature",
+      "return_air_temperature",
+      "outdoor_air_intake_temperature",
+      "supply_fan_operating_status"
     ],
     "optional_roles": [],
     "equation": "Estimated OA fraction < 15% with adequate OAT/RAT split.",
@@ -4386,9 +4386,9 @@
       "ahu"
     ],
     "required_roles": [
-      "outside-air-temp",
-      "mixed-air-temp",
-      "outside-air-damper"
+      "outdoor_air_intake_temperature",
+      "mixed_air_temperature",
+      "outdoor_air_intake_damper_position_command"
     ],
     "optional_roles": [],
     "equation": "Damper \u2264 5% but MAT tracks OAT within 2\u00b0F \u2014 leaking OA damper.",
@@ -4427,16 +4427,16 @@
       "ahu"
     ],
     "required_roles": [
-      "discharge-air-temp",
-      "discharge-air-temp-sp",
-      "cooling-valve"
+      "discharge_air_temperature",
+      "discharge_air_temperature_setpoint",
+      "cooling_valve_position_command"
     ],
     "optional_roles": [
-      "mixed-air-temp",
-      "fan-status",
-      "fan-cmd"
+      "mixed_air_temperature",
+      "supply_fan_operating_status",
+      "supply_fan_command"
     ],
-    "equation": "Cooling valve \u2264 5% AND (SAT < sat_sp \u2212 sat_err OR SAT < MAT \u2212 mat_leak_delta). Fan proven on when fan_status/fan_cmd present (operational gate).",
+    "equation": "Cooling valve \u2264 5% AND (SAT < discharge_air_temperature_setpoint \u2212 sat_err OR SAT < MAT \u2212 mat_leak_delta). Fan proven on when supply_fan_operating_status/supply_fan_command present (operational gate).",
     "summary": "Flags a closed cooling valve while SAT still looks like valve leakage.",
     "confirm_seconds": 900,
     "sensor_sweep": false,

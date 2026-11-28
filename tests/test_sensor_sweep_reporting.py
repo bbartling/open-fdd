@@ -14,13 +14,13 @@ def test_sensor_sweep_reports_missing_samples_separately_from_range_faults():
         confirmed_fault=[True],
         metrics={
             "sv_sweep_evidence": [
-                {"role": "sat", "faulted": True, "fault_hours": 2, "silence_hours": 2},
-                {"role": "rat", "faulted": True, "fault_hours": 1, "silence_hours": 0},
+                {"role": "discharge_air_temperature", "faulted": True, "fault_hours": 2, "silence_hours": 2},
+                {"role": "return_air_temperature", "faulted": True, "fault_hours": 1, "silence_hours": 0},
             ]
         },
     )
     checks = sensor_validation_bullets([result], [])
-    assert [check["roles"] for check in checks] == [["sat"], ["rat"]]
+    assert [check["roles"] for check in checks] == [["discharge_air_temperature"], ["return_air_temperature"]]
     assert checks[0]["silence_hours"] == 2
     text = polish_sensor_paragraph(checks)
     assert "had gaps in reporting." in text
@@ -50,8 +50,8 @@ def test_assessable_sensor_roles_are_shared_by_sql_pandas_and_hook():
     from open_fdd.rules.sensor_sweep_catalog import ASSESSABLE_ROLES_BY_SWEEP
 
     assert {rule: list(roles) for rule, roles in ASSESSABLE_ROLES_BY_SWEEP.items()} == source
-    assert {rule for rule, roles in source.items() if "zone-airflow" in roles} == {"SV-RANGE", "SV-STALE"}
-    assert {rule for rule, roles in source.items() if "duct-static-pressure" in roles} == {"SV-RANGE", "SV-SPIKE", "SV-STALE"}
+    assert {rule for rule, roles in source.items() if "discharge_air_volume_flow_rate" in roles} == {"SV-RANGE", "SV-STALE"}
+    assert {rule for rule, roles in source.items() if "discharge_air_static_pressure" in roles} == {"SV-RANGE", "SV-SPIKE", "SV-STALE"}
 
     pack = json.loads((root / "nf-app/rules/pack-postgres.json").read_text(encoding="utf-8"))
     for rule in ("SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE", "SV-RATE"):

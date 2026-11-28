@@ -2,25 +2,25 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- vlv1_clg_valve_leak.sql — Cooling valve leakage
 WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- Run proof (#1608): the input role operating_status is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
   SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(operating_status) = 0 THEN 1 ELSE 0 END AS no_run_proof
   FROM history
   GROUP BY equipment_id
 ),
 h AS (
   SELECT
-    run_proof,
+    operating_status,
     equipment_id,
     timestamp_utc,
-    sat, sat_sp, mat,
-    clg_valve_pct AS clg,
-    fan_cmd,
-    fan_status,
+    discharge_air_temperature, discharge_air_temperature_setpoint, mixed_air_temperature,
+    cooling_valve_position_command AS clg,
+    supply_fan_command,
+    supply_fan_operating_status,
     CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
+      WHEN supply_fan_operating_status IS NOT NULL THEN CASE WHEN supply_fan_operating_status > 0.05 THEN 1 ELSE 0 END
+      WHEN supply_fan_command IS NOT NULL THEN CASE WHEN supply_fan_command > 0.5 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -31,17 +31,17 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(operating_status, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
-      WHEN clg IS NULL OR sat IS NULL THEN 0
-      WHEN clg <= 0.05 AND (
-        (sat_sp IS NOT NULL AND sat < sat_sp - {{SAT_ERR}})
-        OR (mat IS NOT NULL AND sat < mat - {{MAT_LEAK_DELTA}})
+      WHEN clg IS NULL OR discharge_air_temperature IS NULL THEN 0
+      WHEN clg <= 5.0 AND (
+        (discharge_air_temperature_setpoint IS NOT NULL AND discharge_air_temperature < discharge_air_temperature_setpoint - {{SAT_ERR}})
+        OR (mixed_air_temperature IS NOT NULL AND discharge_air_temperature < mixed_air_temperature - {{MAT_LEAK_DELTA}})
       ) THEN 1
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN operating_status > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM h
 ),
 elapsed_hold AS (

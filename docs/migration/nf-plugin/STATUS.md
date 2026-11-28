@@ -59,7 +59,7 @@ Cost: NF starts one `applications-sdk` runtime per app with hooks. Open-FDD's si
 available memory went 243 → ~140 MB, and idle pages swap to zram between hourly runs. Stable, but it is most of the
 Pi's headroom. A Pi 4/5 or any ≥ 2 GB box is the realistic edge-lite floor.
 
-**Pack bugs found:** `input_contract.sql` lacks the `ra_h`, `zone_rh`, `ma_h` and `sa_h` columns that the SV rules read,
+**Pack bugs found:** `input_contract.sql` lacks the `return_air_relative_humidity`, `zone_air_relative_humidity`, `mixed_air_relative_humidity` and `discharge_air_relative_humidity` columns that the SV rules read,
 and has no `authorized_series` / `equipment` tables. `tuning_catalog.json` `output_columns` is incomplete for 74 rules.
 `build_sql_pack.py` works around both (the contract is extended, and output columns come from the SQL itself);
 `sql/fdd` itself is unchanged.

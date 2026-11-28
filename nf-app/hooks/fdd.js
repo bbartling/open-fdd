@@ -33,14 +33,14 @@
 // (ratio / count / window-statistic rules) keeps only its per-run status sample.
 // The fault_pct point, its uuid and its meaning are unchanged (FDD table, BACnet export, 5.0.1/5.0.2 readers).
 //
-// OCCUPANCY (5.0.3). A runnable rule that lists occ_mode as OPTIONAL (VAV-1, ...) and has no bound occ_mode point gets
-// occ_mode synthesized onto its history rows before the SQL runs, from the site's saved weekly occupancy calendar
+// OCCUPANCY (5.0.3). A runnable rule that lists occupancy_status as OPTIONAL (VAV-1, ...) and has no bound occupancy_status point gets
+// occupancy_status synthesized onto its history rows before the SQL runs, from the site's saved weekly occupancy calendar
 // (OCC-CALENDAR in fdd.rule_config, the Overview editor; #1636), else the site's NF schedule (read only,
 // static/schedule.js: a schedule that targets the site's occupancy point, holidays included), else the 4.x default
 // calendar (Mon-Fri 07:00-17:00), in the site timezone: 1 = occupied, 0 = unoccupied (the SQL treats <= 0.05 as
 // unoccupied). The source lands in the result attributes as fddOccSource = point | calendar | schedule | default
-// (rules with occ_mode REQUIRED, e.g. VAV-2, are untouched: no point, no run). The timescale engine writes the
-// synthesized occ_mode into its session history table after loading (engine.occupancy).
+// (rules with occupancy_status REQUIRED, e.g. VAV-2, are untouched: no point, no run). The timescale engine writes the
+// synthesized occupancy_status into its session history table after loading (engine.occupancy).
 //
 // Result contract (typed, unknown is never healthy):
 //   fault rule   = pack output_columns contain fault_pct or fault_hours. Published value = fault_pct (unit %) else
@@ -71,7 +71,7 @@
 //   timescale     the NF Timescale connection: JSON {"host","port","database","user","password"} or a postgres:// URL
 //   windowHours   trailing window per run (default 24)
 //   weather       false = web weather is OFF (#1552): weather points are ignored (they are stale leftovers), rules that read
-//                 web_oa_t use the equip's own outside-air sensor when tagged, else skip with a reason (alias weatherEnabled)
+//                 weather_service_air_temperature use the equip's own outside-air sensor when tagged, else skip with a reason (alias weatherEnabled)
 //   timezone      IANA zone (e.g. America/Chicago) for the occupancy schedule when the model site has no tz (#1587)
 //   equips        list of equip ids to limit a run to (default: every equip)
 //   dryRun        true → compute and log, write nothing
@@ -192,9 +192,9 @@ const STRICT_QUANTITY = ['temperature', 'pressure', 'flow'];
 function roleQuantity(role, catalog) {
   const name = String(((catalog && catalog.roles && catalog.roles[role]) || {}).name || role);
   if (/request|count/.test(name)) return null;
-  if (/temp|dewpoint|wetbulb/.test(name)) return 'temperature';
+  if (/temp|dew_?point|wet_?bulb/.test(name)) return 'temperature';
   if (/pressure/.test(name)) return 'pressure';
-  if (/airflow|(^|-)flow($|-)/.test(name)) return 'flow';
+  if (/airflow|(^|[-_])flow($|[-_])/.test(name)) return 'flow';
   return null;
 }
 
@@ -230,7 +230,7 @@ function roleScale(role, catalog) {
  * point, never guessed.
  */
 function siPlan(roles, catalog, log, warned) {
-  const plan = { convert: {}, unit: {}, skipped: new Set(), scaled: new Set(), bool: new Set() };
+  const plan = { convert: {}, unit: {}, skipped: new Set(), scaled: new Set(), bool: new Set(), percent: new Set(), raised: new Set() };
   const skip = (role, p, why) => {
     plan.skipped.add(role);
     if (log && warned && !warned.has(p.uuid)) { warned.add(p.uuid); log(`${p.name || p.uuid}: role ${role} ${why}, role skipped`); }
@@ -239,6 +239,21 @@ function siPlan(roles, catalog, log, warned) {
     const unit = p.units || '';
     const probe = ofddUnits.toSI(1, unit);
     const scale = roleScale(role, catalog);
+    if (scale === 'PERCENT') {
+      // Damper, valve and fan speed are PERCENT 0-100. A percent unit is already there. A 0-1 fraction unit is ×100.
+      const pct = !!probe && probe.quantity === 'percent' && !/rh/i.test(unit);
+      if (pct || isBoolKind(p.kind)) { plan.convert[role] = (v) => v; }
+      else if (FRACTION_UNIT.test(unit)) { plan.convert[role] = (v) => v * 100; plan.raised.add(role); }
+      else { skip(role, p, unit ? `is PERCENT 0-100 but unit "${unit}" is not a percent or fraction` : 'is PERCENT 0-100 but its point has no unit (0-100 or 0-1 cannot be told apart)'); continue; }
+      plan.percent.add(role);
+      plan.unit[role] = 'PERCENT';
+      continue;
+    }
+    if (scale === 'PERCENT_RH') {
+      plan.convert[role] = (v) => v;
+      plan.unit[role] = '%';
+      continue;
+    }
     if (scale === 'fraction' || scale === 'boolean') {
       const pct = !!probe && probe.quantity === 'percent' && !/rh/i.test(unit);
       const bool = isBoolKind(p.kind);
@@ -300,7 +315,7 @@ function buildInput({ equipId, siteId, roles, hist, grid, pack, si, occ }) {
       if (x != null) { row[role] = x; any = true; }
     }
     if (any) {                           // a timestamp with no data at all is a gap, not zeros
-      if (occ) row.occ_mode = occ(ts) ? 1 : 0;   // synthesized from the schedule (occ is only passed when no occ_mode point is bound)
+      if (occ) row.occupancy_status = occ(ts) ? 1 : 0;   // synthesized from the schedule (occ is only passed when no occupancy_status point is bound)
       history.push(row);
     }
   }
@@ -308,7 +323,7 @@ function buildInput({ equipId, siteId, roles, hist, grid, pack, si, occ }) {
   for (const ts of grid) {
     const w = { ts };
     let any = false;
-    for (const role of ['oa_t', 'web_oa_t', 'web_oa_dp']) {
+    for (const role of ['outdoor_air_intake_temperature', 'weather_service_air_temperature', 'weather_service_air_dew_point_temperature']) {
       const p = roles[role];
       const v = p && hist[p.uuid].get(ts);
       const x = v != null ? conv(role, v) : null;
@@ -559,26 +574,26 @@ function timelineRecords({ equipRec, siteId, rule, shared, windowHours, key, run
 
 // ---- outside-air temperature policy (#1552): web weather first, else the equip's local sensor ----------------------
 /**
- * The same OAT policy as the RCx charts ("web first, else local"), applied to the rules that read `web_oa_t`:
+ * The same OAT policy as the RCx charts ("web first, else local"), applied to the rules that read `weather_service_air_temperature`:
  *   - web weather bound (a point tagged `weather`) -> used, nothing changes;
- *   - none bound but the equip has its own tagged outside-air temperature (role oa_t) -> that sensor feeds web_oa_t
+ *   - none bound but the equip has its own tagged outside-air temperature (role outdoor_air_intake_temperature) -> that sensor feeds weather_service_air_temperature
  *     (not on the timescale engine: fdd.point keys one role per point);
  *   - none of either -> the rule is skipped with a reason that says why (only when weather is switched OFF; with weather
  *     on but nothing bound yet the rule keeps its old behaviour).
- * A rule that lists BOTH oa_t and web_oa_t (OAT-METEO) compares the two, so a local fallback would compare a sensor with
+ * A rule that lists BOTH outdoor_air_intake_temperature and weather_service_air_temperature (OAT-METEO) compares the two, so a local fallback would compare a sensor with
  * itself: it is skipped when weather is off. Mutates the rows of equipRules(); returns what it did.
  * @param {any[]} rows @param {{ localOat?: any, weatherOn: boolean, canSubstitute: boolean }} o
  * @returns {{ source: 'web' | 'local' | 'none', local: any, skipped: string[] }}
  */
 function applyOatPolicy(rows, { localOat, weatherOn, canSubstitute }) {
   const out = { source: /** @type {'web' | 'local' | 'none'} */ ('none'), local: null, skipped: /** @type {string[]} */ ([]) };
-  if (rows.some((r) => (r.bound.web_oa_t || []).length)) out.source = 'web';
+  if (rows.some((r) => (r.bound.weather_service_air_temperature || []).length)) out.source = 'web';
   for (const r of rows) {
     const roles = [...r.required, ...r.optional];
-    if (!roles.includes('web_oa_t') || (r.bound.web_oa_t || []).length) continue;
-    const compares = roles.includes('oa_t');
+    if (!roles.includes('weather_service_air_temperature') || (r.bound.weather_service_air_temperature || []).length) continue;
+    const compares = roles.includes('outdoor_air_intake_temperature');
     if (!compares && localOat && canSubstitute) {
-      r.bound.web_oa_t = [localOat];
+      r.bound.weather_service_air_temperature = [localOat];
       r.oatLocal = true;
       r.missing = r.required.filter((x) => !(r.bound[x] || []).length);
       r.pointInputs = true;
@@ -597,7 +612,7 @@ function applyOatPolicy(rows, { localOat, weatherOn, canSubstitute }) {
   return out;
 }
 
-// ---- occupancy for rules whose occ_mode is optional and unbound -------------------------------------
+// ---- occupancy for rules whose occupancy_status is optional and unbound -------------------------------------
 const scheduleLib = require('../static/schedule.js');
 const occupancyLib = require('../static/occupancy.js');
 const siteTz = require('./lib/site-timezone.js');
@@ -790,7 +805,7 @@ async function pickEngine(http, wanted, timescaleConfig, hasDuckdb, buildId) {
  * @param {any} rule catalog rule  @param {any} ruleTpl pack.rule_tuning_templates.rules[id]  @param {any} tunedHere tuning.forRule()
  */
 function runProofGateOn(rule, ruleTpl, tunedHere) {
-  if (!rule || rule.run_proof !== 'gated') return false;
+  if (!rule || rule.operating_status !== 'gated') return false;
   const rp = tunedHere && tunedHere.parameters && tunedHere.parameters.rule_params;
   const layers = rp && rp.overrides ? [rp.overrides.equip, rp.overrides.site] : [];
   for (const layer of layers) {
@@ -1049,13 +1064,13 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
       };
       try {
         const bound = shared.equipRules(equipRec, model, shared.catalog).filter((r) => pack.rules[r.rule.id]);
-        if (bound.some((r) => [...r.required, ...r.optional].includes('web_oa_t'))) {
-          const localOat = shared.bindRoles(['oa_t'], shared.equipPool(equipRec, model), shared.catalog).oa_t[0] || null;
+        if (bound.some((r) => [...r.required, ...r.optional].includes('weather_service_air_temperature'))) {
+          const localOat = shared.bindRoles(['outdoor_air_intake_temperature'], shared.equipPool(equipRec, model), shared.catalog).outdoor_air_intake_temperature[0] || null;
           const oat = applyOatPolicy(bound, { localOat, weatherOn, canSubstitute: kind !== 'timescale' });
           summary.oat[oat.source]++;
           if (oat.local) {
             summary.oat.local_points.push({ site: siteId, equip: equipId, point: oat.local.name });
-            log(`${equipId}: no web weather bound, using the local outside-air sensor "${oat.local.name}" for web_oa_t`);
+            log(`${equipId}: no web weather bound, using the local outside-air sensor "${oat.local.name}" for weather_service_air_temperature`);
           }
           if (oat.skipped.length) log(`${equipId}: ${oat.skipped.join(', ')} skipped: no outside-air temperature (weather disabled)`);
         }
@@ -1073,9 +1088,9 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         }
         let roles = roleInputs(runnable);
         // Run proof (#1608): ONE resolved point (own status, own command, or the feeding equipment's), fed to the rules as the
-        // history column run_proof. None found = gated rules are SKIPPED no_run_proof (SQL returns covered_hours 0).
+        // history column operating_status. None found = gated rules are SKIPPED no_run_proof (SQL returns covered_hours 0).
         let proof = { found: false };
-        if (runnable.some((r) => r.rule.run_proof === 'gated')) {
+        if (runnable.some((r) => r.rule.operating_status === 'gated')) {
           proof = shared.resolveRunProof(equipRec, model, shared.catalog, { assumeSingleFeeder: settings.assumeSingleFeeder(config) });
           // #1631: commands with an unknown scale are skipped by the resolver (the next candidate wins); say so
           for (const r of proof.refused || []) log(`${equipId}: run proof candidate ${r.equip}/${r.point} (${r.role}) not used: ${r.reason}`);
@@ -1084,7 +1099,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             summary.assumed_feeders++;
             log(`${equipId}: run proof uses the site's only AHU ${proof.equip} (no airRef)`);
           }
-          if (proof.found && proof.point) roles.run_proof = proof.point;
+          if (proof.found && proof.point) roles.operating_status = proof.point;
         }
         const si = siPlan(roles, shared.catalog, log, warnedUnits);
         const sweepSensors = [];
@@ -1093,7 +1108,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           const assessableRoles = shared.catalog.sensor_sweep_roles?.[r.rule.id];
           if (!Array.isArray(assessableRoles)) throw new Error(`fdd catalog has no assessable-role list for ${r.rule.id}`);
           for (const [role, points] of Object.entries(r.bound || {})) {
-            if (!assessableRoles.includes(role) || (r.oatLocal && role === 'web_oa_t')) continue;
+            if (!assessableRoles.includes(role) || (r.oatLocal && role === 'weather_service_air_temperature')) continue;
             for (const point of points || []) {
               let sensor = sweepSensors.find((s) => s.point.uuid === point.uuid);
               if (!sensor) { sensor = { role, point, ruleIds: new Set() }; sweepSensors.push(sensor); }
@@ -1111,7 +1126,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           }
           runnable = runnable.filter((r) => !r.required.some((x) => si.skipped.has(x)));
           roles = roleInputs(runnable);
-          if (proof.found && proof.point) roles.run_proof = proof.point;
+          if (proof.found && proof.point) roles.operating_status = proof.point;
           for (const x of si.skipped) delete roles[x];
           if (!runnable.length) {
             skip('unit-unusable', `unit unusable (role ${bad}: unknown or missing unit on the point)`);
@@ -1124,8 +1139,8 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         let loadedRows;
         let declaredSweep = 0;        // bound sweep series expected over the window (#1673)
         let histByTs = null;          // ms -> history row (which required inputs exist at a timestamp); not on timescale
-        let occ = null;               // synthesized occupancy: a runnable rule has occ_mode optional and no point is bound
-        if (!roles.occ_mode && runnable.some((r) => r.optional.includes('occ_mode'))
+        let occ = null;               // synthesized occupancy: a runnable rule has occupancy_status optional and no point is bound
+        if (!roles.occupancy_status && runnable.some((r) => r.optional.includes('occupancy_status'))
           && (kind !== 'timescale' || typeof engine.occupancy === 'function')) {
           try {
             let calendar = null;
@@ -1133,13 +1148,13 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             occ = await siteOccupancy({ http, model, shared, siteId, cache: occCache, config, calendar });
             if (!occCache.logged.has(siteId)) {
               occCache.logged.add(siteId);
-              log(`${siteId || 'site'}: occ_mode synthesized from ${occ.source} (${occ.label}, ${occ.tz}, zone from ${occ.tz_source})`);
+              log(`${siteId || 'site'}: occupancy_status synthesized from ${occ.source} (${occ.label}, ${occ.tz}, zone from ${occ.tz_source})`);
               if (occ.tz_ignored) log(`${siteId || 'site'}: ${occ.tz_ignored}`);
               if (occ.tz_sites_error) log(`${siteId || 'site'}: NF Sites unavailable for the time zone (${occ.tz_sites_error})`);
               summary.timezones[siteId || ''] = { zone: occ.tz, source: occ.tz_source, fallback: occ.tz_fallback };
               summary.occupancy[siteId || ''] = { source: occ.source, revision: occ.revision ?? null };
             }
-          } catch (e) { log(`${equipId}: occupancy schedule unavailable (${errText(e)}); occ_mode not synthesized`); }
+          } catch (e) { log(`${equipId}: occupancy schedule unavailable (${errText(e)}); occupancy_status not synthesized`); }
         }
         if (kind === 'timescale') {   // SQL builds the wide and per-series sweep inputs from stored SI data
           const roleToUuid = Object.fromEntries(Object.entries(roles).map(([r, p]) => [r, p.uuid]));
@@ -1149,9 +1164,10 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           const pointMeta = Object.fromEntries([...Object.values(roles), ...sweepSensors.map((s) => s.point)]
             .map((p) => [p.uuid, { name: p.name, dis: p.dis, kind: p.kind }]));
           loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid, pointMeta,
-            sensorSeries: sensorPlan.sensorSeries, fractionRoles: [...si.scaled], booleanRoles: [...si.bool], from, to, stepSec: step });
+            sensorSeries: sensorPlan.sensorSeries, fractionRoles: [...si.scaled], booleanRoles: [...si.bool],
+            percentRoles: [...si.percent], raisedRoles: [...si.raised], from, to, stepSec: step });
           declaredSweep = sensorPlan.sensorSeries.length;   // the engine also fills sweep_series over [from, to) (#1673)
-          if (loadedRows && occ && engine.occupancy) await engine.occupancy(equipId, occ.at);   // #1636: same occ_mode as the other engines
+          if (loadedRows && occ && engine.occupancy) await engine.occupancy(equipId, occ.at);   // #1636: same occupancy_status as the other engines
           if (!loadedRows && engine.newestSample) {   // empty window: when did these points last have a sample at all?
             try { newestHere = await engine.newestSample(uuids); } catch (e) { log(`${equipId}: newest-sample lookup failed: ${errText(e)}`); }
           }
@@ -1243,11 +1259,11 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           const out = resultValue(packRule, row);
           const gateOn = runProofGateOn(r.rule, pack.rule_tuning_templates && pack.rule_tuning_templates.rules
             && pack.rule_tuning_templates.rules[r.rule.id], tunedHere);
-          const noProof = gateOn && !roles.run_proof;
+          const noProof = gateOn && !roles.operating_status;
           if (noProof && out.status === 'not-assessed') {
             const oneAhu = shared.singleAhuRecord(equipRec, model, shared.catalog);
             const hint = oneAhu ? 'add airRef on this VAV (the site has one AHU) to name its feeder' : '';
-            out.reason = `${shared.catalog.run_proof.skip_reason}: ${proof.reason && proof.reason !== shared.catalog.run_proof.skip_reason ? proof.reason : 'no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound'}`
+            out.reason = `${shared.catalog.operating_status.skip_reason}: ${proof.reason && proof.reason !== shared.catalog.operating_status.skip_reason ? proof.reason : 'no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound'}`
               + (hint ? `; ${hint}` : '');
             summary.no_run_proof++;
             if (hint) {
@@ -1294,13 +1310,13 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           }
           if (noProof && out.status === 'not-assessed') {
             for (const dbRow of dbRows) if (dbRow && dbRow.rule_id === r.rule.id && dbRow.equipment_id === equipId) {
-              Object.assign(dbRow, { status: 'SKIPPED', reason: shared.catalog.run_proof.skip_reason, fault_hours: null, covered_hours: null, fault_pct: null });
+              Object.assign(dbRow, { status: 'SKIPPED', reason: shared.catalog.operating_status.skip_reason, fault_hours: null, covered_hours: null, fault_pct: null });
             }
           }
           const uuid = resultUuid(key, r.rule.id);
           touched.add(uuid);
-          const usesOcc = r.required.includes('occ_mode') || r.optional.includes('occ_mode');
-          const occSource = usesOcc ? (roles.occ_mode ? 'point' : occ ? occ.source : undefined) : undefined;
+          const usesOcc = r.required.includes('occupancy_status') || r.optional.includes('occupancy_status');
+          const occSource = usesOcc ? (roles.occupancy_status ? 'point' : occ ? occ.source : undefined) : undefined;
           records.push(...resultRecords({ equipRec, siteId, rule: r.rule, out, shared, windowHours, key, runIso, occSource,
             sensorFaultHours, previous: model.results.get(uuid), outputSince: new Date(to).toISOString() }));
           if (out.status !== 'not-assessed') values.push({ uuid, value: out.value });

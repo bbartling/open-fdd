@@ -14,7 +14,7 @@ DAY_LABELS = {
     "wed": "Wednesday",
     "thu": "Thursday",
     "fri": "Friday",
-    "sat": "Saturday",
+    "discharge_air_temperature": "Saturday",
     "sun": "Sunday",
 }
 
@@ -56,8 +56,7 @@ class OccupancySchedule:
         days: dict[str, DaySchedule] = {}
         raw_days = data.get("days") or {}
         for d in DAYS:
-            # Legacy sessions may have mis-named Saturday as "discharge-air-temp"
-            row = raw_days.get(d) or (raw_days.get("discharge-air-temp") if d == "sat" else {}) or {}
+            row = raw_days.get(d) or {}
             days[d] = DaySchedule(
                 occupied=bool(row.get("occupied", d not in {"sat", "sun"})),
                 start=str(row.get("start", "06:00")),
@@ -83,7 +82,7 @@ def occupied_mask(index: pd.DatetimeIndex, schedule: OccupancySchedule) -> pd.Se
     except Exception:
         local = index
     # A day whose end <= start runs past midnight INTO THE NEXT DAY (Mon 22:00-06:00 = Mon 22:00 .. Tue 06:00), the
-    # same as nf-app/static/occupancy.js calendarSchedule (#1636): the hook's synthesized occ_mode and this mask agree.
+    # same as nf-app/static/occupancy.js calendarSchedule (#1636): the hook's synthesized occupancy_status and this mask agree.
     windows = []
     for d in DAYS:
         day = schedule.days.get(d, DaySchedule(occupied=False))
@@ -142,12 +141,12 @@ def occupied_hours_per_week(schedule: OccupancySchedule) -> float:
 
 
 def apply_schedule_occ_mode(df: pd.DataFrame, schedule: OccupancySchedule, *, overwrite: bool = False) -> pd.DataFrame:
-    """Attach occ_mode from weekly calendar when missing (or overwrite=True)."""
+    """Attach occupancy_status from weekly calendar when missing (or overwrite=True)."""
     out = df.copy()
-    if "occupied" in out.columns and out["occupied"].notna().any() and not overwrite:
+    if "occupancy_status" in out.columns and out["occupancy_status"].notna().any() and not overwrite:
         return out
     if not isinstance(out.index, pd.DatetimeIndex):
         return out
     mask = occupied_mask(out.index, schedule)
-    out["occupied"] = mask.map(lambda x: "occupied" if x else "unoccupied")
+    out["occupancy_status"] = mask.map(lambda x: "occupancy_status" if x else "unoccupied")
     return out

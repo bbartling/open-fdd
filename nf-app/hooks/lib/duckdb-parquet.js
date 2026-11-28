@@ -269,7 +269,11 @@ async function viewHistory(conn, columns, equipmentIds, quoteId) {
 
 async function viewWeather(conn, columns, quoteId) {
   const roles = columns.filter((c) => c.name !== "timestamp_utc").map((c) => c.name);
-  const names = roles.length ? roles : ["oa_t", "web_oa_t", "web_oa_dp"];
+  const names = roles.length ? roles : [
+    "outdoor_air_intake_temperature",
+    "weather_service_air_temperature",
+    "weather_service_air_dew_point_temperature",
+  ];
   const aggs = names.map((name) => `max(CASE WHEN role = ${sqlStr(name)} THEN value END) AS ${quoteId(name)}`);
   await conn.run(`CREATE OR REPLACE TEMP VIEW weather AS
     SELECT CAST(to_timestamp(ts_ms / 1000.0) AS TIMESTAMPTZ) AS timestamp_utc, ${aggs.join(", ")}

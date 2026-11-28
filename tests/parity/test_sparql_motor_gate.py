@@ -37,13 +37,13 @@ def motor_dataset(variant: str):
     for r in ds.history:
         h = (r["ts"] - t0) / 3.6e6
         on = variant != "always_off" and not (8 <= h < 16)
-        r["fan_status"] = None if variant == "cmd_only" else (1.0 if on else 0.0)
-        r["fan_cmd"] = 1.0 if on else 0.0
-        r["sat_sp"], r["sat"] = SP, SP
+        r["supply_fan_operating_status"] = None if variant == "cmd_only" else (1.0 if on else 0.0)
+        r["supply_fan_command"] = 1.0 if on else 0.0
+        r["discharge_air_temperature_setpoint"], r["discharge_air_temperature"] = SP, SP
         if 10 <= h < 12:                                   # inside the OFF window
-            r["sat"] = FAULT
+            r["discharge_air_temperature"] = FAULT
         if variant in ("on_and_off", "cmd_only", "always_off") and 18 <= h < 20:   # inside the 2nd ON window
-            r["sat"] = FAULT
+            r["discharge_air_temperature"] = FAULT
     return ds
 
 

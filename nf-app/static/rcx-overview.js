@@ -118,13 +118,13 @@
   // motor_weekly_runtime.sql). A view requires one signal; the later-signal view only draws
   // equips that lack the preferred one, so no equip is counted twice.
   const MOTORS = [
-    { id: "fan", title: "AHU supply fans", group: "Air handlers", kinds: ["ahu"], signals: ["fan_status", "fan_cmd"], faults: ["SCHED-247"] },
-    { id: "pump", title: "Pumps", group: "Plant", kinds: ["boiler", "chwPlant", "chiller"], signals: ["pump_status"] },
-    { id: "chw-pump", title: "Chilled-water pumps", group: "Plant", kinds: ["chiller", "chwPlant"], signals: ["chw_pump_status", "chw_pump_cmd"] },
-    { id: "cw-pump", title: "Condenser-water pumps", group: "Plant", kinds: ["chiller", "chwPlant", "cooling_tower"], signals: ["cw_pump_cmd"] },
-    { id: "compressor", title: "Compressors", group: "Plant", kinds: [], signals: ["compressor_status"] },
-    { id: "chiller", title: "Chillers", group: "Plant", kinds: ["chiller", "chwPlant"], signals: ["chiller_status", "chiller_cmd"] },
-    { id: "tower-fan", title: "Cooling-tower fans", group: "Plant", kinds: ["cooling_tower", "chiller", "chwPlant"], signals: ["tower_fan_cmd"] },
+    { id: "fan", title: "AHU supply fans", group: "Air handlers", kinds: ["ahu"], signals: ["supply_fan_operating_status", "supply_fan_command"], faults: ["SCHED-247"] },
+    { id: "pump", title: "Pumps", group: "Plant", kinds: ["boiler", "chwPlant", "chiller"], signals: ["pump_operating_status"] },
+    { id: "chw-pump", title: "Chilled-water pumps", group: "Plant", kinds: ["chiller", "chwPlant"], signals: ["chilled_water_pump_operating_status", "chilled_water_pump_command"] },
+    { id: "cw-pump", title: "Condenser-water pumps", group: "Plant", kinds: ["chiller", "chwPlant", "cooling_tower"], signals: ["condenser_water_pump_command"] },
+    { id: "compressor", title: "Compressors", group: "Plant", kinds: [], signals: ["compressor_operating_status"] },
+    { id: "chiller", title: "Chillers", group: "Plant", kinds: ["chiller", "chwPlant"], signals: ["chiller_operating_status", "chiller_command"] },
+    { id: "tower-fan", title: "Cooling-tower fans", group: "Plant", kinds: ["cooling_tower", "chiller", "chwPlant"], signals: ["cooling_tower_fan_command"] },
   ];
 
   // ---- schedules for the weekly views (read only; schedule.js = ofddSchedule) ----------------
@@ -168,7 +168,7 @@
       const rec = ((ctx.model && ctx.model.sites) || []).find((r) => ((r.attrs && r.attrs.id) || r.name) === ref);
       const tz = siteZone(rec);
       // 5.0.20: the site's occupancy calendar (saved on the Overview, or the draft being edited) comes first; without
-      // one, unchanged: an NF schedule bound to the site, else the 4.x default (the FDD hook's occ_mode uses the same).
+      // one, unchanged: an NF schedule bound to the site, else the 4.x default (the FDD hook's occupancy_status uses the same).
       const cal = O && occCalendarOf(ref);
       const schedule = cal ? O.calendarSchedule(cal) : S.pickSiteSchedule(schedules, ctx.model, ref) || S.defaultSchedule(tz);
       const zone = schedule.tz || tz || null;
@@ -185,7 +185,7 @@
   async function weeklyData(ctx, eqs, role) {
     const wx = weatherOat(ctx);
     const cols = {};
-    eqs.forEach((eq, i) => { cols[`m${i}`] = ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });   // one OAT policy: weather first, else the equip oa_t
+    eqs.forEach((eq, i) => { cols[`m${i}`] = ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "outdoor_air_intake_temperature"); });   // one OAT policy: weather first, else the equip outdoor_air_intake_temperature
     const [g, sites] = await Promise.all([ctx.alignedFine(cols, { hours: ctx.hours }), siteSchedules(ctx, eqs)]);
     // #1649: the run hours are the SQL analytic (sql/analytics/motor_weekly_runtime.sql), not JS math
     if (!ctx.sqlAnalytics) throw new Error("SQL analytics engine unavailable (ctx.sqlAnalytics)");
@@ -313,11 +313,11 @@
   for (const motor of MOTORS) {
     motor.signals.forEach((role, i) => {
       rcxView({
-        id: `weekly-${motor.id}${i ? "-" + role.split("_").pop() : ""}`,
+        id: `weekly-${motor.id}${i ? "-cmd" : ""}`,
         group: motor.group,
         title: `Weekly runtime: ${motor.title}${motor.signals.length > 1 ? ` (${role.endsWith("_status") ? "status" : "command"})` : ""}`,
         kinds: motor.kinds, scope: "site", hours: 672, fine: true,
-        roles: { required: [role], optional: ["oa_t", ...motor.signals.filter((r) => r !== role)] },
+        roles: { required: [role], optional: ["outdoor_air_intake_temperature", ...motor.signals.filter((r) => r !== role)] },
         render: (el, ctx) => renderWeekly(el, ctx, motor, role),
       });
     });
@@ -431,8 +431,8 @@
   async function mechData(ctx, role, toDisp, pick = null) {
     const wx = weatherOat(ctx);
     const cols = {};
-    ctx.equips.forEach((eq, i) => { cols[`a${i}`] = pick ? pick(eq) : ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });
-    if (!Object.keys(cols).some((k) => k[0] === "o" && cols[k])) return { error: "needs an outdoor-air temperature (weather point or oa_t)", per: [], wx };
+    ctx.equips.forEach((eq, i) => { cols[`a${i}`] = pick ? pick(eq) : ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "outdoor_air_intake_temperature"); });
+    if (!Object.keys(cols).some((k) => k[0] === "o" && cols[k])) return { error: "needs an outdoor-air temperature (weather point or outdoor_air_intake_temperature)", per: [], wx };
     const g = await ctx.alignedFine(cols, { hours: ctx.hours });   // fine grid: a short low-OAT event must not vanish
     // #1649: the hours per bin are the SQL analytic (sql/analytics/mech_cooling_oat_bins.sql, OAT joined as-of)
     if (!ctx.sqlAnalytics) throw new Error("SQL analytics engine unavailable (ctx.sqlAnalytics)");
@@ -443,13 +443,17 @@
     return { per, wx };
   }
 
-  for (const role of ["compressor_status", "chiller_status", "chiller_cmd"]) {
+  for (const [role, id] of [
+    ["compressor_operating_status", "mech-cooling-compressor-status"],
+    ["chiller_operating_status", "mech-cooling-chiller-status"],
+    ["chiller_command", "mech-cooling-chiller-cmd"],
+  ]) {
     rcxView({
-      id: `mech-cooling-${role.split("_").slice(0, -1).join("-")}-${role.split("_").pop()}`,
+      id,
       group: "Plant", tabHidden: true,          // superseded on the tab by "mech-cooling-hours" (one chart, one series per equip)
       title: `Mechanical cooling hours by outdoor air (${role.replace("_", " ")})`,
       kinds: [], scope: "site", hours: 720,
-      roles: { required: [role], optional: ["oa_t"] },
+      roles: { required: [role], optional: ["outdoor_air_intake_temperature"] },
       render: async (el, ctx) => {
         const res = await mechData(ctx, role, (c) => ctx.disp(c, TEMP).value);
         if (res.error) return res.error;
@@ -465,7 +469,7 @@
           xAxis: { type: "category", data: labels, name: `OAT bin ${unit}`, nameLocation: "middle", nameGap: 26 },
           yAxis: { type: "value", name: "hours" }, series,
         }, null, `mech_cooling_${role}`);
-        return `${wx ? "web" : "equip"} outdoor-air temperature · on = ${role.endsWith("_cmd") ? "command" : "status"} > ${ON * 100}%`;
+        return `${wx ? "web" : "equip"} outdoor-air temperature · on = ${role.endsWith("_command") ? "command" : "status"} > ${ON * 100}%`;
       },
     });
   }
@@ -473,12 +477,12 @@
   // One chart per equip (hours per fixed SI outdoor-air bin). The proof is type-dispatched per equip: a status first (chiller
   // status, compressor status, DX cooling status), else a command (chiller, compressor, DX cooling command), and the chart
   // says which. AHU / RTU DX run roles bind too; a chilled-water valve is never proof (its hours belong to the plant).
-  const MECH_STATUS = ["chiller_status", "compressor_status", "dx_cooling"];
-  const MECH_CMD = ["chiller_cmd", "compressor_cmd", "dx_cool_cmd"];
+  const MECH_STATUS = ["chiller_operating_status", "compressor_operating_status", "dx_cooling"];
+  const MECH_CMD = ["chiller_command", "compressor_cmd", "dx_cool_cmd"];
   rcxView({
     id: "mech-cooling-hours", group: "Plant", title: "Mechanical cooling hours by outdoor air",
     kinds: [], scope: "site", hours: 720, fine: true,
-    roles: { required: [], anyOf: [...MECH_STATUS, ...MECH_CMD], optional: ["oa_t"] },
+    roles: { required: [], anyOf: [...MECH_STATUS, ...MECH_CMD], optional: ["outdoor_air_intake_temperature"] },
     render: async (el, ctx) => {
       const roleOf = new Map();
       const pick = (eq) => { for (const r of [...MECH_STATUS, ...MECH_CMD]) { const p = ctx.first(eq, r); if (p) { roleOf.set(p.uuid, r); return p; } } return null; };
@@ -503,13 +507,13 @@
   // ================= economizer ========================================================
 
   const ECON_RULES = ["ECON-1", "ECON-2", "DMP-1"];
-  const ECON_ROLES = { required: ["oa_t", "rat", "mat", "fan_status"], optional: ["sat", "oa_damper_pct"] };
+  const ECON_ROLES = { required: ["outdoor_air_intake_temperature", "return_air_temperature", "mixed_air_temperature", "supply_fan_operating_status"], optional: ["discharge_air_temperature", "outdoor_air_intake_damper_position_command"] };
 
   /** Economizer samples of one equip. `fine` = the fine grid (agent numbers); the charts keep the display grid. */
   async function econGrid(ctx, eq, fine = false) {
     const col = (r) => ctx.first(eq, r);
-    const g = await (fine ? ctx.alignedFine : ctx.aligned)({ oa_t: col("oa_t"), rat: col("rat"), mat: col("mat"), fan: col("fan_status"),
-      sat: col("sat"), damper: col("oa_damper_pct") }, { hours: ctx.hours });
+    const g = await (fine ? ctx.alignedFine : ctx.aligned)({ outdoor_air_intake_temperature: col("outdoor_air_intake_temperature"), return_air_temperature: col("return_air_temperature"), mixed_air_temperature: col("mixed_air_temperature"), fan: col("supply_fan_operating_status"),
+      discharge_air_temperature: col("discharge_air_temperature"), damper: col("outdoor_air_intake_damper_position_command") }, { hours: ctx.hours });
     // #1649: rows and summary are the SQL analytics (economizer_points.sql / economizer_metrics.sql)
     if (!ctx.sqlAnalytics) throw new Error("SQL analytics engine unavailable (ctx.sqlAnalytics)");
     const { rows, summary } = await ctx.sqlAnalytics.econ(g);
@@ -542,8 +546,8 @@
   });
 
   rcxView({
-    id: "economizer-mat-residual", group: "Air handlers", title: "Economizer: MAT residual (measured - mixing model)",
-    kinds: ["ahu"], scope: "site", hours: 168, roles: { required: [...ECON_ROLES.required, "oa_damper_pct"], optional: ["sat"] },
+    id: "economizer-mixed_air_temperature-residual", group: "Air handlers", title: "Economizer: MAT residual (measured - mixing model)",
+    kinds: ["ahu"], scope: "site", hours: 168, roles: { required: [...ECON_ROLES.required, "outdoor_air_intake_damper_position_command"], optional: ["discharge_air_temperature"] },
     render: async (el, ctx) => {
       const per = await Promise.all(ctx.equips.map((eq) => econGrid(ctx, eq)));
       const series = per.map((p) => lineS(eqName(p.eq),
@@ -566,7 +570,7 @@
     kinds: ["ahu"], scope: "equip", hours: 168, roles: ECON_ROLES,
     render: async (el, ctx) => {
       const eq = ctx.equips[0], col = (r) => ctx.first(eq, r);
-      const cols = { OAT: col("oa_t"), RAT: col("rat"), MAT: col("mat"), SAT: col("sat"), "OA damper %": col("oa_damper_pct") };
+      const cols = { OAT: col("outdoor_air_intake_temperature"), RAT: col("return_air_temperature"), MAT: col("mixed_air_temperature"), SAT: col("discharge_air_temperature"), "OA damper %": col("outdoor_air_intake_damper_position_command") };
       const g = await ctx.aligned(cols, { hours: ctx.hours });
       const pairs = (k) => g.t.map((t, i) => [t, g.cols[k][i]]).filter((d) => isNum(d[1]));
       const tempPairs = (k) => ctx.dispSeries(pairs(k), TEMP);
@@ -585,12 +589,12 @@
   // ================= BAS vs web outdoor-air temperature ================================
 
   async function basData(ctx) {
-    const eq = ctx.equips[0];                      // primary reference: first bound equip's oa_t
-    const bas = ctx.first(eq, "oa_t"), web = ctx.first(eq, "web_oa_t");
+    const eq = ctx.equips[0];                      // primary reference: first bound equip's outdoor_air_intake_temperature
+    const bas = ctx.first(eq, "outdoor_air_intake_temperature"), web = ctx.first(eq, "weather_service_air_temperature");
     const g = await ctx.aligned({ bas, web }, { hours: ctx.hours });
     return { eq, ...(await ctx.sqlAnalytics.bas(g)), g, web };   // bas_vs_web_points.sql + bas_vs_web_oat.sql
   }
-  const BAS_ROLES = { required: ["oa_t", "web_oa_t"], optional: [] };
+  const BAS_ROLES = { required: ["outdoor_air_intake_temperature", "weather_service_air_temperature"], optional: [] };
 
   // The deviation sits under "Weather" (or the boiler / hot-water plant when that is where the hard-wired outdoor-air
   // sensor is modelled), never with the air handlers. It is an FDD chart: signals on top, OAT-METEO fault lane at the bottom.
@@ -605,7 +609,7 @@
       const T = (c) => ctx.disp(c, TEMP).value, half = ctx.dispDelta(d.band, TEMP).value, unit = ctx.dispUnit(TEMP);
       const series = [
         lineS("Web OAT", d.rows.map((r) => [r.t, T(r.web)])),
-        lineS("BAS oa_t", d.rows.map((r) => [r.t, T(r.bas)])),
+        lineS("BAS outdoor_air_intake_temperature", d.rows.map((r) => [r.t, T(r.bas)])),
         // Band = transparent base (web - band) + stacked 2 x band wide area; theme palette colors.
         { name: "band base", type: "line", stack: "band", symbol: "none", silent: true, lineStyle: { opacity: 0 },
           data: d.rows.map((r) => [r.t, +(T(r.web) - half).toFixed(2)]) },
@@ -614,7 +618,7 @@
       ];
       const lanes = await faultLanes(ctx, ["OAT-METEO"], ctx.equips);
       draw(ctx, el, { title: { text: fddRuleRich("BAS vs web outdoor-air temperature", "OAT-METEO", eqName(d.eq)), left: 8, top: 0, textStyle: { rich: FDD_RULE_RICH } },
-        tooltip: { trigger: "axis" }, legend: { top: 24, data: ["Web OAT", "BAS oa_t", `+-${+half.toFixed(1)} band`] },
+        tooltip: { trigger: "axis" }, legend: { top: 24, data: ["Web OAT", "BAS outdoor_air_intake_temperature", `+-${+half.toFixed(1)} band`] },
         grid: baseGrid({ top: 64, bottom: 56 }), xAxis: { type: "time" },
         yAxis: { type: "value", name: unit, scale: true }, series }, lanes, "bas_vs_web_oat");
       const s = d.stats, lane = lanes[0] && lanes[0].data;

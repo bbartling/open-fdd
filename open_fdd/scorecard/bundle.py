@@ -11,7 +11,7 @@ only (never BAS point names):
     labels.csv           equipment_id, start_ts, end_ts, label, rule_id, fault_type, source, reviewer, notes
                          (optional; label = fault / normal, or confirmed / false_positive; blank label = not reviewed)
     history_long.csv     ts, equipment_id, role, value  (optional; SI history around each FAULT window)
-    role_map.json        {"<equipment_id>": {"kind": "ahu", "roles": ["discharge-air-temp", ...]}}  (optional)
+    role_map.json        {"<equipment_id>": {"kind": "ahu", "roles": ["discharge_air_temperature", ...]}}  (optional)
     config.json          column / value mapping for rule_results.csv and labels.csv (optional, see core.Config)
 
 ``equipment_id`` may be an opaque alias (e.g. AHU-0007); the bundle never needs real names.
@@ -29,7 +29,7 @@ from open_fdd.scorecard.core import RESULT_FIELDS, Config, _ts, load_config, rea
 
 FORMAT = "open-fdd-scorecard-bundle"
 VERSION = 1
-ROLE_RE = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
+ROLE_RE = re.compile(r"^[a-z][a-z0-9]*([_-][a-z0-9]+)*$")
 TEMPLATE_FIELDS = ("equipment_id", "start_ts", "end_ts", "label", "rule_id", "fault_type", "source", "reviewer",
                    "notes")
 HISTORY_FIELDS = ("ts", "equipment_id", "role", "value")

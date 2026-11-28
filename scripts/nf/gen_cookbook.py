@@ -66,18 +66,18 @@ In 5.0.22 a sensor with its own saved limit uses a separate `series_id` arm. `cl
 
 
 def run_proof_section(d: dict, sql: bool) -> str:
-    """The run-proof gate (#1608), from sql/fdd/run_proof.json (shipped in the catalog as `run_proof`)."""
-    rp = d["cat"]["run_proof"]
+    """The run-proof gate (#1608), from sql/fdd/run_proof.json (shipped in the catalog as `operating_status`)."""
+    rp = d["cat"]["operating_status"]
     own_s = " &gt; ".join(f"`{x}`" for x in rp["own"]["status"])
     own_c = " &gt; ".join(f"`{x}`" for x in rp["own"]["command"])
     refs = ", ".join(f"`{x}`" for x in rp["feeders"]["refs"])
-    n_gated = sum(1 for r in d["rules"] if r.get("run_proof") == "gated")
-    where = (f"the `history` column `run_proof` (0/1 or a 0-1 fraction; running when above {rp['threshold']})" if sql
+    n_gated = sum(1 for r in d["rules"] if r.get("operating_status") == "gated")
+    where = (f"the `history` column `operating_status` (0/1 or a 0-1 fraction; running when above {rp['threshold']})" if sql
              else f"the frame column `{rp['column']}` (running when above {rp['threshold']})")
     return f"""## Run proof gate {{#run-proof}}
 
 {n_gated} of the {len(d['rules'])} rules count only samples while the equipment is **proven running**. The proof is the input role
-`run_proof`: {where}. It is resolved from the model, never from a point name, in this order (first hit wins):
+`operating_status`: {where}. It is resolved from the model, never from a point name, in this order (first hit wins):
 
 1. **The equipment's own proof**: a bound status role ({own_s}), then a bound command role ({own_c}).
 2. **The feeding equipment's proof**, one hop: the equipment's {refs} target (a VAV to its AHU, a water loop to its pump or plant),
@@ -87,14 +87,14 @@ def run_proof_section(d: dict, sql: bool) -> str:
    pandas: status `SKIPPED_NO_RUN_PROOF`). It is never a silent PASS.
 
 `require_run_proof` (default 1; the old name `require_operational_gate` is an alias) switches the gate off per rule. A sample
-with no proof value is not proof. A rule that is not gated says why in its entry. SQL and pandas read the same `run_proof`
+with no proof value is not proof. A rule that is not gated says why in its entry. SQL and pandas read the same `operating_status`
 signal, and the parity harness checks that both skip the same equipment.
 
 Rules that are not gated, and why:
 
 | Rule | Why not |
 |---|---|
-""" + chr(10).join(f"| `{r['id']}` | {cell(r.get('run_proof_note', ''))} |" for r in d["rules"] if r.get("run_proof") != "gated")
+""" + chr(10).join(f"| `{r['id']}` | {cell(r.get('run_proof_note', ''))} |" for r in d["rules"] if r.get("operating_status") != "gated")
 
 
 GROUPS = [
@@ -115,9 +115,12 @@ UNIT_LABEL = {
     "degC": "°C", "degC_delta": "Δ°C", "degC_delta_per_h": "Δ°C/h", "pct": "%", "frac": "fraction (0-1)",
     "min": "min", "sec": "s", "h": "h", "L_per_s": "L/s", "Pa": "Pa", "kWh": "kWh", "ppm": "ppm",
     "bool": "0/1", "count": "count", "x": "× (scale)", "unit": "signal units", "%": "%",
+    "PERCENT": "%", "DEG_C": "°C", "K": "K", "L-PER-SEC": "L/s", "MIN": "min", "HR": "h", "PA": "Pa",
+    "KiloW-HR": "kWh", "KiloW": "kW", "PPM": "ppm", "NUM": "count", "boolean": "0/1", "SEC": "s",
+    "K-PER-HR": "K/h", "A": "A",
 }
 SI_UNITS = {"°C", "Δ°C", "Δ°C/h", "%", "% out", "%/h", "fraction (0-1)", "min", "s", "sec", "h", "L/s", "Pa", "kWh", "kW", "ppm",
-            "0/1", "count", "× (scale)", "x", "signal units", "eng", "cyc/h", "Δ°C/Δ°C", "A", ""}
+            "0/1", "count", "× (scale)", "x", "signal units", "eng", "cyc/h", "Δ°C/Δ°C", "A", "", "K", "K/h"}
 
 # --------------------------------------------------------------------------------------------------------------------
 # helpers
@@ -285,8 +288,8 @@ def pandas_param_rows(rule) -> tuple[list[str], bool]:
 
 # Hand-written examples that really trip the fault (verified by gen_cookbook.py on every run).
 HAND_EXAMPLES = {
-    "FC1": ('{"duct-static-pressure": 150.0, "duct-static-pressure-sp": 250.0, "fan-cmd": 1.0}', "equip-1", "AHU",
-            "Duct static (Pa) sits 100 Pa under its setpoint while the fan runs: low static at full fan."),
+    "FC1": ('{"discharge_air_static_pressure": 150.0, "discharge_air_static_pressure_setpoint": 250.0, "supply_fan_command": 1.0, "supply_fan_speed_command": 100.0}', "equip-1", "AHU",
+            "Duct static (Pa) sits 100 Pa under its setpoint while the fan runs at full speed (PERCENT)."),
 }
 
 
@@ -297,7 +300,7 @@ def example_code(rule) -> tuple[str, str]:
         "import pandas as pd",
         "from open_fdd.rules import run_rule",
         "",
-        "# one day on a 5-minute grid, UTC timestamps, every value SI (°C, Pa, L/s, kW; commands 0-1)",
+        "# one day on a 5-minute grid, UTC timestamps, every value SI (°C, Pa, L/s, kW; positions PERCENT 0-100; start/stop 0/1)",
         'idx = pd.date_range("2026-01-05", periods=288, freq="5min", tz="UTC", name="timestamp_utc")',
         f"df = pd.DataFrame({frame}, index=idx)",
         f'df.attrs.update(equipment_id="{eid}", equipment_type="{etype}")',

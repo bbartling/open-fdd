@@ -34,11 +34,11 @@ def _infer_interval(index: pd.DatetimeIndex, poll_seconds: float | None) -> pd.T
 
 
 def to_percent_output(series: pd.Series) -> pd.Series:
-    """Fraction 0–1 command/position -> percent points 0–100 (the *_pct tuning parameters are percent points).
+    """Control output already in PERCENT 0–100 (roles 1.1.0). Clip only; do not scale again.
 
-    The input is a fraction by contract (sql/fdd/role_scales.json); there is no magnitude guess.
+    Ingest converts a fraction source once. The *_pct tuning parameters are percent points.
     """
-    s = pd.to_numeric(series, errors="coerce") * 100.0
+    s = pd.to_numeric(series, errors="coerce")
     return s.clip(lower=0.0, upper=100.0)
 
 
@@ -121,16 +121,16 @@ def hunting_fault_mask(
     )
 
     if enabled is None:
-        loop_enabled = pd.Series(True, index=output.index)
+        operating_mode_status = pd.Series(True, index=output.index)
     else:
-        loop_enabled = (
+        operating_mode_status = (
             pd.to_numeric(enabled.reindex(output.index), errors="coerce")
             .fillna(0)
             .gt(0)
         )
 
     fault = (
-        loop_enabled
+        operating_mode_status
         & coverage_pct.ge(params.minimum_coverage_pct)
         & output_span.ge(params.minimum_span_pct)
         & total_variation.ge(params.total_variation_fault_pct)
@@ -150,7 +150,7 @@ def hunting_fault_mask(
             "coverage_pct_1h": coverage_pct,
             "low_extreme_seen_1h": low_extreme_seen,
             "high_extreme_seen_1h": high_extreme_seen,
-            "loop-enabled": loop_enabled,
+            "operating_mode_status": operating_mode_status,
             "fault": fault,
         },
         index=output.index,
@@ -173,10 +173,10 @@ def _looks_like_ao_column(name: str) -> bool:
     # Explicit AO-ish tokens (commands / valve / damper / speed %)
     tokens = (
         "valve",
-        "damper",
+        "damper_position",
         "actuator",
         "fan_speed",
-        "fan-cmd",
+        "supply_fan_command",
         "pump-cmd",
         "pump_speed",
         "vfd",
@@ -195,7 +195,7 @@ def _looks_like_ao_column(name: str) -> bool:
     # Prefer cmd/pos/pct/speed columns; skip binary status-looking names without pct/speed
     if any(x in cl for x in ("_pct", "percent", "speed", "cmd", "pos", "position", "valve")):
         return True
-    return "damper" in cl or "actuator" in cl
+    return "damper_position" in cl or "actuator" in cl
 
 
 def iter_control_output_series(df: pd.DataFrame) -> list[tuple[str, pd.Series]]:

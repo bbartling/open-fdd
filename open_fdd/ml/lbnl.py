@@ -66,19 +66,19 @@ FAULT_FREE = SDAHU_SUBSET[0].name
 
 #: LBNL column -> (Open-FDD Haystack role, converter name). Only the data sheet's "basic" BAS points.
 SDAHU_ROLE_MAP: dict[str, tuple[str, str]] = {
-    "SA_TEMP": ("discharge-air-temp", "degF"),
-    "SA_TEMPSPT": ("discharge-air-temp-sp", "degF"),
-    "MA_TEMP": ("mixed-air-temp", "degF"),
-    "RA_TEMP": ("return-air-temp", "degF"),
-    "OA_TEMP": ("outside-air-temp", "degF"),
-    "OA_DMPR_DM": ("outside-air-damper", "fraction"),
-    "CHWC_VLV_DM": ("cooling-valve", "fraction"),
-    "SF_CS": ("fan-cmd", "fraction"),
-    "RF_CS": ("return-fan-cmd", "fraction"),
-    "SF_SPD_DM": ("fan-status", "boolean"),
-    "SA_SP": ("duct-static-pressure", "static"),
-    "SA_SPSPT": ("duct-static-pressure-sp", "static_sp"),
-    "SYS_CTL": ("occupied", "boolean"),
+    "SA_TEMP": ("discharge_air_temperature", "degF"),
+    "SA_TEMPSPT": ("discharge_air_temperature_setpoint", "degF"),
+    "MA_TEMP": ("mixed_air_temperature", "degF"),
+    "RA_TEMP": ("return_air_temperature", "degF"),
+    "OA_TEMP": ("outdoor_air_intake_temperature", "degF"),
+    "OA_DMPR_DM": ("outdoor_air_intake_damper_position_command", "percent"),
+    "CHWC_VLV_DM": ("cooling_valve_position_command", "percent"),
+    "SF_CS": ("supply_fan_command", "fraction"),
+    "RF_CS": ("return_fan_command", "fraction"),
+    "SF_SPD_DM": ("supply_fan_operating_status", "boolean"),
+    "SA_SP": ("discharge_air_static_pressure", "static"),
+    "SA_SPSPT": ("discharge_air_static_pressure_setpoint", "static_sp"),
+    "SYS_CTL": ("occupancy_status", "boolean"),
 }
 
 
@@ -194,6 +194,13 @@ def _convert(values, kind: str):
         return static_to_pa(values)
     if kind == "static_sp":
         return static_to_pa(values, setpoint=True)
+    if kind == "percent":
+        import numpy as np
+
+        finite = values[np.isfinite(values)]
+        if len(finite) and float(np.nanmax(np.abs(finite))) <= 1.5:
+            return values * 100.0
+        return values
     return values
 
 
@@ -219,7 +226,10 @@ def to_roles(raw, step_minutes: int = 5):
     out.index.name = "timestamp_utc"
     for column, (role, kind) in SDAHU_ROLE_MAP.items():
         if column in frame.columns:
-            out[role] = _convert(pd.to_numeric(frame[column], errors="coerce").astype(float), kind)
+            values = pd.to_numeric(frame[column], errors="coerce").astype(float)
+            out[role] = _convert(values, kind)
+            if column == "SF_SPD_DM":
+                out["supply_fan_speed_command"] = _convert(values, "percent")
     out.attrs["equipment_id"] = "AHU-1"
     out.attrs["equipment_type"] = "AHU"
     out.attrs["role_units"] = {}

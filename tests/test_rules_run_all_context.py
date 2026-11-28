@@ -14,7 +14,7 @@ NORMAL_CSV = Path(__file__).resolve().parent / "fixtures" / "lbnl_sdahu" / "AHU_
 
 def _external():
     return pd.DataFrame(
-        {"sat": [13.0] * 12, "fan_status": [1.0] * 12},
+        {"discharge_air_temperature": [13.0] * 12, "supply_fan_operating_status": [1.0] * 12},
         index=pd.date_range("2026-01-05", periods=12, freq="5min", tz="UTC"),
     )
 
@@ -48,12 +48,14 @@ def test_summarize_explains_an_all_skipped_run():
     untyped = summarize(run_all(_external()))
     assert untyped["all_skipped"] and untyped["assessed"] == 0
     assert "no equipment type" in untyped["explanation"] and "equipment_type=" in untyped["explanation"]
-    typed = summarize(run_all(_external(), equipment_type="AHU"))
+    # No sensor columns: the sweeps have nothing to score, so every rule skips for missing inputs.
+    bare = _external().drop(columns=["discharge_air_temperature", "supply_fan_operating_status"])
+    typed = summarize(run_all(bare, equipment_type="AHU"))
     assert typed["all_skipped"]
     assert "missing input roles" in typed["explanation"] and "most needed:" in typed["explanation"]
     assert typed["missing_roles"] and max(typed["missing_roles"].values()) >= 2
     assert typed["by_status"]["SKIPPED_MISSING_ROLES"] == sum(
-        1 for r in run_all(_external(), equipment_type="AHU") if r.status == "SKIPPED_MISSING_ROLES"
+        1 for r in run_all(bare, equipment_type="AHU") if r.status == "SKIPPED_MISSING_ROLES"
     )
 
 

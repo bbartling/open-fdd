@@ -49,8 +49,8 @@
   function fddPlotExpandRoles(ruleId, roles, bound) {
     const out = [...(roles || [])];
     if (!/^ECON-[1-7]$/.test(String(ruleId ?? "").trim().toUpperCase())) return out;
-    if (out.includes("oa_damper_pct")) return out;
-    if (bound && bound.oa_damper_pct && bound.oa_damper_pct.length) out.push("oa_damper_pct");
+    if (out.includes("outdoor_air_intake_damper_position_command")) return out;
+    if (bound && bound.outdoor_air_intake_damper_position_command && bound.outdoor_air_intake_damper_position_command.length) out.push("outdoor_air_intake_damper_position_command");
     return out;
   }
 
@@ -284,7 +284,7 @@
     }
     return option;
   }
-  const RUN_PROOF_ROLES = ["run_proof", "fan_status", "pump_status", "chw_pump_status", "chiller_status", "compressor_status", "fan_cmd", "chw_pump_cmd"];
+  const RUN_PROOF_ROLES = ["operating_status", "supply_fan_operating_status", "pump_operating_status", "chilled_water_pump_operating_status", "chiller_operating_status", "compressor_operating_status", "supply_fan_command", "chilled_water_pump_command"];
 
   /** Latest persisted sweep result, in fault hours per assessed sensor role. */
   function fddPlotSensorFaultHours(point) {
@@ -440,8 +440,8 @@
   // comparison is the FDD chart "BAS vs web outdoor-air temperature" (rcx-overview.js, tab "fdd").
 
   // Temperature / humidity / pressure roles the SV-* rules check (all exist in fdd-catalog roles).
-  const SENSOR_ROLES = ["oa_t", "mat", "zone_t", "rat", "sat", "chw_supply_t", "chw_return_t", "hw_supply_t",
-    "hw_return_t", "oa_h", "ra_h", "zone_rh", "ma_h", "sa_h", "duct_static"];
+  const SENSOR_ROLES = ["outdoor_air_intake_temperature", "mixed_air_temperature", "zone_air_temperature", "return_air_temperature", "discharge_air_temperature", "supply_chilled_water_temperature", "return_chilled_water_temperature", "supply_hot_water_temperature",
+    "return_hot_water_temperature", "outdoor_air_intake_relative_humidity", "return_air_relative_humidity", "zone_air_relative_humidity", "mixed_air_relative_humidity", "discharge_air_relative_humidity", "discharge_air_static_pressure"];
 
   /** Bound sensor points for an equip: [{ role, p }] in SENSOR_ROLES order. */
   const sensorsOf = (ctx, eq) => SENSOR_ROLES.map((role) => ({ role, p: ctx.first(eq, role) })).filter((s) => s.p);
@@ -459,7 +459,7 @@
 
   /**
    * Sweep limits (SI) of one sensor from the limits file: { lo, hi, spike_delta, rate_per_h, stale_s } (a field is null when
-   * the file has no value: that lane then has no verdict). Per-role entry first (catalog role name, e.g. "outside-air-temp"),
+   * the file has no value: that lane then has no verdict). Per-role entry first (catalog role name, e.g. "outdoor_air_intake_temperature"),
    * else the quantity fallback of the unit family; null when neither exists.
    */
   function fddPlotSweepLimits(roleName, family, doc) {

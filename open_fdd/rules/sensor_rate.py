@@ -34,11 +34,11 @@ MAX_GAP_HOURS_DEFAULT = 2.0
 DEADBAND_REFERENCE_HOURS = 5.0 / 60.0
 
 
-def _norm_cmd(s: pd.Series) -> pd.Series:
-    """Command as a fraction 0–1 (input contract: already a fraction, no magnitude guess)."""
+def _norm_cmd(s: pd.Series, *, representation: str = "percent") -> pd.Series:
+    """Position as a fraction 0–1. PERCENT columns are 0–100; a boolean command passes representation='fraction'."""
     from open_fdd.units.convert import norm_command
 
-    return norm_command(s, representation="fraction")
+    return norm_command(s, representation=representation)
 
 
 def _as_bool(s: pd.Series) -> pd.Series:
@@ -97,29 +97,29 @@ def detect_operating_state(
     on = pd.Series(False, index=idx)
     used = False
 
-    if "fan-status" in d.columns and d["fan-status"].notna().any():
-        on = on | _as_bool(d["fan-status"])
-        meta["signals_used"].append("fan-status")
+    if "supply_fan_operating_status" in d.columns and d["supply_fan_operating_status"].notna().any():
+        on = on | _as_bool(d["supply_fan_operating_status"])
+        meta["signals_used"].append("supply_fan_operating_status")
         used = True
-    elif "fan-cmd" in d.columns and d["fan-cmd"].notna().any():
-        on = on | (_norm_cmd(d["fan-cmd"]).fillna(0) > 0.05)
-        meta["signals_used"].append("fan-cmd")
+    elif "supply_fan_command" in d.columns and d["supply_fan_command"].notna().any():
+        on = on | (_norm_cmd(d["supply_fan_command"], representation="fraction").fillna(0) > 0.05)
+        meta["signals_used"].append("supply_fan_command")
         used = True
 
-    for role in ("pump-status", "chw-pump-status", "hw-pump-status", "chiller-status", "compressor-status"):
+    for role in ("pump_operating_status", "chilled_water_pump_operating_status", "hw-pump-status", "chiller_operating_status", "compressor_operating_status"):
         if role in d.columns and d[role].notna().any():
             on = on | _as_bool(d[role])
             meta["signals_used"].append(role)
             used = True
 
-    for role in ("chw-pump-cmd", "hw-pump-cmd"):
+    for role in ("chilled_water_pump_command", "hw-pump-cmd"):
         if role in d.columns and d[role].notna().any():
-            on = on | (_norm_cmd(d[role]).fillna(0) > 0.05)
+            on = on | (_norm_cmd(d[role], representation="fraction").fillna(0) > 0.05)
             meta["signals_used"].append(role)
             used = True
 
     cmd_change = pd.Series(False, index=idx)
-    for role in ("cooling-valve", "heating-valve", "outside-air-damper", "reheat-valve"):
+    for role in ("cooling_valve_position_command", "heating_valve_position_command", "outdoor_air_intake_damper_position_command", "terminal_unit_heating_valve_position_command"):
         if role not in d.columns:
             continue
         c = _norm_cmd(d[role]).fillna(0)

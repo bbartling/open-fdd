@@ -43,7 +43,7 @@ def test_demo_gates_the_off_hours_and_refuses_a_non_empty_out(tmp_path, capsys):
     # the fan is off 00:00-05:00 UTC daily: each one-day episode has 288 rows, 228 proven running
     assert printed["active_rows"] == {"stuck": 228, "healthy_day": 228}
     stuck = json.loads((out / "reviews" / "stuck.json").read_text(encoding="utf-8"))
-    assert stuck["window"]["proof_source"] == "fan-status" and stuck["training"]["proven_rows"] < stuck["window"]["rows"] * 6
+    assert stuck["window"]["proof_source"] == "supply_fan_operating_status" and stuck["training"]["proven_rows"] < stuck["window"]["rows"] * 6
     assert len(printed) and "reviews" not in printed  # a short summary, not the full review JSON
     ev = json.loads((out / "eval.json").read_text(encoding="utf-8"))
     assert ev["exposure"]["test_device_weeks"] == round(4 / 7, 4)

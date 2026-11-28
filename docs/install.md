@@ -100,8 +100,8 @@ app settings; or `PATCH /api/v1/apps/<id>` with `updateMask: ["options"]`).
 
 **Off (air-gapped or IT-restricted site).** Set `weather` to `false` before or after install. The hook then makes no outbound
 request and no NF call, and returns `{skipped: true, reason: "weather disabled"}`; its schedule can stay. `doctor` reports
-"weather disabled" and passes. Rules and charts that read the web outdoor-air temperature (`web_oa_t`) ignore the old weather
-points (they would be stale) and use the equipment's own outside-air sensor (role `oa_t`) when one is tagged: the `fdd` run
+"weather disabled" and passes. Rules and charts that read the web outdoor-air temperature (`weather_service_air_temperature`) ignore the old weather
+points (they would be stale) and use the equipment's own outside-air sensor (role `outdoor_air_intake_temperature`) when one is tagged: the `fdd` run
 summary has `oat: {weather, web, local, none}` and the log names each equip that fell back. A rule with no outside-air
 temperature at all is skipped with the reason; the OAT-METEO check (BAS sensor against web weather) is skipped because it would
 compare a sensor with itself. On the Timescale engine the local fallback is not available (one role per point), so those rules are
@@ -123,7 +123,7 @@ An exporter you name that is absent or fails makes the run fail after the variab
 Range pickers, hour labels, and RCx weekly views use the site timezone. Open-FDD takes the first of: the modeled site's
 `tz` or `timezone`, the app option `timezone` (an IANA name such as `America/Chicago`, set in the NF console app
 settings like `latitude` and `longitude`), the NF Sites API `timezone`, the browser zone, then UTC. The `fdd` hook's
-occupancy schedule (VAV-1 `occ_mode`) and the `analytics` weekly runtime use the same order with the host zone in place of the
+occupancy schedule (VAV-1 `occupancy_status`) and the `analytics` weekly runtime use the same order with the host zone in place of the
 browser zone (UTC on real NF); the `fdd` run summary reports `timezones: {site: {zone, source}}`. When the UI has to
 fall back, the label says so, for example `UTC (fallback)`, and `doctor` reports a WARN that names the fix. No point is
 retagged. Keep `windowHours` no longer than the history retention of the timeline points: NF acknowledges an AddData

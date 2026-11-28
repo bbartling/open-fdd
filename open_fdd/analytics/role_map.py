@@ -19,125 +19,125 @@ from open_fdd.analytics.mapping_wizard import (
 )
 
 ROLE_ALIASES = {
-    "outside_air_temp": "outside-air-temp",
-    "outside_air_temp_f": "outside-air-temp",
-    "discharge_air_temp": "discharge-air-temp",
-    "discharge_air_temp_f": "discharge-air-temp",
-    "return_air_temp": "return-air-temp",
-    "mixed_air_temp": "mixed-air-temp",
-    "zone_temp": "zone-air-temp",
-    "space_temp": "zone-air-temp",
-    "supply_fan_cmd": "fan-cmd",
-    "cooling_valve": "cooling-valve",
-    "outdoor_air_damper": "outside-air-damper",
+    "outside_air_temp": "outdoor_air_intake_temperature",
+    "outside_air_temp_f": "outdoor_air_intake_temperature",
+    "discharge_air_temp": "discharge_air_temperature",
+    "discharge_air_temp_f": "discharge_air_temperature",
+    "return_air_temp": "return_air_temperature",
+    "mixed_air_temp": "mixed_air_temperature",
+    "zone_temp": "zone_air_temperature",
+    "space_temp": "zone_air_temperature",
+    "supply_fan_cmd": "supply_fan_command",
+    "cooling_valve": "cooling_valve_position_command",
+    "outdoor_air_damper": "outdoor_air_intake_damper_position_command",
 }
 
 POINT_ROLE_CANONICAL: dict[str, str] = {
-    "discharge_air_temp": "discharge-air-temp",
-    "return_air_temp": "return-air-temp",
-    "mixed_air_temp": "mixed-air-temp",
-    "outside_air_temp": "outside-air-temp",
-    "oat": "outside-air-temp",
-    "zone_temp": "zone-air-temp",
-    "space_temp": "zone-air-temp",
-    "chw_valve": "cooling-valve",
-    "cooling_valve": "cooling-valve",
-    "heating_valve": "heating-valve",
-    "hw_valve": "heating-valve",
-    "reheat_valve": "reheat-valve",
-    # Zone / VAV damper (not OA) — never treat generic "damper" as OA damper
-    "damper": "damper",
-    "zone_damper": "damper",
-    "vav_damper": "damper",
-    "oa_damper": "outside-air-damper",
-    "outdoor_air_damper": "outside-air-damper",
-    "airflow": "zone-airflow",
-    "fan_cmd": "fan-cmd",
-    "fan_speed": "fan-cmd",
-    "supply_fan": "fan-cmd",
-    "return_fan_speed": "return-fan-cmd",
-    "return_fan_cmd": "return-fan-cmd",
-    "fan_status": "fan-status",
-    "occ_mode": "occupied",
-    "chw_supply": "chilled-water-supply-temp",
-    "chw_return": "chilled-water-return-temp",
-    "chiller": "chiller-status",
-    "chiller_command": "chiller-status",
-    "power": "chiller-power",
-    "chw_pump_status": "chw-pump-status",
-    "chw_pump": "chw-pump-cmd",
-    "primary_chw_pump_status": "chw-pump-status",
-    "primary_chw_pump": "chw-pump-status",
+    "discharge_air_temp": "discharge_air_temperature",
+    "return_air_temp": "return_air_temperature",
+    "mixed_air_temp": "mixed_air_temperature",
+    "outside_air_temp": "outdoor_air_intake_temperature",
+    "oat": "outdoor_air_intake_temperature",
+    "zone_temp": "zone_air_temperature",
+    "space_temp": "zone_air_temperature",
+    "chw_valve": "cooling_valve_position_command",
+    "cooling_valve": "cooling_valve_position_command",
+    "heating_valve": "heating_valve_position_command",
+    "hw_valve": "heating_valve_position_command",
+    "reheat_valve": "terminal_unit_heating_valve_position_command",
+    # Zone / VAV damper (not OA) — never treat generic "damper_position" as OA damper
+    "damper_position": "damper_position",
+    "zone_damper": "damper_position",
+    "vav_damper": "damper_position",
+    "oa_damper": "outdoor_air_intake_damper_position_command",
+    "outdoor_air_damper": "outdoor_air_intake_damper_position_command",
+    "airflow": "discharge_air_volume_flow_rate",
+    "supply_fan_command": "supply_fan_command",
+    "fan_speed": "supply_fan_command",
+    "supply_fan": "supply_fan_command",
+    "return_fan_speed": "return_fan_command",
+    "return_fan_cmd": "return_fan_command",
+    "supply_fan_operating_status": "supply_fan_operating_status",
+    "occupancy_status": "occupancy_status",
+    "chw_supply": "supply_chilled_water_temperature",
+    "chw_return": "return_chilled_water_temperature",
+    "chiller": "chiller_operating_status",
+    "chiller_command": "chiller_operating_status",
+    "power": "chiller_electric_power",
+    "chilled_water_pump_operating_status": "chilled_water_pump_operating_status",
+    "chw_pump": "chilled_water_pump_command",
+    "primary_chw_pump_status": "chilled_water_pump_operating_status",
+    "primary_chw_pump": "chilled_water_pump_operating_status",
 }
 
 COL_PATTERN_ROLES: list[tuple[tuple[str, ...], str]] = [
-    (("discharge_air_temp_f", "da-t"), "discharge-air-temp"),
-    (("dat_reset", "sat_sp", "sat_setpoint"), "discharge-air-temp-sp"),
-    (("return_air_temp", "ra-t"), "return-air-temp"),
-    (("mixed_air_temp", "mat"), "mixed-air-temp"),
+    (("discharge_air_temp_f", "da-t"), "discharge_air_temperature"),
+    (("dat_reset", "discharge_air_temperature_setpoint", "sat_setpoint"), "discharge_air_temperature_setpoint"),
+    (("return_air_temp", "ra-t"), "return_air_temperature"),
+    (("mixed_air_temp", "mixed_air_temperature"), "mixed_air_temperature"),
     # Prefer real OAT columns — not oat_*_setpoint / enable setpoints
-    (("outside_air_temp", "oa-t", "oat_f"), "outside-air-temp"),
-    (("ex_dmpr", "oa_damper", "outdoor_air_damper", "oad_pos"), "outside-air-damper"),
-    (("chw_valve", "clg_valve", "cooling_valve"), "cooling-valve"),
-    (("hw_valve", "htg_valve", "heating_valve"), "heating-valve"),
+    (("outside_air_temp", "oa-t", "oat_f"), "outdoor_air_intake_temperature"),
+    (("ex_dmpr", "oa_damper", "outdoor_air_damper", "oad_pos"), "outdoor_air_intake_damper_position_command"),
+    (("chw_valve", "clg_valve", "cooling_valve"), "cooling_valve_position_command"),
+    (("hw_valve", "htg_valve", "heating_valve"), "heating_valve_position_command"),
     # Supply fan before generic fan_speed (avoids return_fan_speed winning)
-    (("supply_fan_speed", "supply_fan_cmd"), "fan-cmd"),
-    (("return_fan_speed", "return_fan_cmd", "rf_speed"), "return-fan-cmd"),
-    (("supply_fan_status", "supplyfanstatus"), "fan-status"),
-    (("fan_cmd",), "fan-cmd"),
-    (("fan_status", "fan_proof"), "fan-status"),
-    (("da_p_setpoint", "duct_static_sp"), "duct-static-pressure-sp"),
-    (("da_p_inwc", "duct_static"), "duct-static-pressure"),
-    (("space_temp", "spacetemp"), "zone-air-temp"),
-    (("reheat_valve", "rht_valve", "reheat"), "reheat-valve"),
+    (("supply_fan_speed", "supply_fan_cmd"), "supply_fan_command"),
+    (("return_fan_speed", "return_fan_cmd", "rf_speed"), "return_fan_command"),
+    (("supply_fan_status", "supplyfanstatus"), "supply_fan_operating_status"),
+    (("supply_fan_command",), "supply_fan_command"),
+    (("supply_fan_operating_status", "fan_proof"), "supply_fan_operating_status"),
+    (("da_p_setpoint", "discharge_air_static_pressure_setpoint"), "discharge_air_static_pressure_setpoint"),
+    (("da_p_inwc", "discharge_air_static_pressure"), "discharge_air_static_pressure"),
+    (("space_temp", "spacetemp"), "zone_air_temperature"),
+    (("reheat_valve", "rht_valve", "reheat"), "terminal_unit_heating_valve_position_command"),
     # Prefer actuator *command* over position feedback for PID hunting
-    (("vavactuatorcommand", "vav_actuator_cmd", "actuatorcommand"), "damper"),
-    (("damper_pct", "damper_pos", "dpr_pos", "vavactuatorposition", "vavactuator"), "damper"),
-    (("mad_c_pct", "mad_c", "mixed_air_damper"), "outside-air-damper"),
-    (("actflow", "airflow_cfm"), "zone-airflow"),
-    (("minflowsp", "min_airflow"), "min-flow-sp"),
-    (("vav_disch", "dischargeairtemp"), "vav-discharge-air-temp"),
-    (("ductintemp", "duct_in"), "vav-inlet-air-temp"),
+    (("vavactuatorcommand", "vav_actuator_cmd", "actuatorcommand"), "damper_position"),
+    (("damper_position", "damper_pos", "dpr_pos", "vavactuatorposition", "vavactuator"), "damper_position"),
+    (("mad_c_pct", "mad_c", "mixed_air_damper"), "outdoor_air_intake_damper_position_command"),
+    (("actflow", "airflow_cfm"), "discharge_air_volume_flow_rate"),
+    (("minflowsp", "min_airflow"), "discharge_air_volume_flow_rate_minimum"),
+    (("vav_disch", "dischargeairtemp"), "terminal_unit_discharge_air_temperature"),
+    (("ductintemp", "duct_in"), "terminal_unit_inlet_air_temperature"),
     # Central plant
-    (("chws_t", "chw_supply", "chilled_water_supply"), "chilled-water-supply-temp"),
-    (("chwr_t", "chw_return", "chilled_water_return"), "chilled-water-return-temp"),
-    (("hws_t", "hw_supply"), "hot-water-supply-temp"),
-    (("hwr_t", "hw_return"), "hot-water-return-temp"),
-    (("chiller_1_command", "chiller_2_command", "chiller_command"), "chiller-status"),
-    (("chiller_1_amps", "chiller_2_amps", "amps_a"), "chiller-amps"),
+    (("chws_t", "chw_supply", "chilled_water_supply"), "supply_chilled_water_temperature"),
+    (("chwr_t", "chw_return", "chilled_water_return"), "return_chilled_water_temperature"),
+    (("hws_t", "hw_supply"), "supply_hot_water_temperature"),
+    (("hwr_t", "hw_return"), "return_hot_water_temperature"),
+    (("chiller_1_command", "chiller_2_command", "chiller_command"), "chiller_operating_status"),
+    (("chiller_1_amps", "chiller_2_amps", "amps_a"), "chiller_electric_current"),
     (("power_demand_this_interval", "meter_power_sum_kw", "elec_kw", "building_kw"), "elec-power"),
-    (("chiller_power", "meter_chiller"), "chiller-power"),
+    (("chiller_electric_power", "meter_chiller"), "chiller_electric_power"),
     (("gas_flow", "nat_gas", "gas_therm", "gas_cfh"), "gas-flow"),
     (("hwp1_c", "hwp2_c", "hwp3_c", "hw_pump_cmd", "hw_pump_speed"), "hw-pump-cmd"),
-    (("hwp1_s", "hwp2_s", "hwp3_s", "pump_status"), "pump-status"),
+    (("hwp1_s", "hwp2_s", "hwp3_s", "pump_operating_status"), "pump_operating_status"),
     # Designated CHW pump for chiller runtime (data-model role; prefer over chiller cmd)
-    (("chw_pump_status", "cwp1_s", "cwp2_s", "primary_chw_pump_status"), "chw-pump-status"),
-    (("chw_pump_cmd", "cwp1_c", "cwp2_c", "primary_chw_pump_cmd", "chw_pump_speed"), "chw-pump-cmd"),
-    (("cw_pump_cmd", "tower_pump_cmd", "condenser_pump"), "cw-pump-cmd"),
-    (("tower_fan_cmd", "tower_fan_speed", "cw_fan_cmd", "ct_fan_speed", "cooling_tower_fan"), "tower-fan-cmd"),
+    (("chilled_water_pump_operating_status", "cwp1_s", "cwp2_s", "primary_chw_pump_status"), "chilled_water_pump_operating_status"),
+    (("chilled_water_pump_command", "cwp1_c", "cwp2_c", "primary_chw_pump_cmd", "chw_pump_speed"), "chilled_water_pump_command"),
+    (("condenser_water_pump_command", "tower_pump_cmd", "condenser_pump"), "condenser_water_pump_command"),
+    (("cooling_tower_fan_command", "tower_fan_speed", "cw_fan_cmd", "ct_fan_speed", "cooling_tower_fan"), "cooling_tower_fan_command"),
 ]
 
 ROLE_COLUMN_RANK: dict[str, tuple[str, ...]] = {
-    "zone-air-temp": ("spacetemp", "space_temp", "zone_temp"),
-    "zone-airflow": ("actflow", "flow_input", "airflow"),
-    "min-flow-sp": ("minflowsp", "min_airflow"),
-    "discharge-air-temp": ("discharge_air_temp_f", "da-t"),
-    "discharge-air-temp-sp": ("dat_reset", "sat_sp"),
-    "outside-air-damper": ("ex_dmpr", "oa_damper", "outdoor_air_damper", "mad_c"),
-    "damper": ("vavactuatorcommand", "actuatorcommand", "damper_pct", "dpr_pos"),
+    "zone_air_temperature": ("spacetemp", "space_temp", "zone_temp"),
+    "discharge_air_volume_flow_rate": ("actflow", "flow_input", "airflow"),
+    "discharge_air_volume_flow_rate_minimum": ("minflowsp", "min_airflow"),
+    "discharge_air_temperature": ("discharge_air_temp_f", "da-t"),
+    "discharge_air_temperature_setpoint": ("dat_reset", "discharge_air_temperature_setpoint"),
+    "outdoor_air_intake_damper_position_command": ("ex_dmpr", "oa_damper", "outdoor_air_damper", "mad_c"),
+    "damper_position": ("vavactuatorcommand", "actuatorcommand", "damper_position", "dpr_pos"),
     # Prefer supply fan over return fan for AHU runtime
-    "fan-cmd": ("supply_fan_speed", "supply_fan", "sf_", "fan_cmd"),
-    "fan-status": ("supply_fan_status", "supplyfanstatus", "supply_fan", "fan_status"),
-    "outside-air-temp": ("outside_air_temp", "oa_t", "oat_f"),
-    "chilled-water-supply-temp": ("chws_t", "chw_supply"),
-    "chilled-water-return-temp": ("chwr_t", "chw_return"),
-    "chiller-status": ("chiller_1_command", "chiller_2_command", "chiller_command", "command"),
-    "chiller-amps": ("amps_a", "current_sum", "amps"),
-    "chiller-power": ("power_demand_this_interval", "meter_power_sum", "power"),
+    "supply_fan_command": ("supply_fan_speed", "supply_fan", "sf_", "supply_fan_command"),
+    "supply_fan_operating_status": ("supply_fan_status", "supplyfanstatus", "supply_fan", "supply_fan_operating_status"),
+    "outdoor_air_intake_temperature": ("outside_air_temp", "outdoor_air_intake_temperature", "oat_f"),
+    "supply_chilled_water_temperature": ("chws_t", "chw_supply"),
+    "return_chilled_water_temperature": ("chwr_t", "chw_return"),
+    "chiller_operating_status": ("chiller_1_command", "chiller_2_command", "chiller_command", "command"),
+    "chiller_electric_current": ("amps_a", "current_sum", "amps"),
+    "chiller_electric_power": ("power_demand_this_interval", "meter_power_sum", "power"),
     "hw-pump-cmd": ("hwp1_c", "hwp2_c", "hw_pump"),
-    "pump-status": ("hwp1_s", "hwp2_s", "pump_status"),
-    "chw-pump-status": ("chw_pump_status", "cwp1_s", "cwp2_s", "primary_chw_pump"),
-    "chw-pump-cmd": ("chw_pump_cmd", "cwp1_c", "cwp2_c"),
+    "pump_operating_status": ("hwp1_s", "hwp2_s", "pump_operating_status"),
+    "chilled_water_pump_operating_status": ("chilled_water_pump_operating_status", "cwp1_s", "cwp2_s", "primary_chw_pump"),
+    "chilled_water_pump_command": ("chilled_water_pump_command", "cwp1_c", "cwp2_c"),
 }
 
 
@@ -157,10 +157,10 @@ def _canonical_role(point_role: str, col: str) -> str | None:
 def _rank_column(role: str, col: str) -> int:
     cl = col.lower()
     # Hard demote return-fan columns when mapping supply fan roles
-    if role in {"fan-cmd", "fan-status"} and "return" in cl:
+    if role in {"supply_fan_command", "supply_fan_operating_status"} and "return" in cl:
         return 90
     # Demote setpoints / min-position masquerading as OA damper command
-    if role == "outside-air-damper" and (
+    if role == "outdoor_air_intake_damper_position_command" and (
         "setpoint" in cl
         or "minimum" in cl
         or "min_pos" in cl
@@ -169,15 +169,15 @@ def _rank_column(role: str, col: str) -> int:
     ):
         return 95
     # Zone damper role must not steal AHU OA / MAD columns
-    if role == "damper" and any(
+    if role == "damper_position" and any(
         x in cl for x in ("ex_dmpr", "oa_damper", "outdoor_air", "mad_c", "oad_")
     ):
         return 95
-    # Prefer outdoor / exhaust damper cmd over mixed-air damper for oa_damper_pct
-    if role == "outside-air-damper" and "mad_c" in cl and "ex_dmpr" not in cl and "oa_damper" not in cl:
+    # Prefer outdoor / exhaust damper cmd over mixed-air damper for outdoor_air_intake_damper_position_command
+    if role == "outdoor_air_intake_damper_position_command" and "mad_c" in cl and "ex_dmpr" not in cl and "oa_damper" not in cl:
         return 35
     # Demote setpoints masquerading as OAT
-    if role == "outside-air-temp" and ("setpoint" in cl or "enable" in cl or "reset" in cl):
+    if role == "outdoor_air_intake_temperature" and ("setpoint" in cl or "enable" in cl or "reset" in cl):
         return 95
     # Never treat terminal load % as a control AO role
     if "terminalload" in cl or "terminal_load" in cl:
@@ -186,7 +186,7 @@ def _rank_column(role: str, col: str) -> int:
     for i, p in enumerate(prefs):
         if p in cl:
             return i
-    if "alarm" in cl or "limit" in cl or ("setpoint" in cl and role == "zone-air-temp"):
+    if "alarm" in cl or "limit" in cl or ("setpoint" in cl and role == "zone_air_temperature"):
         return 100
     return 50
 
@@ -265,7 +265,7 @@ def enrich_role_map_from_equipment(
             elif _rank_column(role, col) < _rank_column(role, merged[role]):
                 merged[role] = col
         # If fan roles point at return fan but supply exists, upgrade
-        for role in ("fan-cmd", "fan-status"):
+        for role in ("supply_fan_command", "supply_fan_operating_status"):
             col = merged.get(role)
             if col and "return" in col.lower():
                 better = suggested.get(role)

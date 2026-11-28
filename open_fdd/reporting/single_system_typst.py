@@ -49,18 +49,18 @@ EXAMPLE_LOCATION = "AHU · Example Campus · City, ST"
 _MIN_FAN_ON_SAMPLES = 6
 
 _PLAIN_ROLE = {
-    "outside-air-temp": "outdoor air temperature",
-    "web-outside-air-temp": "web outdoor air temperature",
-    "mixed-air-temp": "mixed air temperature",
-    "return-air-temp": "return air temperature",
-    "discharge-air-temp": "supply air temperature",
-    "duct-static-pressure": "duct static pressure",
-    "duct-static-pressure-sp": "duct static setpoint",
-    "outside-air-damper": "outdoor air damper",
-    "fan-cmd": "fan speed command",
-    "fan-status": "fan status",
-    "cooling-valve": "cooling valve",
-    "heating-valve": "heating valve",
+    "outdoor_air_intake_temperature": "outdoor air temperature",
+    "weather_service_air_temperature": "web outdoor air temperature",
+    "mixed_air_temperature": "mixed air temperature",
+    "return_air_temperature": "return air temperature",
+    "discharge_air_temperature": "supply air temperature",
+    "discharge_air_static_pressure": "duct static pressure",
+    "discharge_air_static_pressure_setpoint": "duct static setpoint",
+    "outdoor_air_intake_damper_position_command": "outdoor air damper",
+    "supply_fan_command": "fan speed command",
+    "supply_fan_operating_status": "fan status",
+    "cooling_valve_position_command": "cooling valve",
+    "heating_valve_position_command": "heating valve",
 }
 
 _SV_PLAIN = {
@@ -174,7 +174,7 @@ def filter_to_month(frame: pd.DataFrame, month: str) -> pd.DataFrame:
 def load_web_oat_csv(path: Path | str) -> pd.DataFrame:
     """Read a sidecar weather CSV (``timestamp_utc`` plus a dry-bulb column).
 
-    Accepts ``web-outside-air-temp`` or Open-Meteo ``web_oa_t``. A 15-minute
+    Accepts ``web-outside-air-temp`` or Open-Meteo ``weather_service_air_temperature``. A 15-minute
     file is normalized here; ``attach_web_oat`` reindexes it onto the BAS clock.
     """
     from open_fdd.analytics.weather_psychrometrics import enrich_weather_frame
@@ -201,14 +201,14 @@ def attach_web_oat(
 
     Sources, in order: a mapped ``web-outside-air-temp`` column, a CSV path, or
     ``web_oat="fetch"`` (Open-Meteo via ``--lat`` / ``--lon``). CSV aliases
-    include ``web_oa_t``. ``align_to_index`` puts a 15-minute file onto the
+    include ``weather_service_air_temperature``. ``align_to_index`` puts a 15-minute file onto the
     BAS timestamps, then ``merge_weather`` / ``weather_resolver`` keeps web
     OAT primary (``prefer_web_oat``).
     """
     from open_fdd.analytics.weather_psychrometrics import prefer_web_oat
     from open_fdd.rules.runner import merge_weather
 
-    if "web-outside-air-temp" in frame.columns and frame["web-outside-air-temp"].notna().any():
+    if "weather_service_air_temperature" in frame.columns and frame["weather_service_air_temperature"].notna().any():
         return merge_weather(frame, None), "column"
     if web_oat is None or str(web_oat).strip() == "":
         return merge_weather(frame, None), None
@@ -231,7 +231,7 @@ def attach_web_oat(
         source = "csv"
     aligned = align_to_index(weather, frame.index)
     joined = merge_weather(frame, aligned)
-    if "web-outside-air-temp" not in joined.columns or not joined["web-outside-air-temp"].notna().any():
+    if "weather_service_air_temperature" not in joined.columns or not joined["weather_service_air_temperature"].notna().any():
         raise ValueError("web OAT join produced no web-outside-air-temp values")
     preferred = prefer_web_oat(joined, aligned, prefer_web=True)
     if preferred is not None:
@@ -272,10 +272,10 @@ def data_health_rows(role_df: pd.DataFrame, points: list[tuple[str, str]]) -> li
 
 def fan_on_fraction(role_df: pd.DataFrame) -> float | None:
     """Share of samples with fan status (else command) at or above 0.5."""
-    if "fan-status" in role_df.columns:
-        series = pd.to_numeric(role_df["fan-status"], errors="coerce")
-    elif "fan-cmd" in role_df.columns:
-        series = pd.to_numeric(role_df["fan-cmd"], errors="coerce")
+    if "supply_fan_operating_status" in role_df.columns:
+        series = pd.to_numeric(role_df["supply_fan_operating_status"], errors="coerce")
+    elif "supply_fan_command" in role_df.columns:
+        series = pd.to_numeric(role_df["supply_fan_command"], errors="coerce")
         series = series.where(series <= 1.0, series / 100.0)
     else:
         return None
@@ -327,7 +327,7 @@ def representative_week(frame: pd.DataFrame, week_start: str | None = None) -> t
 
 
 def _fan_on_mask(frame: pd.DataFrame) -> pd.Series | None:
-    for role in ("fan-status", "fan-cmd"):
+    for role in ("supply_fan_operating_status", "supply_fan_command"):
         if role not in frame.columns or not frame[role].notna().any():
             continue
         num = pd.to_numeric(frame[role], errors="coerce")
@@ -456,7 +456,7 @@ MOTOR_SKIP_NOTE = (
 MOTOR_ZERO_NOTE = (
     "Fan or pump proof is mapped, but those motors did not run in this month, so there is no weekly run-hours chart."
 )
-_CHILLER_MOTOR_PROOF = ("chiller-status", "compressor-status", "equipment-enable")
+_CHILLER_MOTOR_PROOF = ("chiller_operating_status", "compressor_operating_status", "equipment-enable")
 
 
 def _role_has_data(frame: pd.DataFrame, role: str) -> bool:
@@ -594,14 +594,14 @@ def _figure_for_spec(spec, week: pd.DataFrame, equipment_id: str, units_map: dic
     from open_fdd.analytics.units import resolve_role_unit
 
     units_map = units_map or {}
-    temp_unit = str(units_map.get("outside-air-temp") or "°F")
-    static_unit = str(units_map.get("duct-static-pressure") or "in. w.c.")
+    temp_unit = str(units_map.get("outdoor_air_intake_temperature") or "°F")
+    static_unit = str(units_map.get("discharge_air_static_pressure") or "in. w.c.")
     frames, role_map = _identity_pack(week, equipment_id)
     if spec.kind == "econ_temps":
         points = build_economizer_delta_points(week, equipment_id=equipment_id)
-        if "discharge-air-temp" in week.columns and not points.empty:
+        if "discharge_air_temperature" in week.columns and not points.empty:
             points = points.copy()
-            points["sat_f"] = pd.to_numeric(week["discharge-air-temp"], errors="coerce").reindex(points.index)
+            points["sat_f"] = pd.to_numeric(week["discharge_air_temperature"], errors="coerce").reindex(points.index)
         return economizer_temps_overlay(
             points,
             equipment_id=equipment_id,
@@ -614,7 +614,7 @@ def _figure_for_spec(spec, week: pd.DataFrame, equipment_id: str, units_map: dic
         long_df = collect_oat_scatter(
             frames,
             role_map,
-            y_role=spec.y_role or "discharge-air-temp",
+            y_role=spec.y_role or "discharge_air_temperature",
             weather=None,
             equipment_types=("AHU",),
             operating_on=True,
@@ -625,20 +625,20 @@ def _figure_for_spec(spec, week: pd.DataFrame, equipment_id: str, units_map: dic
             long_df,
             title=spec.title,
             x_title=f"Web outdoor air {temp_unit}",
-            y_title=resolve_role_unit(spec.y_role or "discharge-air-temp", units_map) or f"Supply air {temp_unit}",
+            y_title=resolve_role_unit(spec.y_role or "discharge_air_temperature", units_map) or f"Supply air {temp_unit}",
         )
     if spec.kind == "box":
         series_map = collect_role_series(
             frames,
             role_map,
-            role=spec.y_role or "duct-static-pressure",
+            role=spec.y_role or "discharge_air_static_pressure",
             equipment_types=("AHU",),
             filter_fan_on=True,
         )
         return multi_equipment_box(
             series_map,
             title=spec.title,
-            y_title=resolve_role_unit(spec.y_role or "duct-static-pressure", units_map) or static_unit,
+            y_title=resolve_role_unit(spec.y_role or "discharge_air_static_pressure", units_map) or static_unit,
         )
     if spec.kind == "timeseries":
         series_map = collect_role_series(
@@ -1300,7 +1300,7 @@ def _one_device(
     storage.attrs["equipment_id"] = label
     plot = frame_for_display(storage, display_units)
     units_map = dict(plot.attrs.get("units_map") or {})
-    temp_unit = str(units_map.get("outside-air-temp") or "°F")
+    temp_unit = str(units_map.get("outdoor_air_intake_temperature") or "°F")
     dt_min = economizer_identifiable_delta_min(display_units)
     chosen = resolve_profile(profile, history.equipment_type)
     comments = load_ai_comments(folder, ai_comments)

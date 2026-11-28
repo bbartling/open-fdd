@@ -9,8 +9,8 @@ from open_fdd.analytics.role_map import apply_role_map
 from open_fdd.analytics.site_model import resolve_equipment_type
 
 
-ZONE_SAT_COL = "building-zone-load-satisfied"
-AHU_SAT_COL = "building-ahu-load-satisfied"
+ZONE_SAT_COL = "zone_load_satisfied_status"
+AHU_SAT_COL = "air_handling_unit_load_satisfied_status"
 
 
 def _numeric(series: pd.Series) -> pd.Series:
@@ -42,17 +42,17 @@ def aggregate_load_satisfaction(
     for eq_id, raw in frames.items():
         et = resolve_equipment_type(eq_id, df=raw, role_map=rm)
         mapped = apply_role_map(raw, eq_id, rm)
-        if et in {"VAV", "ZONE"} and "zone-air-temp" in mapped.columns and mapped["zone-air-temp"].notna().any():
-            zt = _numeric(mapped["zone-air-temp"])
+        if et in {"VAV", "ZONE"} and "zone_air_temperature" in mapped.columns and mapped["zone_air_temperature"].notna().any():
+            zt = _numeric(mapped["zone_air_temperature"])
             ok = zt.notna() & (zt >= lo) & (zt <= hi)
             # Only count samples with valid zone temp
             zone_series.append(ok.where(zt.notna()))
             zone_ids.append(eq_id)
-        if et in {"AHU", "RTU"} and "discharge-air-temp" in mapped.columns and "discharge-air-temp-sp" in mapped.columns:
-            sat = _numeric(mapped["discharge-air-temp"])
-            sp = _numeric(mapped["discharge-air-temp-sp"])
-            both = sat.notna() & sp.notna()
-            ok = both & ((sat - sp).abs() <= band)
+        if et in {"AHU", "RTU"} and "discharge_air_temperature" in mapped.columns and "discharge_air_temperature_setpoint" in mapped.columns:
+            discharge_air_temperature = _numeric(mapped["discharge_air_temperature"])
+            sp = _numeric(mapped["discharge_air_temperature_setpoint"])
+            both = discharge_air_temperature.notna() & sp.notna()
+            ok = both & ((discharge_air_temperature - sp).abs() <= band)
             ahu_series.append(ok.where(both))
             ahu_ids.append(eq_id)
 
@@ -77,9 +77,9 @@ def aggregate_load_satisfaction(
             return None
         aligned = [s.reindex(index) for s in parts]
         # Sample is satisfied only when every equipment with a value is True and ≥1 contributes
-        mat = pd.concat(aligned, axis=1)
-        any_valid = mat.notna().any(axis=1)
-        all_true = mat.fillna(True).all(axis=1) & any_valid
+        mixed_air_temperature = pd.concat(aligned, axis=1)
+        any_valid = mixed_air_temperature.notna().any(axis=1)
+        all_true = mixed_air_temperature.fillna(True).all(axis=1) & any_valid
         return all_true
 
     for cid in chiller_ids:

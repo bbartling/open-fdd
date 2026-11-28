@@ -19,7 +19,7 @@ from open_fdd.analytics.si_thresholds import ECON_DIAG_DT_MIN_C
 from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _connect, _quote, create_core, load_core, normalize_engine
 from open_fdd.analytics.sql_runtime import TS_MS, _inline
 
-ROLES = ("fan", "oat", "rat", "mat", "damper")
+ROLES = ("fan", "oat", "return_air_temperature", "mixed_air_temperature", "damper_position")
 AIR_TYPES = frozenset({"AHU", "RTU"})
 COLUMNS = ("equipment_id", "fan_on_ms", "n_fan_on", "n_identifiable", "n_resid", "median_resid", "mae_resid")
 
@@ -96,8 +96,8 @@ def _oat_role(mapped, prefer_web_oat: bool) -> str | None:
     def has(col):
         return col in mapped.columns and mapped[col].notna().any()
 
-    bas = next((c for c in ("outside-air-temp", "bas-outside-air-temp") if has(c)), None)
-    web = next((c for c in ("web-outside-air-temp", "oa_t_effective") if has(c)), None)
+    bas = next((c for c in ("outdoor_air_intake_temperature", "bas-outside-air-temp") if has(c)), None)
+    web = next((c for c in ("weather_service_air_temperature", "oa_t_effective") if has(c)), None)
     if prefer_web_oat and web:
         return web
     return bas or web
@@ -128,16 +128,16 @@ def plan_from_frames(frames: dict, role_map: dict, *, prefer_web_oat: bool = Fal
         mapped = apply_role_map(raw, eq_id, role_map)
         oat = _oat_role(mapped, prefer_web_oat)
         fans = [r for r in MAPPED_FAN_ROLES if r in mapped.columns and mapped[r].notna().any()]
-        if oat is None or "return-air-temp" not in mapped.columns or "mixed-air-temp" not in mapped.columns or not fans:
+        if oat is None or "return_air_temperature" not in mapped.columns or "mixed_air_temperature" not in mapped.columns or not fans:
             continue
-        has_damper = "outside-air-damper" in mapped.columns and bool(mapped["outside-air-damper"].notna().any())
+        has_damper = "outdoor_air_intake_damper_position_command" in mapped.columns and bool(mapped["outdoor_air_intake_damper_position_command"].notna().any())
         index = pd.DatetimeIndex(mapped.index)
         if index.tz is None:
             index = index.tz_localize("UTC")
         ts_ms = (index.tz_convert("UTC").as_unit("ns").asi8 // 1_000_000).astype("int64")
-        cols = [(f, "fan") for f in fans] + [(oat, "oat"), ("return-air-temp", "rat"), ("mixed-air-temp", "mat")]
+        cols = [(f, "fan") for f in fans] + [(oat, "oat"), ("return_air_temperature", "return_air_temperature"), ("mixed_air_temperature", "mixed_air_temperature")]
         if has_damper:
-            cols.append(("outside-air-damper", "damper"))
+            cols.append(("outdoor_air_intake_damper_position_command", "damper_position"))
         for col, role in cols:
             values = pd.to_numeric(mapped[col], errors="coerce").to_numpy(dtype=float)
             ok = ~np.isnan(values)
@@ -190,7 +190,7 @@ def economizer_metrics_sql(frames: dict, role_map: dict, *, engine: str = "sqlit
 
 # ---------------------------------------------------------------- per-sample points (#1649: the economizer charts)
 
-POINT_COLUMNS = ("equipment_id", "t", "oat", "rat", "mat", "d_or", "d_mr", "identifiable", "damper_pct", "mat_resid",
+POINT_COLUMNS = ("equipment_id", "t", "oat", "return_air_temperature", "mixed_air_temperature", "d_or", "d_mr", "identifiable", "damper_position", "mat_resid",
                  "oa_frac_pct")
 
 
@@ -250,7 +250,7 @@ def run_economizer_points_sql(conn: Any, engine: str, roles: Iterable[tuple[str,
         rec = dict(zip(POINT_COLUMNS, row))
         rec["t"] = int(rec["t"]) if not hasattr(rec["t"], "timestamp") else int(rec["t"].timestamp() * 1000)
         rec["identifiable"] = bool(rec["identifiable"])
-        for k in ("oat", "rat", "mat", "d_or", "d_mr", "damper_pct", "mat_resid", "oa_frac_pct"):
+        for k in ("oat", "return_air_temperature", "mixed_air_temperature", "d_or", "d_mr", "damper_position", "mat_resid", "oa_frac_pct"):
             rec[k] = None if rec[k] is None else float(rec[k])
         out.append(rec)
     return out

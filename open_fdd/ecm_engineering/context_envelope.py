@@ -24,7 +24,7 @@ _INCOMPATIBLE_UNIT_PAIRS = frozenset(
         frozenset({"F", "C"}),
         frozenset({"cfm", "m3/s"}),
         frozenset({"therms", "kWh"}),
-        frozenset({"therms", "kwh"}),
+        frozenset({"therms", "electric_energy"}),
     }
 )
 
@@ -37,7 +37,7 @@ class ReadinessStatus(StrEnum):
 
 class AssetKind(StrEnum):
     SUPPLY_FAN = "supply_fan"
-    RETURN_FAN = "return_fan"
+    RETURN_FAN = "return_fan_command"
     PUMP = "pump"
     MOTOR = "motor"
     VFD = "vfd"

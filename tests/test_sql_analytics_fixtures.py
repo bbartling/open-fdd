@@ -36,7 +36,7 @@ def test_dst_gap_and_missing_weather_are_observable():
     assert row['in_hours'] + row['after_hours'] == row['hours']
     assert cases['web-weather-empty']['expected']['equipment-1']['mae'] is None
     assert cases['web-weather-outage']['expected']['equipment-1']['n'] == 15
-    assert cases['economizer-missing-mat']['expected']['skipped'][0]['reason'] == 'missing_MAT'
+    assert cases['economizer-missing-mixed_air_temperature']['expected']['skipped'][0]['reason'] == 'missing_MAT'
 
 
 @pytest.mark.parametrize('case', CASES, ids=lambda c: c['id'])
@@ -90,11 +90,11 @@ def test_weather_fixtures_agree_with_sql(case, engine):
     from open_fdd.analytics.sql_anomaly import create_core, load_core
     from open_fdd.analytics.sql_bas_web import run_bas_web_sql
     conn = pytest.importorskip('duckdb').connect(':memory:') if engine == 'duckdb' else sqlite3.connect(':memory:')
-    points = [{'site_id': 'local', 'point_key': 'weather', 'equipment_id': None, 'role': 'web_oa_t'}]
+    points = [{'site_id': 'local', 'point_key': 'weather', 'equipment_id': None, 'role': 'weather_service_air_temperature'}]
     samples = [('local', 'weather', r['ts_ms'], r['value_c']) for r in case['web_weather']]
     for eq, frame in case['frames'].items():
-        points.append({'site_id': 'local', 'point_key': eq, 'equipment_id': eq, 'role': 'oa_t'})
-        samples += [('local', eq, r['ts_ms'], r['outside-air-temp']) for r in frame['rows']]
+        points.append({'site_id': 'local', 'point_key': eq, 'equipment_id': eq, 'role': 'outdoor_air_intake_temperature'})
+        samples += [('local', eq, r['ts_ms'], r['outdoor_air_intake_temperature']) for r in frame['rows']]
     try:
         create_core(conn, engine)
         load_core(conn, engine, points, samples)

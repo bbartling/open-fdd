@@ -1,13 +1,13 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- wx1_oa_spike.sql — OA temperature spike
--- Storage is SI (metric-c-v2): oa_t is °C and SPIKE_LIMIT is a temperature difference in K.
+-- Storage is SI (metric-c-v2): outdoor_air_intake_temperature is °C and SPIKE_LIMIT is a temperature difference in K.
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    oa_t,
-    LAG(oa_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_oa_t
+    outdoor_air_intake_temperature,
+    LAG(outdoor_air_intake_temperature) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_oa_t
   FROM history
 ),
 base AS (
@@ -15,8 +15,8 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN oa_t IS NULL OR prev_oa_t IS NULL THEN 0
-      WHEN ABS(oa_t - prev_oa_t) > {{SPIKE_LIMIT}} THEN 1
+      WHEN outdoor_air_intake_temperature IS NULL OR prev_oa_t IS NULL THEN 0
+      WHEN ABS(outdoor_air_intake_temperature - prev_oa_t) > {{SPIKE_LIMIT}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

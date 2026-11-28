@@ -24,7 +24,7 @@ class FakeHook:
 
     def __init__(self, n=6, change_snapshot_at=None, too_large_over=None):
         self.calls, self.n, self.change_at, self.too_large_over = [], n, change_snapshot_at, too_large_over
-        self.points = {"u1": _pt("u1", role="sat"), "u2": _pt("u2", role="mat")}
+        self.points = {"u1": _pt("u1", role="discharge_air_temperature"), "u2": _pt("u2", role="mixed_air_temperature")}
 
     def __call__(self, hook, args):
         assert hook == "sparql-data"
@@ -104,8 +104,8 @@ def test_frames_explicit_roles_use_the_shared_si_assembly():
     ans = sd.fetch(FakeHook(), "SELECT ?uuid ?role WHERE {}", T0, T0 + timedelta(hours=1), bucket="raw")
     fr = sd.frames(ans, window_sec=300)
     df = fr[("s1", "AHU-1")]
-    assert list(df.columns) == ["discharge-air-temp", "mixed-air-temp"]
-    assert df.attrs["role_units"]["discharge-air-temp"] == "°C" and df.attrs["window_sec"] == 300
+    assert list(df.columns) == ["discharge_air_temperature", "mixed_air_temperature"]
+    assert df.attrs["role_units"]["discharge_air_temperature"] == "°C" and df.attrs["window_sec"] == 300
     assert str(df.index.tz) == "UTC" and len(df) == 6
 
 
@@ -113,23 +113,23 @@ def test_frames_degf_converted_to_si_like_equipment_frames():
     from open_fdd.nf.model import Model, Point, frames_from_samples, bind_equipment
 
     ans = {"kind": "select", "vars": ["uuid"], "uuid_var": "uuid", "rows": [], "bucket": "raw",
-           "points": {"u1": _pt("u1", role="sat", unit="°F")},
+           "points": {"u1": _pt("u1", role="discharge_air_temperature", unit="°F")},
            "equips": [{"site": "s1", "id": "AHU-1", "dis": "AHU 1", "tags": ["equip", "ahu"]}],
            "series": {"u1": [[MS0, 212.0], [MS0 + 300_000, 32.0]]}}
     df = sd.frames(ans)[("s1", "AHU-1")]
-    assert df["discharge-air-temp"].round(6).tolist() == [100.0, 0.0]
+    assert df["discharge_air_temperature"].round(6).tolist() == [100.0, 0.0]
     assert Model and Point and frames_from_samples and bind_equipment
 
 
 def test_weather_frame_and_separate():
-    wx = _pt("w1", equip="", role="web_oa_t", tags=("point", "his", "sensor", "weather"))
+    wx = _pt("w1", equip="", role="weather_service_air_temperature", tags=("point", "his", "sensor", "weather"))
     ans = {"kind": "select", "vars": ["uuid"], "uuid_var": "uuid", "rows": [], "bucket": "raw",
-           "points": {"u1": _pt("u1", role="sat"), "w1": wx},
+           "points": {"u1": _pt("u1", role="discharge_air_temperature"), "w1": wx},
            "equips": [{"site": "s1", "id": "AHU-1", "dis": "AHU 1", "tags": ["equip", "ahu"]}],
            "series": {"u1": [[MS0, 12.0]], "w1": [[MS0, -3.0]]}}
-    assert "web-outside-air-temp" in sd.frames(ans)[("s1", "AHU-1")].columns
-    assert "web-outside-air-temp" not in sd.frames(ans, weather="separate")[("s1", "AHU-1")].columns
-    assert sd.weather_frame(ans)["web-outside-air-temp"].tolist() == [-3.0]
+    assert "weather_service_air_temperature" in sd.frames(ans)[("s1", "AHU-1")].columns
+    assert "weather_service_air_temperature" not in sd.frames(ans, weather="separate")[("s1", "AHU-1")].columns
+    assert sd.weather_frame(ans)["weather_service_air_temperature"].tolist() == [-3.0]
 
 
 def test_run_rules_is_the_package_runner():
@@ -162,7 +162,7 @@ def test_fetch_local_runs_the_query_here_like_lite(tmp_path):
     subprocess.run(["node", str(root / "tools" / "rdf-check" / "gen_ttl.js"), str(fixture), str(ttl)], check=True,
                    capture_output=True)
     recs = json.loads(fixture.read_text(encoding="utf-8"))["records"]
-    sat = "11111111-0000-4000-8000-000000000004"
+    discharge_air_temperature = "11111111-0000-4000-8000-000000000004"
 
     class Client:
         calls = []
@@ -178,12 +178,12 @@ def test_fetch_local_runs_the_query_here_like_lite(tmp_path):
     q = (root / "examples" / "sparql_data" / "ahu_points.rq").read_text(encoding="utf-8")
     ans = sd.fetch_local(c, q, T0, T0 + timedelta(hours=1), window_sec=0, turtle=ttl.read_text(encoding="utf-8"),
                          base="urn:test:")
-    assert ans["uuid_var"] == "uuid" and sat in ans["points"]
-    assert ans["points"][sat]["unit"] == "degF" and ans["series"][sat][0][1] == 55.0
+    assert ans["uuid_var"] == "uuid" and discharge_air_temperature in ans["points"]
+    assert ans["points"][discharge_air_temperature]["unit"] == "degF" and ans["series"][discharge_air_temperature][0][1] == 55.0
     assert c.calls and c.calls[0][1] == 0  # raw
     assert any(e["id"] == "AHU-1" for e in ans["equips"])
     df = sd.frames(ans)[("site-a", "AHU-1")]
-    assert df["discharge-air-temp"].round(4).tolist() == [12.7778, 13.3333]  # degF -> degC, same SI plan
+    assert df["discharge_air_temperature"].round(4).tolist() == [12.7778, 13.3333]  # degF -> degC, same SI plan
     with pytest.raises(NFError):
         sd.fetch_local(c, "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }", T0, T0 + timedelta(hours=1),
                        turtle=ttl.read_text(encoding="utf-8"))

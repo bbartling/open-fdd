@@ -77,32 +77,32 @@ test("display units -> SI: absolute temperature, difference and rate are separat
 
 test("invalid overrides are rejected; precedence is shipped < site < equipment", () => {
   const eff = (s, e) => RL.effectiveRoleLimits(T.shipped, T.allowlists, s, e);
-  assert.throws(() => eff({ version: 1, roles: { "zone-air-temp": { lo: 30, hi: 20 } } }), /lo \(30\) must be < hi \(20\)/);
-  assert.throws(() => eff({ version: 1, roles: { "zone-air-temp": { spike_delta: 0 } } }), /> 0/);
+  assert.throws(() => eff({ version: 1, roles: { "zone_air_temperature": { lo: 30, hi: 20 } } }), /lo \(30\) must be < hi \(20\)/);
+  assert.throws(() => eff({ version: 1, roles: { "zone_air_temperature": { spike_delta: 0 } } }), /> 0/);
   assert.throws(() => eff({ version: 1, roles: { "no-role": { lo: 1 } } }), /unknown role/);
-  assert.throws(() => eff({ version: 1, roles: { "zone-air-temp": { source: 1 } } }), /not editable/);
+  assert.throws(() => eff({ version: 1, roles: { "zone_air_temperature": { source: 1 } } }), /not editable/);
   assert.throws(() => eff({ version: 2, roles: {} }), /version/);
-  const { doc, sources } = RL.merge(T.shipped, { version: 1, roles: { "zone-air-temp": { lo: 12, hi: 30 } } }, { version: 1, roles: { "zone-air-temp": { hi: 27 } } }, { site: 4, equipment: 2 });
-  const zat = doc.roles.find((e) => e.role === "zone-air-temp");
+  const { doc, sources } = RL.merge(T.shipped, { version: 1, roles: { "zone_air_temperature": { lo: 12, hi: 30 } } }, { version: 1, roles: { "zone_air_temperature": { hi: 27 } } }, { site: 4, equipment: 2 });
+  const zat = doc.roles.find((e) => e.role === "zone_air_temperature");
   assert.deepEqual([zat.lo, zat.hi, zat.source], [12, 27, "equipment override revision 2"]);
-  assert.deepEqual([sources["zone-air-temp"].lo, sources["zone-air-temp"].hi, sources["zone-air-temp"].spike_delta], ["site", "equipment", "shipped"]);
+  assert.deepEqual([sources["zone_air_temperature"].lo, sources["zone_air_temperature"].hi, sources["zone_air_temperature"].spike_delta], ["site", "equipment", "shipped"]);
 });
 
 test("editor: imperial edits become SI overrides; unchanged cells keep their exact SI value; '' clears a field", () => {
   const limits = RL.merge(T.shipped).doc;
   const effective = { roles: Object.fromEntries(limits.roles.map((e) => [e.role, e])), sources: RL.merge(T.shipped).sources };
   const rows = tuning.displayRows(effective, "imperial");
-  const zat = rows.find((r) => r.role === "zone-air-temp");
+  const zat = rows.find((r) => r.role === "zone_air_temperature");
   assert.equal(zat.unit, "degF");
-  assert.equal(rows.find((r) => r.role === "chw-flow").unit, "gpm");
-  assert.equal(rows.find((r) => r.role === "duct-static-pressure").unit, "inH2O");
-  const ov = tuning.buildOverride({ "zone-air-temp": { lo: "55", hi: String(zat.fields.hi.shown), spike_delta: "9" }, "duct-static-pressure": { hi: "2" } }, rows, null);
-  assert.deepEqual(ov, { version: 1, roles: { "zone-air-temp": { lo: 12.777778, spike_delta: 5 }, "duct-static-pressure": { hi: 498.1778 } } });
-  const cleared = tuning.buildOverride({ "zone-air-temp": { lo: "" } }, rows, ov);
-  assert.deepEqual(cleared.roles["zone-air-temp"], { spike_delta: 5 });
-  assert.throws(() => tuning.buildOverride({ "zone-air-temp": { lo: "warm" } }, rows, null), /not a number/);
+  assert.equal(rows.find((r) => r.role === "chilled_water_volume_flow_rate").unit, "gpm");
+  assert.equal(rows.find((r) => r.role === "discharge_air_static_pressure").unit, "inH2O");
+  const ov = tuning.buildOverride({ "zone_air_temperature": { lo: "55", hi: String(zat.fields.hi.shown), spike_delta: "9" }, "discharge_air_static_pressure": { hi: "2" } }, rows, null);
+  assert.deepEqual(ov, { version: 1, roles: { "zone_air_temperature": { lo: 12.777778, spike_delta: 5 }, "discharge_air_static_pressure": { hi: 498.1778 } } });
+  const cleared = tuning.buildOverride({ "zone_air_temperature": { lo: "" } }, rows, ov);
+  assert.deepEqual(cleared.roles["zone_air_temperature"], { spike_delta: 5 });
+  assert.throws(() => tuning.buildOverride({ "zone_air_temperature": { lo: "warm" } }, rows, null), /not a number/);
   const si = tuning.displayRows(effective, "si");
-  assert.equal(si.find((r) => r.role === "zone-air-temp").unit, "degC");
+  assert.equal(si.find((r) => r.role === "zone_air_temperature").unit, "degC");
   const opt = tuning.bandChartOption(rows, T.shipped, "absolute_temperature");
   assert.equal(opt.yAxis.data.length, rows.filter((r) => r.quantity === "absolute_temperature").length);
   assert.equal(opt.series.length, 4);
@@ -114,17 +114,17 @@ test("fdd hook: no overrides -> shipped pack SQL; site + equipment revisions -> 
   const noTs = await hook.loadRoleLimitOverrides({ engine: {}, pack, log: () => {} });
   assert.equal(noTs.summary.source, "shipped");
   const rows = [
-    { site_id: "s", scope_key: "site", revision: 3, parameters: { version: 1, roles: { "zone-air-temp": { lo: 12, hi: 30 } } } },
-    { site_id: "s", scope_key: "equip:VAV-1", revision: 5, parameters: { version: 1, roles: { "zone-air-temp": { hi: 27 } } } },
-    { site_id: "s", scope_key: "equip:VAV-BAD", revision: 1, parameters: { version: 1, roles: { "zone-air-temp": { lo: 40 } } } },
+    { site_id: "s", scope_key: "site", revision: 3, parameters: { version: 1, roles: { "zone_air_temperature": { lo: 12, hi: 30 } } } },
+    { site_id: "s", scope_key: "equip:VAV-1", revision: 5, parameters: { version: 1, roles: { "zone_air_temperature": { hi: 27 } } } },
+    { site_id: "s", scope_key: "equip:VAV-BAD", revision: 1, parameters: { version: 1, roles: { "zone_air_temperature": { lo: 40 } } } },
     { site_id: "s", scope_key: "equip:VAV-RESET", revision: 2, parameters: { version: 1, roles: {}, reset: true } },
   ];
   const logs = [];
   const t = await hook.loadRoleLimitOverrides({ engine: { roleLimitOverrides: async () => rows }, pack, log: (m) => logs.push(m) });
   const v1 = t.forEquip("s", "VAV-1");
   assert.equal(v1.configRevision, 5);
-  assert.deepEqual(v1.parameters.role_limits.overrides, { site: { "zone-air-temp": { hi: 30.0, lo: 12.0 } }, equipment: { "zone-air-temp": { hi: 27.0 } } });
-  assert.match(v1.sweeps["SV-RANGE"].sql, /sensor_role = 'zone_t' AND \(value < \(19\.5 - 7\.5 \* 1\)/);
+  assert.deepEqual(v1.parameters.role_limits.overrides, { site: { "zone_air_temperature": { hi: 30.0, lo: 12.0 } }, equipment: { "zone_air_temperature": { hi: 27.0 } } });
+  assert.match(v1.sweeps["SV-RANGE"].sql, /sensor_role = 'zone_air_temperature' AND \(value < \(19\.5 - 7\.5 \* 1\)/);
   assert.equal(v1.ruleHashes["SV-RANGE"], sha(v1.sweeps["SV-RANGE"].sql));
   const other = t.forEquip("s", "VAV-2");
   assert.equal(other.configRevision, 3, "site revision for equipment without its own");

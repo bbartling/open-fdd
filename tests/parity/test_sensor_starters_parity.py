@@ -3,12 +3,12 @@ sqlite3), DuckDB and, when configured, standalone PostgreSQL (POSTGRES_TEST_URL 
 
 One AHU, 24 h at 5 min, six sensors (SI), two of them sharing the zone-air-temp role:
 
-  zat-1  zone_t       22.0 + (0, .25, .5, .25) repeating: well controlled, never flat at the shipped tolerance
-  zat-2  zone_t       same, stuck at 22.0 10:00-16:00, 40.0 18:00-19:00
-  sat-1  sat          30 degC while off (proof 0 before 06:00), a 17.25 degC startup step, then 13 degC
-  rh-1   oa_h         50 %RH + 1 %RH pattern
-  dsp-1  duct_static  250 Pa + 10 Pa pattern
-  mat-1  mat          15 degC + pattern, no samples 14:00-16:00
+  zat-1  zone_air_temperature       22.0 + (0, .25, .5, .25) repeating: well controlled, never flat at the shipped tolerance
+  zat-2  zone_air_temperature       same, stuck at 22.0 10:00-16:00, 40.0 18:00-19:00
+  discharge_air_temperature-1  discharge_air_temperature          30 degC while off (proof 0 before 06:00), a 17.25 degC startup step, then 13 degC
+  rh-1   outdoor_air_intake_relative_humidity         50 %RH + 1 %RH pattern
+  dsp-1  discharge_air_static_pressure  250 Pa + 10 Pa pattern
+  mixed_air_temperature-1  mixed_air_temperature          15 degC + pattern, no samples 14:00-16:00
 
 Hand-calculated expectations are asserted on every engine; pandas must equal SQL per series for SV-RANGE, SV-SPIKE,
 SV-FLATLINE and SV-STALE (SV-RATE has a known pandas difference: SQL engines only).
@@ -60,14 +60,14 @@ def _zat2(i: int) -> float:
 
 
 SENSORS = {
-    "zat-1": ("zone_t", "°C", [22.0 + PATTERN[i % 4] for i in range(N)]),
-    "zat-2": ("zone_t", "°C", [_zat2(i) for i in range(N)]),
-    "sat-1": ("sat", "°C", [(30.0 if i < 72 else 13.0) + PATTERN[i % 4] for i in range(N)]),
-    "rh-1": ("oa_h", "%RH", [50.0 + 2 * PATTERN[i % 4] for i in range(N)]),
-    "dsp-1": ("duct_static", "Pa", [250.0 + 20 * PATTERN[i % 4] for i in range(N)]),
-    "mat-1": ("mat", "°C", [None if 168 <= i < 192 else 15.0 + PATTERN[i % 4] for i in range(N)]),
+    "zat-1": ("zone_air_temperature", "°C", [22.0 + PATTERN[i % 4] for i in range(N)]),
+    "zat-2": ("zone_air_temperature", "°C", [_zat2(i) for i in range(N)]),
+    "discharge_air_temperature-1": ("discharge_air_temperature", "°C", [(30.0 if i < 72 else 13.0) + PATTERN[i % 4] for i in range(N)]),
+    "rh-1": ("outdoor_air_intake_relative_humidity", "%RH", [50.0 + 2 * PATTERN[i % 4] for i in range(N)]),
+    "dsp-1": ("discharge_air_static_pressure", "Pa", [250.0 + 20 * PATTERN[i % 4] for i in range(N)]),
+    "mixed_air_temperature-1": ("mixed_air_temperature", "°C", [None if 168 <= i < 192 else 15.0 + PATTERN[i % 4] for i in range(N)]),
 }
-HISTORY = [{"equipment_id": EQ, "ts": START_MS + i * STEP * 1000, "run_proof": 0.0 if i < 72 else 1.0} for i in range(N)]
+HISTORY = [{"equipment_id": EQ, "ts": START_MS + i * STEP * 1000, "operating_status": 0.0 if i < 72 else 1.0} for i in range(N)]
 DATASET = SimpleNamespace(
     history_columns=[], history=HISTORY, weather=[], utility_interval=[], utility_monthly=[],
     sensor_history=[{"equipment_id": EQ, "series_id": sid, "sensor_role": role, "unit": unit, "ts": HISTORY[i]["ts"], "value": v}
@@ -78,17 +78,17 @@ CONFIGS = {
     "shipped": None,
     # zat-1 at its own boundaries: max 22.5 == hi (no range fault), span 0.5 == flat_tol (flat: <= faults)
     "zat-1 at the boundary": {"version": 1, "roles": {}, "sensors": {
-        "zat-1": {"role": "zone-air-temp", "lo": 15.0, "hi": 22.5, "flat_tol": 0.5}}},
+        "zat-1": {"role": "zone_air_temperature", "lo": 15.0, "hi": 22.5, "flat_tol": 0.5}}},
     # zat-1 just inside: 22.5 > hi 22.25 faults, span 0.5 > flat_tol 0.25 does not; 3 degC/h > its 2.5 degC/h rate
     "zat-1 past the boundary": {"version": 1, "roles": {}, "sensors": {
-        "zat-1": {"role": "zone-air-temp", "lo": 15.0, "hi": 22.25, "flat_tol": 0.25, "rate_per_h": 2.5}}},
+        "zat-1": {"role": "zone_air_temperature", "lo": 15.0, "hi": 22.25, "flat_tol": 0.25, "rate_per_h": 2.5}}},
 }
 ENERGIZED_HELD = 215 * STEP   # samples 06:00 .. 23:50 (the last sample holds 0 s)
 EXPECTED = {   # (config, rule, series) -> fault hours ("shipped" rows hold for every config except zat-1); else 0
     ("shipped", "SV-RANGE", "zat-2"): 12 * STEP * H,
     ("shipped", "SV-SPIKE", "zat-2"): 2 * STEP * H,
     ("shipped", "SV-FLATLINE", "zat-2"): 61 * STEP * H,      # windows 11:00 .. 16:00 all 22.0
-    ("shipped", "SV-STALE", "mat-1"): (7500 - 1800) * H,     # 13:55 -> 16:00, less the 30 min threshold
+    ("shipped", "SV-STALE", "mixed_air_temperature-1"): (7500 - 1800) * H,     # 13:55 -> 16:00, less the 30 min threshold
     ("zat-1 at the boundary", "SV-FLATLINE", "zat-1"): ENERGIZED_HELD * H,
     ("zat-1 past the boundary", "SV-RANGE", "zat-1"): 54 * STEP * H,   # the energized 22.5 samples
 }
@@ -155,11 +155,11 @@ def _run_postgres(rule_sql):
 def _pandas(limits) -> dict[str, dict[str, float]]:
     """{rule: {series_id: fault hours}}: each series is its own frame (one point per role column)."""
     idx = pd.DatetimeIndex(pd.to_datetime([r["ts"] for r in HISTORY], unit="ms", utc=True), name="timestamp_utc")
-    proof = pd.Series([r["run_proof"] for r in HISTORY], index=idx, dtype=float)
+    proof = pd.Series([r["operating_status"] for r in HISTORY], index=idx, dtype=float)
     out: dict[str, dict[str, float]] = {rid: {} for rid in PANDAS_RULES}
     for sid, (role, unit, values) in SENSORS.items():
         hs = SQL_TO_HS[role]
-        df = pd.DataFrame({hs: pd.Series(values, index=idx, dtype=float), SQL_TO_HS["run_proof"]: proof}, index=idx)
+        df = pd.DataFrame({hs: pd.Series(values, index=idx, dtype=float), SQL_TO_HS["operating_status"]: proof}, index=idx)
         df.attrs.update(equipment_id=EQ, run_proof_resolved=True, role_units={hs: unit}, series_ids={hs: sid})
         if limits is not None:
             df.attrs["sweep_limits"] = limits
@@ -233,10 +233,10 @@ def test_steady_readings_startup_step_and_missing_data_are_not_value_faults(resu
     """Negative controls: a well-controlled reading (0.5 degC span per hour) is not flat; a 17.25 degC startup step of
     the supply air is below its spike limit; a data gap is SV-STALE only (no range, spike or flatline time)."""
     got = results["shipped"]["engines"]["sqlite"]
-    for sid in ("zat-1", "sat-1", "rh-1", "mat-1"):
+    for sid in ("zat-1", "discharge_air_temperature-1", "rh-1", "mixed_air_temperature-1"):
         assert got["SV-FLATLINE"][sid][0] == 0.0, sid
-    assert got["SV-SPIKE"]["sat-1"][0] == 0.0 and got["SV-RANGE"]["sat-1"][0] == 0.0
+    assert got["SV-SPIKE"]["discharge_air_temperature-1"][0] == 0.0 and got["SV-RANGE"]["discharge_air_temperature-1"][0] == 0.0
     assert "dsp-1" not in got["SV-FLATLINE"], "pressure has no flatline tolerance: not assessed"
     for rid in ("SV-RANGE", "SV-SPIKE", "SV-FLATLINE"):
-        assert got[rid]["mat-1"][0] == 0.0, rid
-    assert got["SV-STALE"]["mat-1"][0] > 0.0
+        assert got[rid]["mixed_air_temperature-1"][0] == 0.0, rid
+    assert got["SV-STALE"]["mixed_air_temperature-1"][0] > 0.0

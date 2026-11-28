@@ -19,14 +19,14 @@ def resolve_web_drybulb_dewpoint(d: pd.DataFrame) -> tuple[pd.Series | None, pd.
     """
     from open_fdd.analytics.weather_psychrometrics import dewpoint_c_from_db_rh
 
-    if "web-outside-air-temp" not in d.columns or not d["web-outside-air-temp"].notna().any():
+    if "weather_service_air_temperature" not in d.columns or not d["weather_service_air_temperature"].notna().any():
         return None, None, "missing_web_oat"
-    db = pd.to_numeric(d["web-outside-air-temp"], errors="coerce")
-    if "web-outside-air-dewpoint" in d.columns and d["web-outside-air-dewpoint"].notna().any():
-        dp = pd.to_numeric(d["web-outside-air-dewpoint"], errors="coerce")
+    db = pd.to_numeric(d["weather_service_air_temperature"], errors="coerce")
+    if "weather_service_air_dew_point_temperature" in d.columns and d["weather_service_air_dew_point_temperature"].notna().any():
+        dp = pd.to_numeric(d["weather_service_air_dew_point_temperature"], errors="coerce")
         return db, dp, "web_dewpoint"
-    if "web-outside-air-humidity" in d.columns and d["web-outside-air-humidity"].notna().any():
-        rh = pd.to_numeric(d["web-outside-air-humidity"], errors="coerce")
+    if "weather_service_air_relative_humidity" in d.columns and d["weather_service_air_relative_humidity"].notna().any():
+        rh = pd.to_numeric(d["weather_service_air_relative_humidity"], errors="coerce")
         dp = dewpoint_c_from_db_rh(db, rh)
         return db, dp, "web_db_rh_magnus"
     return db, None, "missing_web_dewpoint_and_rh"
@@ -65,7 +65,7 @@ def econ3_compute(d: pd.DataFrame, p: dict, poll: float, wx_ok: bool = True) -> 
     Band: 15.6 ≤ DB < 22.2°C and DP < 15.6°C. Damper must be ≥ integrated threshold (default 90%).
     """
     del wx_ok  # web presence is resolved explicitly below
-    if not {"outside-air-damper", "cooling-valve"}.issubset(d.columns):
+    if not {"outdoor_air_intake_damper_position_command", "cooling_valve_position_command"}.issubset(d.columns):
         return _false(d.index)
     db, dp, src = resolve_web_drybulb_dewpoint(d)
     if db is None or dp is None:
@@ -77,8 +77,8 @@ def econ3_compute(d: pd.DataFrame, p: dict, poll: float, wx_ok: bool = True) -> 
     dp_max = _f(p, "econ3_dp_max", 15.555556)
     damper_hi = _f(p, "econ3_damper_hi", 0.90)
 
-    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
-    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    econ = norm_cmd(d["outdoor_air_intake_damper_position_command"]).fillna(0)
+    clg = norm_cmd(d["cooling_valve_position_command"]).fillna(0)
     opportunity = free_cool_opportunity_mask(db, dp, db_min=db_min, db_max=db_max, dp_max=dp_max)
     mech = clg > 0.01
     not_integrated = econ < damper_hi
@@ -97,7 +97,7 @@ def econ7_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     mech + integrated economizer in the 60–22.222222°C band (see ECON-3).
     """
     del poll
-    if "outside-air-damper" not in d.columns:
+    if "outdoor_air_intake_damper_position_command" not in d.columns:
         return _false(d.index)
     db, dp, src = resolve_web_drybulb_dewpoint(d)
     d.attrs["econ7_weather_source"] = src
@@ -113,8 +113,8 @@ def econ7_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
     demand = _false(d.index)
     has_demand_signal = False
-    if "cooling-valve" in d.columns and d["cooling-valve"].notna().any():
-        demand = demand | (norm_cmd(d["cooling-valve"]).fillna(0) > 0.05)
+    if "cooling_valve_position_command" in d.columns and d["cooling_valve_position_command"].notna().any():
+        demand = demand | (norm_cmd(d["cooling_valve_position_command"]).fillna(0) > 0.05)
         has_demand_signal = True
     mech, kind = mechanical_proof_mask(d)
     d.attrs["econ7_proof"] = kind
@@ -125,7 +125,7 @@ def econ7_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         d.attrs["econ7_skip"] = "missing_cooling_demand_signal"
         return _false(d.index)
 
-    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    econ = norm_cmd(d["outdoor_air_intake_damper_position_command"]).fillna(0)
     return (econ_ok & demand & (econ < damper_min)).fillna(False)
 
 
@@ -144,7 +144,7 @@ def mech_oat1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     return (db.notna() & (db < oat_max) & run).fillna(False)
 
 
-HW_PROOF_ROLES = ("pump-status", "hot-water-supply-temp")
+HW_PROOF_ROLES = ("pump_operating_status", "supply_hot_water_temperature")
 
 
 def hw_oat1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
@@ -160,7 +160,7 @@ def hw_oat1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         return _false(d.index)
     on = _false(d.index)
     kinds = []
-    for role, thr in (("pump-status", 0.05), ("hot-water-supply-temp", _f(p, "hw_on_min", 43.333333))):
+    for role, thr in (("pump_operating_status", 0.05), ("supply_hot_water_temperature", _f(p, "hw_on_min", 43.333333))):
         if role in d.columns and d[role].notna().any():
             on = on | (pd.to_numeric(d[role], errors="coerce") > thr)
             kinds.append(role)
@@ -171,7 +171,7 @@ def hw_oat1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 def econ6_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     """Fault: OA damper above winter min-OA ceiling while web OAT < −3.888889°C."""
     del poll
-    if "outside-air-damper" not in d.columns:
+    if "outdoor_air_intake_damper_position_command" not in d.columns:
         return _false(d.index)
     db, _dp, src = resolve_web_drybulb_dewpoint(d)
     d.attrs["econ6_weather_source"] = src
@@ -179,7 +179,7 @@ def econ6_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         return _false(d.index)
     oat_max = _f(p, "econ6_oat_max", -3.888889)
     damper_max = _f(p, "econ6_damper_max", 0.25)
-    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    econ = norm_cmd(d["outdoor_air_intake_damper_position_command"]).fillna(0)
     return (db.notna() & (db < oat_max) & (econ > damper_max)).fillna(False)
 
 
@@ -197,10 +197,10 @@ def chw_noload1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
     zone_ok = None
     ahu_ok = None
-    if "building-zone-load-satisfied" in d.columns and d["building-zone-load-satisfied"].notna().any():
-        zone_ok = as_bool(d["building-zone-load-satisfied"])
-    if "building-ahu-load-satisfied" in d.columns and d["building-ahu-load-satisfied"].notna().any():
-        ahu_ok = as_bool(d["building-ahu-load-satisfied"])
+    if "zone_load_satisfied_status" in d.columns and d["zone_load_satisfied_status"].notna().any():
+        zone_ok = as_bool(d["zone_load_satisfied_status"])
+    if "air_handling_unit_load_satisfied_status" in d.columns and d["air_handling_unit_load_satisfied_status"].notna().any():
+        ahu_ok = as_bool(d["air_handling_unit_load_satisfied_status"])
     if zone_ok is None and ahu_ok is None:
         d.attrs["chw_noload_skip"] = "missing_load_satisfaction"
         return _false(d.index)
@@ -215,10 +215,10 @@ def chw_noload1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
 def web_weather_missing_reasons(df: pd.DataFrame) -> list[str]:
     """Roles missing for strict web dry-bulb + dewpoint/RH resolution."""
-    if "web-outside-air-temp" not in df.columns or not df["web-outside-air-temp"].notna().any():
-        return ["web-outside-air-temp"]
-    has_dp = "web-outside-air-dewpoint" in df.columns and df["web-outside-air-dewpoint"].notna().any()
-    has_rh = "web-outside-air-humidity" in df.columns and df["web-outside-air-humidity"].notna().any()
+    if "weather_service_air_temperature" not in df.columns or not df["weather_service_air_temperature"].notna().any():
+        return ["weather_service_air_temperature"]
+    has_dp = "weather_service_air_dew_point_temperature" in df.columns and df["weather_service_air_dew_point_temperature"].notna().any()
+    has_rh = "weather_service_air_relative_humidity" in df.columns and df["weather_service_air_relative_humidity"].notna().any()
     if not has_dp and not has_rh:
         return ["web-outside-air-dewpoint|web-outside-air-humidity"]
     return []

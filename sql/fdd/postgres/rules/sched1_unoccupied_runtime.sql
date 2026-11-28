@@ -1,10 +1,10 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- sched1_unoccupied_runtime.sql — Excess / wasted unoccupied runtime
--- Storage is SI (metric-c-v2): zone_t and the ZONE_T_LO / ZONE_T_HI comfort band are °C.
--- Pandas sched1: unoccupied & fan_on; when zone_t mapped, also require comfort band
+-- Storage is SI (metric-c-v2): zone_air_temperature and the ZONE_T_LO / ZONE_T_HI comfort band are °C.
+-- Pandas sched1: unoccupied & fan_on; when zone_air_temperature mapped, also require comfort band
 -- (zone already satisfied → optimal-start / bad schedule signal).
--- When zone_t is absent from history, the runner injects NULL zone_t (optional role)
+-- When zone_air_temperature is absent from history, the runner injects NULL zone_air_temperature (optional role)
 -- so behavior matches pandas “no zone → base only”.
 -- Portable occupancy: literal 'unoccupied' OR numeric/boolean falsey (0 / 0.0 / false).
 WITH base AS (
@@ -12,19 +12,19 @@ WITH base AS (
     equipment_id,
     timestamp_utc,
         CAST(CASE
-          WHEN occ_mode IS NULL OR fan_status IS NULL THEN 0
-          WHEN fan_status > 0.5
+          WHEN occupancy_status IS NULL OR supply_fan_operating_status IS NULL THEN 0
+          WHEN supply_fan_operating_status > 0.5
             AND (
-              LOWER(trim(CAST(occ_mode AS VARCHAR))) IN
+              LOWER(trim(CAST(occupancy_status AS VARCHAR))) IN
                 ('unoccupied','unocc','off','false','night','standby','setback','no')
               OR (
-                fdd.try_double(trim(CAST(occ_mode AS VARCHAR))) IS NOT NULL
-                AND fdd.try_double(trim(CAST(occ_mode AS VARCHAR))) <= 0.05
+                fdd.try_double(trim(CAST(occupancy_status AS VARCHAR))) IS NOT NULL
+                AND fdd.try_double(trim(CAST(occupancy_status AS VARCHAR))) <= 0.05
               )
             )
             AND (
-              zone_t IS NULL
-              OR (zone_t >= {{ZONE_T_LO}} AND zone_t <= {{ZONE_T_HI}})
+              zone_air_temperature IS NULL
+              OR (zone_air_temperature >= {{ZONE_T_LO}} AND zone_air_temperature <= {{ZONE_T_HI}})
             )
           THEN 1
           ELSE 0

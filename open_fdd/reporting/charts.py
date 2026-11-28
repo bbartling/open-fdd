@@ -250,7 +250,7 @@ def _figure_for_finding(f: EngineeringFinding, go):
             data=[
                 go.Bar(
                     x=["Damper %", "Airflow"],
-                    y=[float(spec.get("damper") or 0), float(spec.get("airflow") or 0)],
+                    y=[float(spec.get("damper_position") or 0), float(spec.get("airflow") or 0)],
                     marker_color=["#805ad5", "#dd6b20"],
                 )
             ]

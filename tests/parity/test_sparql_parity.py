@@ -129,7 +129,8 @@ def test_timescale_selected_client_equals_the_oracle_on_numeric_inputs():
     sparql, info = leg.sparql_reference(ds, source="timescale")
     assert info["source"] == "timescale" and info["hook_calls"] > 2 and info["sweep_mismatches"] == []
     text = _text_columns(ds)
-    assert text, "the dataset must carry a text point for this test to mean anything"
+    # occupancy_status is numeric in the contract. A text history column, when the contract has one,
+    # is absent from Timescale and is dropped from the oracle before the comparison.
     frames = {e["equipment_id"]: equip_frame(ds, e["equipment_id"]).drop(columns=[c for c in text], errors="ignore")
               for e in ds.equipment}
     for e, df in frames.items():   # the client marks its sweep set; give the oracle frames the same metadata
@@ -139,7 +140,10 @@ def test_timescale_selected_client_equals_the_oracle_on_numeric_inputs():
     assert not bad, bad[:20]
     full = reference(ds)
     differ = {m.split("/")[0] for m in leg.oracle_mismatches(sparql, full)}
-    assert differ and differ <= {"SCHED-1", "VAV-1", "VAV-2"}, differ   # only the text-input rules move
+    if text:
+        assert differ and differ <= {"SCHED-1", "VAV-1", "VAV-2"}, differ  # only the text-input rules move
+    else:
+        assert not differ
 
 
 def test_timescale_selected_frames_are_epoch_bucket_means_on_irregular_data():

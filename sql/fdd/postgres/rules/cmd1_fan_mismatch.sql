@@ -5,8 +5,8 @@ WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    fan_cmd AS fan,
-    fan_status
+    supply_fan_command AS fan,
+    supply_fan_operating_status
   FROM history
 ),
 base AS (
@@ -14,8 +14,8 @@ base AS (
     equipment_id,
     timestamp_utc,
         CAST(CASE
-          WHEN fan IS NULL OR fan_status IS NULL THEN 0
-          WHEN (fan >= 0.05) <> (fan_status > 0.5) THEN 1
+          WHEN fan IS NULL OR supply_fan_operating_status IS NULL THEN 0
+          WHEN (fan >= 0.05) <> (supply_fan_operating_status > 0.5) THEN 1
           ELSE 0
         END AS INT) AS raw_fault
   FROM h

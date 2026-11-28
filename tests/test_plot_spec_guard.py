@@ -110,4 +110,4 @@ def test_no_substring_tests_on_names_in_either_producer():
     for path in (PY, JS):
         text = path.read_text(encoding="utf-8")
         assert not re.search(r"(dis|name)\s*(\.|\[)\s*(includes|startswith|startsWith|endswith|endsWith|match|search|test)\b", text, re.I), path.name
-        assert not re.search(r"\b(includes|startswith|startsWith)\(\s*['\"](temp|supply|discharge|zone|oa|sat|mat)\b", text, re.I), path.name
+        assert not re.search(r"\b(includes|startswith|startsWith)\(\s*['\"](temp|supply|discharge|zone|oa|discharge_air_temperature|mixed_air_temperature)\b", text, re.I), path.name

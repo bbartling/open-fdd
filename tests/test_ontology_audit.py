@@ -256,7 +256,7 @@ def test_doctor_keeps_two_sensors_on_one_role_apart():
     rep = doctor(_example_graph())
     assert rep.points == 6 and rep.problems == []
     (binding,) = rep.role_bindings
-    assert binding["role"] == "discharge-air-temp" and binding["points"] == [U + "10", U + "11"]
+    assert binding["role"] == "discharge_air_temperature" and binding["points"] == [U + "10", U + "11"]
     sats = rep.queries["ahu_discharge_air_temp_sensors"]
     assert [r["historyId"] for r in sats] == ["22222222-0000-4000-8000-000000000010",
                                              "22222222-0000-4000-8000-000000000011"]

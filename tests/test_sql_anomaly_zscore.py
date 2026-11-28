@@ -173,7 +173,7 @@ def test_screen_engine_sql_matches_pandas(tmp_path):
                          "SAT": 13 + rng.normal(0, 0.3, len(idx)), "MAT": 18 + rng.normal(0, 0.5, len(idx))})
     hist.loc[400, "SAT"] = 25.0
     hist.to_csv(folder / "history_wide.csv", index=False)
-    (folder / "column_map.json").write_text(json.dumps({"equipType": "AHU", "points": {"sat": "SAT", "mat": "MAT"}}),
+    (folder / "column_map.json").write_text(json.dumps({"equipType": "AHU", "points": {"discharge_air_temperature": "SAT", "mixed_air_temperature": "MAT"}}),
                                             encoding="utf-8")
     # No run proof in this fixture: screen every row on purpose (#1656).
     a = screen_folder(folder, tmp_path / "pandas", methods=["zscore"], top_n=0, max_days=0, activity_policy="ungated")

@@ -130,9 +130,10 @@ async function createTempTables(client, pack) {
 }
 
 /** Scale decision for one bound role: {a, b, unit, bool?}, v_si = a + b * v. siPlan (hooks/fdd.js) made the decisions. */
-function roleFactors(role, uuid, { unitsByUuid = {}, fractionRoles = [], booleanRoles = [] }) {
+function roleFactors(role, uuid, { unitsByUuid = {}, fractionRoles = [], booleanRoles = [], percentRoles = [], raisedRoles = [] }) {
   const unit = unitsByUuid[uuid];
   if (booleanRoles.includes(role)) return { a: 0, b: fractionRoles.includes(role) ? 0.01 : 1, unit: "bool", bool: true };
+  if (percentRoles.includes(role)) return { a: 0, b: raisedRoles.includes(role) ? 100 : 1, unit: "PERCENT" };
   if (fractionRoles.includes(role)) return { a: 0, b: 0.01, unit: "fraction" };
   return siFactors(unit);
 }
@@ -141,12 +142,12 @@ function roleFactors(role, uuid, { unitsByUuid = {}, fractionRoles = [], boolean
  * The fdd.point rows (one per bound point, shape of core.sql) for one equipment, from the same arguments as loadHistory.
  *   roleToUuid  {role: pointUuid}   unitsByUuid {pointUuid: nfUnit}   fractionRoles / booleanRoles = siPlan's decisions
  *   sensorSeries [{uuid, role, unit}] sweep sensors (unit = canonical SI unit); pointMeta {uuid: {name, dis, kind, haystackId}}
- * A point bound to a role AND swept appears once, with the role's scale. Text roles (occ_mode) keep their values (scale 1).
+ * A point bound to a role AND swept appears once, with the role's scale. Text roles (occupancy_status) keep their values (scale 1).
  * @returns {Array<Record<string, any>>}
  */
-function pointRows({ pack, siteId = "", equipId, roleToUuid = {}, unitsByUuid = {}, fractionRoles = [], booleanRoles = [], sensorSeries = [], pointMeta = {} }) {
+function pointRows({ pack, siteId = "", equipId, roleToUuid = {}, unitsByUuid = {}, fractionRoles = [], booleanRoles = [], percentRoles = [], raisedRoles = [], sensorSeries = [], pointMeta = {} }) {
   const histCols = new Map(pack.contract.history.map((c) => [c.name, c]));
-  const plan = { unitsByUuid, fractionRoles, booleanRoles };
+  const plan = { unitsByUuid, fractionRoles, booleanRoles, percentRoles, raisedRoles };
   const rows = new Map();
   const add = (uuid, role, f, unit, kind) => {
     if (rows.has(uuid)) return;
@@ -216,7 +217,7 @@ async function syncPoints(client, { siteId = "", equipId, rows }) {
  * Returns counts of wide history rows and long sensor rows, plus wide roles and SI units.
  */
 async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, unitsByUuid = {}, fractionRoles = [], booleanRoles = [],
-  sensorSeries = [], from, to, stepSec }) {
+  percentRoles = [], raisedRoles = [], sensorSeries = [], from, to, stepSec }) {
   if (!pack || !pack.contract) throw new Error("loadHistory: pack is required");
   const step = Number(stepSec || pack.poll_seconds);
   if (!(step > 0)) throw new Error("loadHistory: stepSec must be > 0");
@@ -301,7 +302,7 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
   // joins for the rules' window / as-of CTEs (minutes instead of seconds on a week of 5-min data). Analyze what we loaded.
   for (const t of Object.keys(pack.contract)) await client.query(`ANALYZE pg_temp.${quoteId(t)}`);
   const si = {};
-  for (const [role, uuid] of roles) si[role] = roleFactors(role, uuid, { unitsByUuid, fractionRoles, booleanRoles }).unit;
+  for (const [role, uuid] of roles) si[role] = roleFactors(role, uuid, { unitsByUuid, fractionRoles, booleanRoles, percentRoles, raisedRoles }).unit;
   return { rows, sensorRows, roles: roles.map(([r]) => r), si };
 }
 

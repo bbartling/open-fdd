@@ -55,9 +55,9 @@ def test_dataset_is_si(data):
 
 
 def test_dataset_follows_the_declared_scales(data):
-    """Issue #1541: both oracles are fed fractions 0-1 for command/position roles and 0/1 for statuses."""
+    """Roles 1.1.0: damper, valve and speed columns are PERCENT 0-100; commands and statuses are boolean 0/1."""
     scales = json.loads((ROOT / "sql/fdd/role_scales.json").read_text(encoding="utf-8"))["roles"]
-    seen = {"fraction": 0, "boolean": 0}
+    seen = {"PERCENT": 0, "boolean": 0}
     for equip, cols in data["history"].items():
         for role, vals in cols.items():
             sc = scales.get(role)
@@ -66,10 +66,12 @@ def test_dataset_follows_the_declared_scales(data):
                 continue
             seen[sc] += 1
             lo, hi = min(nums), max(nums)
-            assert 0.0 <= lo and hi <= 1.0, (equip, role, sc, lo, hi)
-            if sc == "boolean":
+            if sc == "PERCENT":
+                assert 0.0 <= lo and hi <= 100.0, (equip, role, sc, lo, hi)
+            else:
+                assert 0.0 <= lo and hi <= 1.0, (equip, role, sc, lo, hi)
                 assert set(nums) <= {0, 1, 0.0, 1.0}, (equip, role)
-    assert seen["fraction"] >= 20 and seen["boolean"] >= 10, seen
+    assert seen["PERCENT"] >= 6 and seen["boolean"] >= 10, seen
 
 
 def test_duckdb_returns_every_rule(data):
@@ -109,8 +111,8 @@ def test_rules_without_pandas_twin_are_listed(report):
 
 def test_catalog_units_are_si():
     cat = json.loads((ROOT / "sql/fdd/tuning_catalog.json").read_text(encoding="utf-8"))["rules"]
-    allowed = {"degC", "degC_delta", "degC_delta_per_h", "Pa", "L_per_s", "kWh", "min", "frac", "pct", "bool", "x", "count",
-               "h", "sec", "unit", "ppm", "%"}
+    allowed = {"DEG_C", "K", "K-PER-HR", "PA", "L-PER-SEC", "KiloW-HR", "MIN", "SEC", "HR", "PERCENT", "PPM",
+               "boolean", "x", "NUM", "unit"}
     for r in cat:
         for k, d in r["parameters"].items():
             assert d["unit"] in allowed, (r["rule_id"], k, d["unit"])
@@ -129,11 +131,11 @@ def test_no_imperial_literals_in_sql():
 
 def test_unit_gate_rejects_imperial_and_unknown():
     from open_fdd.rules.sensor_sweep_catalog import sweep_assessable_role as ok
-    assert ok("zone-air-temp", "°C") and ok("duct-static-pressure", "Pa") and ok("zone-air-humidity", "%")
+    assert ok("zone_air_temperature", "°C") and ok("discharge_air_static_pressure", "Pa") and ok("zone_air_relative_humidity", "%")
     for bad in ("°F", "degF", None, "", "kPa"):
-        assert not ok("zone-air-temp", bad), bad
+        assert not ok("zone_air_temperature", bad), bad
     for bad in ("inH2O", "inWC", "kPa", None):
-        assert not ok("duct-static-pressure", bad), bad
+        assert not ok("discharge_air_static_pressure", bad), bad
 
 
 def test_pandas_defaults_equal_sql_catalog(report):
@@ -145,7 +147,7 @@ def test_pandas_defaults_equal_sql_catalog(report):
             continue
         for p in rule.params:
             q = sql["parameters"].get(p.key)
-            if q and q["unit"] in ("degC", "degC_delta", "L_per_s", "Pa"):
+            if q and q["unit"] in ("degC", "degC_delta", "L_per_s", "Pa", "DEG_C", "L-PER-SEC", "PA"):
                 if abs(float(p.default) - float(q["default"])) > 1e-4 * max(1.0, abs(float(q["default"]))):
                     bad.append((rid, p.key, p.default, q["default"]))
     assert not bad, bad[:10]
@@ -189,10 +191,10 @@ def test_duplicate_role_sensor_series_are_distinct(duplicate_sensor_data):
     assert set(pg) == set(SWEEP_RULES)
     for rule in SWEEP_RULES:
         a = sorted(pg[rule], key=h.sql_result_key)
-        sat = [row for row in a if row["equipment_id"] == "AHU-1" and row.get("sensor_role") == "sat"]
-        ids = {row["series_id"] for row in sat}
-        assert len(sat) == 2 and len(ids) == 2, (rule, sat)
-        assert all(row.get("covered_hours") is not None for row in sat), (rule, sat)
+        discharge_air_temperature = [row for row in a if row["equipment_id"] == "AHU-1" and row.get("sensor_role") == "discharge_air_temperature"]
+        ids = {row["series_id"] for row in discharge_air_temperature}
+        assert len(discharge_air_temperature) == 2 and len(ids) == 2, (rule, discharge_air_temperature)
+        assert all(row.get("covered_hours") is not None for row in discharge_air_temperature), (rule, discharge_air_temperature)
 
 
 def test_stress_verdict_fails_on_unexpected_divergence_or_short_comparison():
@@ -235,9 +237,9 @@ def test_vav_reheat_difference_is_exactly_the_startup_holdoff(monkeypatch):
     n = 30
     fan = [0] * 4 + [1] * 26
     rise_bad = [0.5] * 22 + [2.5] * 8  # the fault is present from the first fan-on sample, then ends
-    df = _fixture_frame(n, **{"fan-status": fan, "zone-airflow": [50.0] * n, "reheat-valve": [0.7] * n,
-                              "vav-inlet-air-temp": [15.0] * n,
-                              "vav-discharge-air-temp": [15.0 + r for r in rise_bad]})
+    df = _fixture_frame(n, **{"supply_fan_operating_status": fan, "discharge_air_volume_flow_rate": [50.0] * n, "terminal_unit_heating_valve_position_command": [70.0] * n,
+                              "terminal_unit_inlet_air_temperature": [15.0] * n,
+                              "terminal_unit_discharge_air_temperature": [15.0 + r for r in rise_bad]})
     raw = [f == 1 and r < 1.666667 for f, r in zip(fan, rise_bad)]
     sql_hours = _sql_confirmed_hours(raw, CATALOG_CONFIRM["VAV-REHEAT"])
     pandas_hours, status = h.pandas_fault_hours("VAV-REHEAT", df.copy(), None)
@@ -254,13 +256,13 @@ def test_trim3_is_aligned_with_the_sql_contract_and_differs_only_by_the_startup_
     """#1588: pandas TRIM-3 reads the contract role, faults at request sum <= request_lo like SQL, and skips when the
     request sum is absent (SQL has no rows then); what is left is the pandas 600 s hydronic-proof startup holdoff."""
     n = 24
-    common = {"hot-water-supply-temp": [75.0] * n, "pump-status": [1] * n}
-    df = _fixture_frame(n, **common, **{"hot-water-reset-request-sum": [1.0] * n})     # exactly at request_lo
+    common = {"supply_hot_water_temperature": [75.0] * n, "pump_operating_status": [1] * n}
+    df = _fixture_frame(n, **common, **{"hot_water_reset_request_count": [1.0] * n})     # exactly at request_lo
     pandas_hours, status = h.pandas_fault_hours("TRIM-3", df, None)
     assert not str(status).startswith("SKIPPED") and pandas_hours > 0.0
     sql_hours = _sql_confirmed_hours([True] * n, CATALOG_CONFIRM["TRIM-3"])
     assert sql_hours >= pandas_hours and sql_hours - pandas_hours <= 600 / 3600 + 1e-9, (sql_hours, pandas_hours)
-    df = _fixture_frame(n, **common, **{"hot-water-reset-request-sum": [2.0] * n})     # above request_lo: no fault
+    df = _fixture_frame(n, **common, **{"hot_water_reset_request_count": [2.0] * n})     # above request_lo: no fault
     assert h.pandas_fault_hours("TRIM-3", df, None)[0] == 0.0
     df = _fixture_frame(n, **common)                                                    # absent: not assessed
     assert str(h.pandas_fault_hours("TRIM-3", df, None)[1]).startswith("SKIPPED")

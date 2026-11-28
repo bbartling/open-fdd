@@ -55,7 +55,7 @@ def test_manifest_covers_every_pack_rule_and_input(manifest, unpacked):
         assert r["title"] and r["confirm_min"] * 60 == catalog[r["rule_id"]]["confirm_seconds"]   # existing default
         for i in r["inputs"]:
             ref = roles[i["role"]]                                    # every input is a roles-file role, exactly
-            assert i["legacy_key"] in ref["legacy_keys"], (r["rule_id"], i)
+            assert i["legacy_key"] == ref["role"] or i["legacy_key"] in (ref.get("legacy_keys") or []), (r["rule_id"], i)
             assert i["unit"] == (ref["unit"].split(":", 1)[1] if ref["unit"] else None)   # QUDT local name
             assert i["value_type"] == ref["value_type"]
             assert i["unit_display"] == (units[ref["unit"]]["haystack"] if ref["unit"] else None)

@@ -21,7 +21,7 @@ const MODEL = [
   { uuid: "e", name: "BLR-1", pointType: "EQUIPMENT", attrs: { id: "BLR-1", siteRef: "site-a", markers: "equip,boiler" } },
 ];
 const PUMP = pt("u-PUMP", "HW-PUMP-S", ["pump", "run", "sensor"], { equipRef: "BLR-1", unit: "" });
-const WEB = pt("u-WEB", "oa_dry_bulb_web", ["weather", "outside", "air", "temp"], { unit: "degF" });
+const WEB = pt("u-WEB", "oa_dry_bulb_web", ["weather", "outside", "air", "temp", "sensor"], { unit: "degF" });
 
 function http(points) {
   const writes = { points: [], data: [] };

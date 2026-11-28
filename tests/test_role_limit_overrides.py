@@ -22,19 +22,19 @@ from open_fdd.rules import sensor_sweep_catalog as cat  # noqa: E402
 
 FIXTURE = ROOT / "nf-app" / "tests" / "fixtures" / "role-limit-overrides.json"
 CASES = [
-    {"name": "site only", "site": {"version": 1, "roles": {"zone-air-temp": {"lo": 12.0, "hi": 30.0}, "outside-air-temp": {"rate_per_h": 5.5}}}, "equipment": None},
-    {"name": "site + equipment", "site": {"version": 1, "roles": {"zone-air-temp": {"lo": 12.0, "hi": 30.0}}},
-     "equipment": {"version": 1, "roles": {"zone-air-temp": {"hi": 26.6666667}, "zone-air-humidity": {"flat_tol": 0.2, "stale_tol": 0.07},
-                                          "discharge-air-temp": {"spike_delta": 8.3333333, "flat_tol": 0.1}, "duct-static-pressure": {"lo": -50.0, "hi": 1500.123456789}}}},
+    {"name": "site only", "site": {"version": 1, "roles": {"zone_air_temperature": {"lo": 12.0, "hi": 30.0}, "outdoor_air_intake_temperature": {"rate_per_h": 5.5}}}, "equipment": None},
+    {"name": "site + equipment", "site": {"version": 1, "roles": {"zone_air_temperature": {"lo": 12.0, "hi": 30.0}}},
+     "equipment": {"version": 1, "roles": {"zone_air_temperature": {"hi": 26.6666667}, "zone_air_relative_humidity": {"flat_tol": 0.2, "stale_tol": 0.07},
+                                          "discharge_air_temperature": {"spike_delta": 8.3333333, "flat_tol": 0.1}, "discharge_air_static_pressure": {"lo": -50.0, "hi": 1500.123456789}}}},
     {"name": "equipment only, default-equal tolerance", "site": None,
-     "equipment": {"version": 1, "roles": {"mixed-air-temp": {"flat_tol": 0.055556, "rate_per_h": 3.333333}, "chw-flow": {"hi": 63.0902}}}},
+     "equipment": {"version": 1, "roles": {"mixed_air_temperature": {"flat_tol": 0.055556, "rate_per_h": 3.333333}, "chilled_water_volume_flow_rate": {"hi": 63.0902}}}},
     # #1763: per-sensor values (two points of one role, one with its own limits; a site sensor field under an equipment one)
-    {"name": "sensor overrides", "site": {"version": 1, "roles": {"zone-air-temp": {"hi": 30.0}},
-                                          "sensors": {"zat-2": {"role": "zone-air-temp", "lo": 15.0, "flat_tol": 0.2}}},
+    {"name": "sensor overrides", "site": {"version": 1, "roles": {"zone_air_temperature": {"hi": 30.0}},
+                                          "sensors": {"zat-2": {"role": "zone_air_temperature", "lo": 15.0, "flat_tol": 0.2}}},
      "equipment": {"version": 1, "roles": {},
-                   "sensors": {"zat-2": {"role": "zone-air-temp", "hi": 26.0, "rate_per_h": 4.0},
-                               "rh-9": {"role": "zone-air-humidity", "flat_tol": 0.5},
-                               "dat-1": {"role": "discharge-air-temp", "spike_delta": 5.0}}}},
+                   "sensors": {"zat-2": {"role": "zone_air_temperature", "hi": 26.0, "rate_per_h": 4.0},
+                               "rh-9": {"role": "zone_air_relative_humidity", "flat_tol": 0.5},
+                               "dat-1": {"role": "discharge_air_temperature", "spike_delta": 5.0}}}},
 ]
 
 
@@ -60,6 +60,11 @@ def test_imperial_round_trip_absolute_difference_and_rate_are_separate_conversio
     assert o.to_si(1.8, "degF", q, "rate_per_h") == pytest.approx(1.0)
     assert o.to_si(1.0, "inH2O", "air_pressure", "hi") == pytest.approx(249.0889)
     assert o.to_si(1.0, "cfm", "volume_flow", "hi") == pytest.approx(0.4719474)
+    assert o.to_si(1.0, "L/sec", "volume_flow", "hi") == pytest.approx(1.0)
+    assert o.to_si(1.0, "L-PER-SEC", "volume_flow", "hi") == pytest.approx(1.0)
+    assert o.to_si(1.0, "FT3-PER-MIN", "volume_flow", "hi") == pytest.approx(0.4719474)
+    assert o.to_si(1.0, "in h₂0", "air_pressure", "hi") == pytest.approx(249.0889)
+    assert o.to_si(1.0, "PERCENT_RH", "relative_humidity", "hi") == pytest.approx(1.0)
     assert o.to_si(1.0, "gpm", "volume_flow", "hi") == pytest.approx(0.0630902)
     for q, unit in (("absolute_temperature", "degF"), ("air_pressure", "inH2O"), ("volume_flow", "cfm"), ("volume_flow", "gpm"), ("relative_humidity", "%RH")):
         for field in o.FIELD_KIND:
@@ -82,28 +87,28 @@ def test_unit_factors_match_the_canonical_table_and_the_js_twin():
 
 def test_invalid_overrides_are_rejected():
     with pytest.raises(ValueError, match="lo .* must be < hi"):
-        o.effective_role_limits(site={"version": 1, "roles": {"zone-air-temp": {"lo": 30.0, "hi": 20.0}}})
+        o.effective_role_limits(site={"version": 1, "roles": {"zone_air_temperature": {"lo": 30.0, "hi": 20.0}}})
     with pytest.raises(ValueError, match="> 0"):
-        o.effective_role_limits(site={"version": 1, "roles": {"zone-air-temp": {"spike_delta": 0.0}}})
-    for bad in ({"version": 2, "roles": {}}, {"version": 1, "roles": {"nope": {"lo": 1.0}}}, {"version": 1, "roles": {"zone-air-temp": {"source": 1.0}}},
-                {"version": 1, "roles": {"zone-air-temp": {"lo": float("inf")}}}, {"version": 1, "roles": {"zone-air-temp": {"lo": True}}},
-                {"version": 1, "roles": {"zone-air-temp": {}}}, {"version": 1, "roles": []}):
+        o.effective_role_limits(site={"version": 1, "roles": {"zone_air_temperature": {"spike_delta": 0.0}}})
+    for bad in ({"version": 2, "roles": {}}, {"version": 1, "roles": {"nope": {"lo": 1.0}}}, {"version": 1, "roles": {"zone_air_temperature": {"source": 1.0}}},
+                {"version": 1, "roles": {"zone_air_temperature": {"lo": float("inf")}}}, {"version": 1, "roles": {"zone_air_temperature": {"lo": True}}},
+                {"version": 1, "roles": {"zone_air_temperature": {}}}, {"version": 1, "roles": []}):
         with pytest.raises(ValueError):
             o.normalize_override(bad)
     # equipment layer over an invalid combination with the site layer
     with pytest.raises(ValueError):
-        o.effective_role_limits(site={"version": 1, "roles": {"zone-air-temp": {"lo": 20.0}}}, equipment={"version": 1, "roles": {"zone-air-temp": {"hi": 19.0}}})
+        o.effective_role_limits(site={"version": 1, "roles": {"zone_air_temperature": {"lo": 20.0}}}, equipment={"version": 1, "roles": {"zone_air_temperature": {"hi": 19.0}}})
 
 
 def test_scope_precedence_and_sources():
-    doc, sources = o.merge(None, {"version": 1, "roles": {"zone-air-temp": {"lo": 12.0, "hi": 30.0}}},
-                           {"version": 1, "roles": {"zone-air-temp": {"hi": 27.0}}}, {"site": 4, "equipment": 2})
-    zat = next(e for e in doc["roles"] if e["role"] == "zone-air-temp")
+    doc, sources = o.merge(None, {"version": 1, "roles": {"zone_air_temperature": {"lo": 12.0, "hi": 30.0}}},
+                           {"version": 1, "roles": {"zone_air_temperature": {"hi": 27.0}}}, {"site": 4, "equipment": 2})
+    zat = next(e for e in doc["roles"] if e["role"] == "zone_air_temperature")
     assert (zat["lo"], zat["hi"]) == (12.0, 27.0)
-    assert sources["zone-air-temp"]["lo"] == "site"
-    assert sources["zone-air-temp"]["hi"] == "equipment"
-    assert sources["zone-air-temp"]["spike_delta"] == "shipped"
-    assert sources["mixed-air-temp"]["lo"] == "shipped"
+    assert sources["zone_air_temperature"]["lo"] == "site"
+    assert sources["zone_air_temperature"]["hi"] == "equipment"
+    assert sources["zone_air_temperature"]["spike_delta"] == "shipped"
+    assert sources["mixed_air_temperature"]["lo"] == "shipped"
     assert zat["source"] == "equipment override revision 2"
     shipped = cat.load_role_limits()
     assert o.effective_role_limits()["roles"] == shipped["roles"], "no overrides = the shipped limits"
@@ -118,9 +123,9 @@ def test_reset_is_an_empty_override_and_renders_the_shipped_sql():
 
 
 def test_saved_overrides_reach_the_rendered_sql():
-    limits = o.effective_role_limits(site={"version": 1, "roles": {"zone-air-temp": {"lo": 12.0, "hi": 30.0}}})
+    limits = o.effective_role_limits(site={"version": 1, "roles": {"zone_air_temperature": {"lo": 12.0, "hi": 30.0}}})
     sql = render_rule.render("SV-RANGE", role_limits=limits)
-    assert "(sensor_role = 'zone_t' AND (value < (21.0 - 9.0 * 1) OR value > (21.0 + 9.0 * 1)))" in sql
+    assert "(sensor_role = 'zone_air_temperature' AND (value < (21.0 - 9.0 * 1) OR value > (21.0 + 9.0 * 1)))" in sql
     assert sql != render_rule.render("SV-RANGE")
 
 
@@ -171,16 +176,16 @@ class _Cursor:
 
 def test_store_appends_revisions_resets_and_rolls_back():
     cur = _Cursor()
-    assert o.save_override(cur, "s1", "site", {"version": 1, "roles": {"zone-air-temp": {"hi": 30.0}}}, "t") == 1
+    assert o.save_override(cur, "s1", "site", {"version": 1, "roles": {"zone_air_temperature": {"hi": 30.0}}}, "t") == 1
     with pytest.raises(ValueError):
-        o.save_override(cur, "s1", "equip:A", {"version": 1, "roles": {"zone-air-temp": {"lo": 31.0}}}, "t")   # over the site's 30
+        o.save_override(cur, "s1", "equip:A", {"version": 1, "roles": {"zone_air_temperature": {"lo": 31.0}}}, "t")   # over the site's 30
     assert len(cur.rows) == 1, "an invalid override is never stored"
-    assert o.save_override(cur, "s1", "site", {"version": 1, "roles": {"zone-air-temp": {"hi": 28.0}}}, "t") == 2
+    assert o.save_override(cur, "s1", "site", {"version": 1, "roles": {"zone_air_temperature": {"hi": 28.0}}}, "t") == 2
     assert o.reset_override(cur, "s1", "site", "t") == 3
     assert o.rollback_override(cur, "s1", "site", 1, "t") == 4
     active = o.active_overrides(cur, "s1")
     assert active["site"]["revision"] == 4
-    assert active["site"]["parameters"]["roles"] == {"zone-air-temp": {"hi": 30.0}}
+    assert active["site"]["parameters"]["roles"] == {"zone_air_temperature": {"hi": 30.0}}
     assert active["site"]["parameters"]["rollback_of"] == 1
     assert [r["active"] for r in cur.rows] == [False, False, False, True]
     with pytest.raises(ValueError):

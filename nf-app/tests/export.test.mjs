@@ -338,16 +338,16 @@ test("exportCandidates isolates single equip, separates per-sensor faults, inclu
     ],
     devices: [],
     points: [
-      { uuid: "sat", name: "SAT", dis: "Supply Air Temp", kind: "Number", units: "°F", tags: ["point", "sensor", "his"], siteRef: "site-a", equipRef: "ahu-1" },
-      { uuid: "sat-2", name: "SAT2", dis: "Supply Air Temp", kind: "Number", units: "°F", tags: ["point", "sensor", "his"], siteRef: "site-a", equipRef: "ahu-1" },
+      { uuid: "discharge_air_temperature", name: "SAT", dis: "Supply Air Temp", kind: "Number", units: "°F", tags: ["point", "sensor", "his"], siteRef: "site-a", equipRef: "ahu-1" },
+      { uuid: "discharge_air_temperature-2", name: "SAT2", dis: "Supply Air Temp", kind: "Number", units: "°F", tags: ["point", "sensor", "his"], siteRef: "site-a", equipRef: "ahu-1" },
       { uuid: "mode", name: "Mode", dis: "Mode", kind: "String", units: "", tags: ["point", "his"], siteRef: "site-a", equipRef: "ahu-1" },
       { uuid: "fan", name: "Fan", dis: "Fan Status", kind: "Bool", units: "", tags: ["point", "sensor", "his"], siteRef: "site-a", equipRef: "ahu-1" },
       { uuid: "cur-only", name: "CurOnly", dis: "Manual Override", kind: "Bool", units: "", tags: ["point", "cmd"], siteRef: "site-a", equipRef: "ahu-1" },
       { uuid: "oat-w", name: "OAT", dis: "Weather OAT", kind: "Number", units: "°F", tags: ["point", "weather", "his"], siteRef: "site-a", weatherStationRef: "ws-1" },
       { uuid: "wrong-eq", name: "Other", dis: "Other SAT", kind: "Number", units: "°F", tags: ["point", "sensor", "his"], siteRef: "site-a", equipRef: "ahu-2" },
       { uuid: "wrong-site", name: "BadSite", dis: "Bad Site", kind: "Number", units: "°F", tags: ["point", "sensor", "his"], siteRef: "site-b", equipRef: "ahu-1" },
-      { uuid: "tl-1", name: "TL1", dis: "SV-RANGE timeline", kind: "Number", units: "", tags: ["point", "his", "fault_timeline"], siteRef: "site-a", equipRef: "ahu-1", rec: { attrs: { ruleRef: "SV-RANGE", sensorRef: "sat" } } },
-      { uuid: "tl-2", name: "TL2", dis: "SV-RANGE timeline", kind: "Number", units: "", tags: ["point", "his", "fault_timeline"], siteRef: "site-a", equipRef: "ahu-1", rec: { attrs: { ruleRef: "SV-RANGE", sensorRef: "sat-2" } } },
+      { uuid: "tl-1", name: "TL1", dis: "SV-RANGE timeline", kind: "Number", units: "", tags: ["point", "his", "fault_timeline"], siteRef: "site-a", equipRef: "ahu-1", rec: { attrs: { ruleRef: "SV-RANGE", sensorRef: "discharge_air_temperature" } } },
+      { uuid: "tl-2", name: "TL2", dis: "SV-RANGE timeline", kind: "Number", units: "", tags: ["point", "his", "fault_timeline"], siteRef: "site-a", equipRef: "ahu-1", rec: { attrs: { ruleRef: "SV-RANGE", sensorRef: "discharge_air_temperature-2" } } },
       { uuid: "sum-1", name: "SUM1", dis: "SV-RANGE", kind: "Number", units: "h", tags: ["point", "his", "fdd", "fault"], siteRef: "site-a", equipRef: "ahu-1", rec: { attrs: { ruleRef: "SV-RANGE", fddOutput: "fault_hours", fddOutputSince: "2026-11-05T12:15:00Z" } } },
     ],
   };
@@ -368,7 +368,7 @@ test("exportCandidates isolates single equip, separates per-sensor faults, inclu
 
 test("collectJoined + toJoinedCsv join exact raw timestamps, preserve types/0/false, neutralize formulas, enforce fddOutputSince", async () => {
   const columns = [
-    { uuid: "sat", equip: "AHU-1", dis: "SAT", unit: "°F", kind: "Number", historyAvailable: true, point: { uuid: "sat", kind: "Number", tags: ["point", "his"] } },
+    { uuid: "discharge_air_temperature", equip: "AHU-1", dis: "SAT", unit: "°F", kind: "Number", historyAvailable: true, point: { uuid: "discharge_air_temperature", kind: "Number", tags: ["point", "his"] } },
     { uuid: "mode", equip: "AHU-1", dis: "Mode", unit: "", kind: "String", historyAvailable: true, point: { uuid: "mode", kind: "String", tags: ["point", "his"] } },
     { uuid: "fan", equip: "AHU-1", dis: "Fan", unit: "", kind: "Bool", historyAvailable: true, point: { uuid: "fan", kind: "Bool", tags: ["point", "his"] } },
     { uuid: "cur", equip: "AHU-1", dis: "CurOnly", unit: "", kind: "Bool", historyAvailable: false, point: { uuid: "cur", kind: "Bool", tags: ["point"] } },
@@ -378,7 +378,7 @@ test("collectJoined + toJoinedCsv join exact raw timestamps, preserve types/0/fa
     assert.ok(!url.includes("window="), "raw join must omit window=");
     return {
       data: [
-        { uuid: "sat", values: [{ ts: new Date(t(12)).toISOString(), double: 0 }, { ts: new Date(t(12, 15)).toISOString(), double: 72.5 }] },
+        { uuid: "discharge_air_temperature", values: [{ ts: new Date(t(12)).toISOString(), double: 0 }, { ts: new Date(t(12, 15)).toISOString(), double: 72.5 }] },
         { uuid: "mode", values: [{ ts: new Date(t(12)).toISOString(), characterString: "=CMD()" }, { ts: new Date(t(12, 15)).toISOString(), characterString: "COOL" }] },
         { uuid: "fan", values: [{ ts: new Date(t(12)).toISOString(), boolean: false }, { ts: new Date(t(12, 15)).toISOString(), boolean: true }] },
         { uuid: "sum", values: [{ ts: new Date(t(12)).toISOString(), double: 99 }, { ts: new Date(t(12, 15)).toISOString(), double: 0.25 }] },
@@ -424,28 +424,28 @@ test("collectJoined fills older uncovered range from Timescale and surfaces trun
   const midMs = Date.UTC(2026, 10, 4, 0, 0);
   const endMs = Date.UTC(2026, 10, 5, 0, 0);
   const cols = [
-    { uuid: "sat", equip: "AHU-1", dis: "SAT", unit: "°F", kind: "Number", historyAvailable: true, point: { uuid: "sat", kind: "Number", tags: ["point", "his"] } },
+    { uuid: "discharge_air_temperature", equip: "AHU-1", dis: "SAT", unit: "°F", kind: "Number", historyAvailable: true, point: { uuid: "discharge_air_temperature", kind: "Number", tags: ["point", "his"] } },
     { uuid: "mode", equip: "AHU-1", dis: "Mode", unit: "", kind: "String", historyAvailable: true, point: { uuid: "mode", kind: "String", tags: ["point", "his"] } },
   ];
   const apiFn = async () => ({
-    data: [{ uuid: "sat", values: [{ ts: new Date(midMs).toISOString(), double: 72 }] }],
+    data: [{ uuid: "discharge_air_temperature", values: [{ ts: new Date(midMs).toISOString(), double: 72 }] }],
   });
   const timescaleFn = async ({ uuids, fromMs, toMs }) => {
-    assert.deepEqual(uuids, ["sat"]);
+    assert.deepEqual(uuids, ["discharge_air_temperature"]);
     assert.equal(fromMs, startMs);
     assert.equal(toMs, midMs);
     return {
       ok: true,
       bucket: "5 minutes",
-      rows: [{ point_uuid: "sat", bucket: new Date(startMs).toISOString(), avg: 68.5, max: 69, n: 1 }],
+      rows: [{ point_uuid: "discharge_air_temperature", bucket: new Date(startMs).toISOString(), avg: 68.5, max: 69, n: 1 }],
     };
   };
   const res = await X.collectJoined({ columns: cols, startMs, endMs, apiFn, timescaleFn });
   assert.equal(res.mode, "mixed");
   assert.equal(res.timescaleUsed, true);
   assert.deepEqual(res.timescaleSkippedCols, ["Mode"]);
-  assert.equal(res.data.get("sat").get(startMs), 68.5);
-  assert.equal(res.data.get("sat").get(midMs), 72);
+  assert.equal(res.data.get("discharge_air_temperature").get(startMs), 68.5);
+  assert.equal(res.data.get("discharge_air_temperature").get(midMs), 72);
 
   await assert.rejects(
     X.collectJoined({

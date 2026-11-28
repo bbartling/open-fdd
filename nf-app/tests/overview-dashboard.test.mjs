@@ -71,7 +71,7 @@ test("FDD plot shading: fault spans and equipment-off spans become mark areas on
   assert.equal(option.series[0].markArea.data.length, 2, "one off span + one fault span");
   assert.ok(!option.series[1].markArea, "once per grid");
   assert.equal(option.series[2].markArea.data.length, 2);
-  const built = ctx.fddPlotRuleOption({ title: "t", groups: [{ family: "temp", unit: "°C", series: [{ name: "sat (°C)", data: [[0, 1]] }] }] });
+  const built = ctx.fddPlotRuleOption({ title: "t", groups: [{ family: "temp", unit: "°C", series: [{ name: "discharge_air_temperature (°C)", data: [[0, 1]] }] }] });
   assert.equal(built.option.legend.show, false, "no legend");
   assert.equal(built.option.series[0].endLabel.show, true, "lines are labelled directly");
 });
