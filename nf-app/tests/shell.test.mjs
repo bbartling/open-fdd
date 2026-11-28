@@ -94,7 +94,8 @@ test("nav: no RCx or Points tab; Overview holds the Points section (its only dev
   assert.ok(!/data-tab="(rcx|points)"/.test(nav), "the RCx and Points tabs are gone");
   assert.ok(!/id="tab-(rcx|points)"/.test(html));
   const ov = html.slice(html.indexOf('id="tab-overview"'), html.indexOf("<!-- Charts"));
-  for (const id of ["overviewPoints", "overviewPointsScope", "pointRows", "pointFilter", "histChart", "cards", "overviewIoRows", "nPoints"]) assert.match(ov, new RegExp(`id="${id}"`), id);
+  for (const id of ["overviewPoints", "overviewPointsScope", "pointRows", "pointFilter", "histChart", "cards", "overviewIoRows"]) assert.match(ov, new RegExp(`id="${id}"`), id);
+  assert.ok(!/id="nPoints"/.test(ov), "the Point data heading has no bare count");
   if (edition === "full") {
     for (const id of ["overviewRcx", "rcxBody", "rcxKpis", "rcxAhuOn", "rcxRangeControl"]) assert.match(ov, new RegExp(`id="${id}"`), id);
     assert.match(ov, /id="overviewRcx" hidden/, "the dashboard is hidden until a panel draws");
@@ -198,6 +199,98 @@ test("weather mirror: this edition's copy of the hook mirrors to the BACnet serv
   assert.equal(hook.OFDD_EDITION, edition);
   const src = readFileSync(new URL(edition === "full" ? "../hooks/weather.js" : "../../lite/hooks/open_meteo_weather.js", import.meta.url), "utf8");
   assert.match(src, /listed === undefined \? \[\{ id: 'bacnet-av', explicit: false \}\]/, "bacnet-av is the default exporter (when NF's BACnet server is present)");
+});
+
+test("nav order and labels: Overview, Charts, then the rest of the canonical sequence", () => {
+  const html = text("index.html");
+  const nav = html.slice(html.indexOf('<nav class="tabs"'), html.indexOf("</nav>"));
+  const CANON = ["overview", "charts", "analytics", "fdd", "bacnet", "export", "model"];
+  const LABELS = {
+    overview: "Overview", charts: "Charts", analytics: "Analytics", fdd: "Fault detection",
+    bacnet: "Backend server", export: "Export", model: "Model/RDF",
+  };
+  const buttons = [...nav.matchAll(/<button data-tab="([^"]+)"[^>]*>([\s\S]*?)<\/button>/g)];
+  const ids = buttons.map((m) => m[1]);
+  if (edition === "full") assert.deepEqual(ids, CANON);
+  else {
+    let at = 0;
+    for (const id of ids) {
+      while (at < CANON.length && CANON[at] !== id) at += 1;
+      assert.ok(at < CANON.length, `${id} is not in the canonical order`);
+      at += 1;
+    }
+    assert.deepEqual(ids, ["overview", "charts", "bacnet", "model"]);
+  }
+  for (const [, id, inner] of buttons) {
+    assert.equal(inner.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim(), LABELS[id]);
+  }
+  const sections = [...html.matchAll(/id="tab-([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(sections, ids, "section order matches the nav");
+  assert.match(html, /DuckDB backend/);
+  assert.doesNotMatch(html, /DuckDB build|Timescale build/);
+});
+
+test("overview point list is sensors and process points, not fault or timeline outputs", () => {
+  const ctx = load();
+  const m = modelFor(ctx);
+  m.points.push(ctx.toPoint(pt("TL", { equipRef: "VAV-A", dis: "SV-RANGE timeline", markers: "point,his,fault_timeline", ruleRef: "SV-RANGE" })));
+  ctx.assignedModel = m;
+  ctx.document = {
+    getElementById(id) {
+      if (id === "showUntagged") return { checked: false };
+      if (id === "pointFilter") return { value: "" };
+      return null;
+    },
+  };
+  vm.runInContext('model = assignedModel; scope.site = "site-a"; overviewSelection = { site: "site-a", equipId: "VAV-A", mode: "manual", reason: "" };', ctx);
+  const names = ctx.pointRows().map((p) => p.dis);
+  assert.ok(names.includes("Zone temp"));
+  assert.ok(names.includes("Damper position"));
+  assert.ok(names.includes("Web outside air temp"));
+  assert.ok(!names.some((n) => /fault|timeline/i.test(n)));
+});
+
+test("overview totals count sensors and process points, not fault or timeline outputs", () => {
+  const ctx = load();
+  const m = modelFor(ctx);
+  m.points.push(ctx.toPoint(pt("TL2", { equipRef: "VAV-A", dis: "SV-RANGE timeline", markers: "point,his,fault_timeline", ruleRef: "SV-RANGE" })));
+  ctx.assignedModel = m;
+  vm.runInContext('model = assignedModel; scope.site = "site-a";', ctx);
+  const all = vm.runInContext("taggedOnSite().length", ctx);
+  const counted = vm.runInContext("countedTaggedOnSite().length", ctx);
+  const diag = m.points.filter((p) => ctx.isDiagnosticPoint(p) && p.siteRef === "site-a").length;
+  assert.ok(diag >= 4, "the fixture has fault, FDD and timeline points");
+  assert.equal(counted, all - diag, "the header and the Overview tile skip diagnostic points");
+  assert.match(text("app-core.js"), /stat\(tagged\.length, "tagged points"\)/);
+  assert.match(text("app-core.js"), /const tagged = countedTaggedOnSite\(\);/);
+});
+
+test("the backend badge poll asks for run logs, where the schema hook writes its result", () => {
+  const src = text("version.js");
+  assert.match(src, /hooks\/schema\/runs\?page_size=5&include_results=true&include_logs=true/);
+});
+test("model tree links devices by equipRef or point deviceRef and hides diagnostic points", () => {
+  const ctx = load();
+  const m = modelFor(ctx);
+  m.devices = [rec("dev-1", "DEVICE", { id: "dev-1", dis: "Controller", markers: "device" })];
+  const sensor = m.points.find((p) => p.uuid === "u-ZN-T");
+  sensor.deviceRef = "dev-1";
+  m.points.push(ctx.toPoint(pt("ORPH", { equipRef: "VAV-A", deviceRef: "dev-missing", dis: "Orphan sensor", markers: "point,sensor,zone,temp,his" })));
+  ctx.assignedModel = m;
+  vm.runInContext('model = assignedModel; scope.site = "site-a";', ctx);
+  const flat = [];
+  const walk = (n) => { flat.push(n); (n.children || []).forEach(walk); };
+  walk(ctx.buildTree());
+  const deviceNames = flat.filter((n) => n.kind === "device").map((n) => n.name);
+  assert.ok(deviceNames.some((n) => n.startsWith("dev-1")), deviceNames.join(" | "));
+  assert.ok(deviceNames.some((n) => n.startsWith("dev-missing")), deviceNames.join(" | "));
+  const joined = flat.map((n) => n.name).join("\n");
+  assert.doesNotMatch(joined, /SV-RANGE|fault flag|timeline/);
+  assert.match(joined, /zone air temp/);
+  const fault = m.points.find((p) => p.uuid === "u-FDD-F1");
+  const ttl = ctx.modelToTurtle({ sites: m.sites, equips: m.equips, devices: m.devices, points: m.points }, "urn:nf:");
+  assert.match(ttl.turtle, /SV-RANGE|ruleRef/);
+  assert.equal(ctx.isDiagnosticPoint(fault), true);
 });
 
 test("FDD hook result points are outputs: never in All signals, the heat-map dropdown, cards or lanes; no two series share a name", () => {

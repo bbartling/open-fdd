@@ -9,6 +9,11 @@ test("the DuckDB build page names DuckDB and does not ship a WASM engine", () =>
   const build = JSON.parse(readFileSync(new URL("../static/engine-build.json", import.meta.url), "utf8"));
   assert.equal(build.id, "duckdb");
   assert.equal(build.library, "@duckdb/node-api");
-  assert.match(html, /id="engineBuild"[^>]*>DuckDB build</);
+  assert.match(html, /id="engineBuild"[^>]*>DuckDB backend</);
+  assert.doesNotMatch(html, /DuckDB build|Timescale build|Open-FDD Lite|>Full</);
+  const version = readFileSync(new URL("../../shared/static/version.js", import.meta.url), "utf8");
+  assert.ok(version.indexOf("whenAuthReady") < version.indexOf("hooks/schema"), "schema runs after auth");
+  assert.match(version, /open-fdd-lite/);
+  assert.match(version, /engine_label/);
   assert.doesNotMatch(html, /duckdb-wasm|sql-wasm|SQLite|PGlite/);
 });

@@ -18,6 +18,15 @@ function loadScript(src, attrs = {}) {
 // Through Normal Online the console signs every API call with a short-lived
 // Clerk JWT (template "ConsoleJWT"); cookies alone get a 401. platform/info
 // is open and says which identity provider this NF uses, so do the same.
+/** One in-flight sign-in. The header probe and main() share it, so the probe is not a 401. */
+let authReady = null;
+function whenAuthReady() {
+  if (!authReady) {
+    authReady = initAuth().catch((err) => { authReady = null; throw err; });
+  }
+  return authReady;
+}
+
 async function initAuth() {
   const r = await fetch("/api/v1/platform/info", { credentials: "same-origin" });
   if (!r.ok) throw new Error(`/api/v1/platform/info → HTTP ${r.status} (sign in to the portal first)`);

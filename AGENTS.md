@@ -25,12 +25,17 @@ rules), [#1833](https://github.com/bbartling/open-fdd/issues/1833) (P2 data mode
 [#1834](https://github.com/bbartling/open-fdd/issues/1834) (P3 NF plugin and UI) and
 [#1835](https://github.com/bbartling/open-fdd/issues/1835) (Future). Add new items to the matching bucket instead of
 opening a new issue.
+
+## Deployment backends
+
+Open-FDD is one product with two storage backends. DuckDB is recommended for single-building deployments (edge, Raspberry Pi, embedded). Timescale is recommended for multi-site, campus or portfolio deployments. Do not reintroduce Lite or Full as product names. The install id `open-fdd-lite`, the `lite/` tree and `APP_ID` stay so existing installs keep working.
+
 ## Layout
 
 | Path | What |
 |---|---|
-| `nf-app/` | The full app: `app.json`, `static/` UI, `hooks/` (`fdd`, `weather`, `sparql`), `rules/` (SQL packs), `rcx-parity.json`, `dev/mock-nf.mjs`, `tests/` |
-| `lite/` | Open-FDD Lite for 1 GB boxes. Hourly FDD on Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`) and the `sparql` hook (`oxigraph` `0.5.13`) |
+| `nf-app/` | Timescale-capable install (app id `open-fdd`): `app.json`, `static/` UI, `hooks/` (`fdd`, `weather`, `sparql`), `rules/` (SQL packs), `rcx-parity.json`, `dev/mock-nf.mjs`, `tests/` |
+| `lite/` | DuckDB install (app id `open-fdd-lite`, kept so existing installs keep working). Hourly FDD on Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`) and the `sparql` hook (`oxigraph` `0.5.13`) |
 | `sql/fdd/` | The FDD math (83 SQL rules in `nf-app/static/fdd-catalog.json`, registry, role map). Packs in `nf-app/rules/` are generated from it. The shipped runtimes are Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`, Parquet history) and Timescale. pandas must match SQL except `open_fdd/data/parity_known_differences.json`. `duckdb>=2.0.1` is a test and parity dependency only |
 | `sql/analytics/` | Read-only analytics SQL. Pandas twins: `open_fdd/analytics/sql_*.py` |
 | `roles/` | Point-role contract `roles/openfdd-roles.json` (`1.1.0-draft.1`). 223P names are the core; Haystack is the binding overlay. QUDT local names (`DEG_C`, `PA`, …) are the wire units |
@@ -80,7 +85,7 @@ PyPI tooling uses pandas for faults. `duckdb>=2.0.1` stays only as a test and pa
    (`@duckdb/node-api` 2.0.1-r.1, Parquet history) and Timescale run the Postgres pack. `auto` picks DuckDB unless
    Timescale is configured. A saved option named `sqlite` or `pglite` fails and names `duckdb`. Parity compares pandas
    with Node DuckDB and, when a server is configured, Timescale. If `@duckdb/node-api` does not load, the run stops.
-   The badge in the plugin header is `DuckDB build` or `Timescale build`. Sensor sweeps
+   The badge in the plugin header is `DuckDB backend` or `Timescale backend`, from the resolved engine. Sensor sweeps
    (`SV-RANGE`, `SV-SPIKE`, `SV-FLATLINE`, `SV-STALE`, `SV-RATE`) return one row per sensor.
 6. **Small PR slices** (one concern each, easy for a small model to review). Update the docs page that describes
    what you changed; `docs/rules/*.md` is generated. See Docs style below.
@@ -93,7 +98,7 @@ The GitHub Pages site is five short sections, rules first. `scripts/check_pages.
 |---|---|---|
 | 1 | **Rules** | SQL and pandas cookbooks, using SQL rules outside Open-FDD, parity and the parity harness, [testing and parity](docs/testing-parity.md), writing SQL rules |
 | 2 | **Data model** | Haystack roles bind points to rule inputs; SI units; RDF and SPARQL |
-| 3 | **Lite vs Full** | The two NF app editions, charts and export |
+| 3 | **DuckDB vs Timescale** | The two storage backends, charts and export |
 | 4 | **Normal Framework** | Short install and usage notes that link to the official NF docs; API reference |
 | 5 | **Legacy** | One paragraph: earlier deployments are unsupported |
 

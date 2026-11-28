@@ -7,9 +7,7 @@ const COLORS = {
   site: "#b5179e", equip: "#f8961e", device: "#4361ee", sensor: "#43aa8b", sp: "#f9c74f",
   cmd: "#f94144", weather: "#4cc9f0", bacnet: "#90be6d", other: "#577590",
 };
-const GENERIC = new Set(["point", "his", "cur", "writable"]);
 const REF_KEYS = ["siteRef", "equipRef", "deviceRef", "weatherStationRef"];
-const markersOf = (r) => ((r.attrs || {}).markers || "").split(",").filter(Boolean);
 const fmtVal = (r) => {
   const lv = r.latestValue || {};
   const v = lv.double ?? lv.real;
@@ -93,16 +91,17 @@ const groupNode = (name, kind, children) => ({
 });
 
 function buildTree(model, points, bacnet) {
-  const ref = (r, k) => (r.attrs || {})[k] || "";
-  const idOf = (r) => ref(r, "id") || r.name;
+  const ref = (r, k) => refId((r.attrs || {})[k] || "");
+  const idOf = (r) => refId(ref(r, "id") || r.name);
+  points = (points || []).filter((p) => !isDiagnosticPoint(p));
   const roots = model.sites.map((site) => {
     const sid = idOf(site);
     const onSite = points.filter((p) => ref(p, "siteRef") === sid);
     const equipNodes = model.equips.filter((e) => ref(e, "siteRef") === sid).map((equip) => {
-      const eid = idOf(equip);
-      const eqPts = onSite.filter((p) => ref(p, "equipRef") === eid);
-      const devs = model.devices.filter((d) => ref(d, "equipRef") === eid);
-      const devNodes = devs.map((d) => {
+      const keys = new Set(equipKeys(equip));
+      const eqPts = onSite.filter((p) => keys.has(ref(p, "equipRef")));
+      const devs = devicesForEquip(equip, model.devices, onSite);
+      const devNodes = devs.map(({ rec: d }) => {
         const did = idOf(d);
         const mine = eqPts.filter((p) => ref(p, "deviceRef") === did);
         const internals = onSite.filter((p) => ref(p, "deviceRef") === did && !ref(p, "equipRef"));
@@ -120,7 +119,8 @@ function buildTree(model, points, bacnet) {
         }
         return entityNode(d, "device", kids, idOf(d));
       });
-      const loose = eqPts.filter((p) => !devs.some((d) => ref(p, "deviceRef") === idOf(d))).map(pointNode);
+      const devIds = new Set(devs.map(({ rec }) => idOf(rec)));
+      const loose = eqPts.filter((p) => !devIds.has(ref(p, "deviceRef"))).map(pointNode);
       return entityNode(equip, "equip", [...devNodes, ...loose]);
     });
     const stations = [...new Set(onSite.map((p) => ref(p, "weatherStationRef")).filter(Boolean))].map((ws) => {
@@ -164,12 +164,12 @@ function showDetail(node) {
 }
 
 async function main() {
-  await initAuth();
+  await whenAuthReady();
   const recs = await queryAll({ layer: "model" });
   const model = {
     sites: recs.filter((r) => r.pointType === "SITE"),
     equips: recs.filter((r) => r.pointType === "EQUIPMENT"),
-    devices: recs.filter((r) => r.pointType === "DEVICE"),
+    devices: recs.filter(isDeviceRecord),
   };
   if (!model.sites.length) throw new Error("no Haystack site in this NF's model layer");
   // Merged layer: every point on any modeled site, with tags + latest value.
@@ -200,8 +200,13 @@ async function main() {
 
 let root = null;
 
-function drawTree() {
-  const chart = ofddChart($("tree"));
+function drawTree(tries) {
+  const el = $("tree");
+  if (el && el.clientWidth < 8 && (tries || 0) < 30) {
+    requestAnimationFrame(() => drawTree((tries || 0) + 1));
+    return;
+  }
+  const chart = ofddChart(el);
   ofddRender(chart, {
     tooltip: { trigger: "item",
       formatter: (x) => `${esc(x.data.rec?.attrs?.dis || x.name)}<br><span class="muted">${esc(markersOf(x.data.rec || {}).join(" "))}</span>` },

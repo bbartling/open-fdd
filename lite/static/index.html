@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open-FDD Lite</title>
+<title>Open-FDD</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https:; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <!-- CSP: script-src allows https: ONLY for the portal path, where nf.js loads the pinned clerk-js from the
      Clerk host named in the portal's publishable key (host unknown until runtime). Everything else is 'self';
@@ -32,7 +32,8 @@
 <body>
 <header>
   <div>
-    <h1>⚡ Open-FDD Lite</h1>
+    <h1>⚡ Open-FDD</h1>
+    <span class="pill app-engine" id="engineBuild" data-ofdd-engine="duckdb">DuckDB backend</span>
     <div class="sub" id="sub">Loading the Haystack model…</div>
   </div>
   <div class="spacer"></div>
@@ -44,8 +45,8 @@
 <nav class="tabs" id="tabs">
   <button data-tab="overview" class="on">Overview</button>
   <button data-tab="charts">Charts</button>
-  <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
-  <button data-tab="model">Model &amp; RDF</button>
+  <button data-tab="bacnet">Backend server <span class="count" id="nBacnet"></span></button>
+  <button data-tab="model">Model/RDF</button>
 </nav>
 
 <main>
@@ -75,7 +76,7 @@
         </table></div>
       </section>
       <section class="panel">
-        <h2>Point data <span class="count" id="nPoints"></span>
+        <h2>Point data
           <input type="search" id="pointFilter" placeholder="markers, e.g. temp sensor (all must match)">
           <label class="hint"><input type="checkbox" id="showUntagged"> show untagged objects</label>
           <span class="hint" id="pointHint"></span>

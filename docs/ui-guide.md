@@ -1,12 +1,12 @@
 ---
 title: UI guide
-parent: Lite vs Full
+parent: DuckDB vs Timescale
 nav_order: 2
 ---
 
 # UI guide
 
-The UI is plain JavaScript in the NF plugin. Full is `nf-app/static/`; Lite is `lite/static/`. Charts use Apache ECharts 6.1.0, vendored in the app (`nf-app/static/vendor/echarts.esm.min.js`, Lite `lite/static/vendor/echarts.min.js`).
+The UI is plain JavaScript in the NF plugin. The Timescale install is `nf-app/static/`; the DuckDB install is `lite/static/`. Charts use Apache ECharts 6.1.0, vendored in the app (`nf-app/static/vendor/echarts.esm.min.js`, DuckDB install `lite/static/vendor/echarts.min.js`).
 
 Developers: UI API contract 1.0.0 ([#1807](https://github.com/bbartling/open-fdd/issues/1807), [OpenAPI](https://github.com/bbartling/open-fdd/blob/master/openapi/open-fdd-ui-api.yaml)). The reference mock and the contract suite are in [`contract/`](https://github.com/bbartling/open-fdd/tree/master/contract).
 
@@ -14,22 +14,23 @@ Developers: UI API contract 1.0.0 ([#1807](https://github.com/bbartling/open-fdd
 
 | Page | Edition | What it shows |
 |---|---|---|
-| `index.html` | both | The dashboard. The top bar is the site, the live clock, theme, and (Full only) the display-unit toggle. |
+| `index.html` | both | The dashboard. The top bar is the site, the live clock, theme, and (Timescale install) the display-unit toggle. |
 | `chart.html` | both | One catalog chart in its own window (`?c=`, site, optional equip, hours, point). |
 | `tree.html` | both | Read-only BACnet object list beside the Haystack tree (ECharts graph). |
 
 ## Tabs
 
-Lite has Overview, Charts, BACnet Server, and Model & RDF. Full adds FDD and Export, and puts the RCx panels on Overview.
+The DuckDB install shows Overview, Charts, Backend server, and Model/RDF. The Timescale install adds Analytics, Fault detection and Export, and puts the retro-commissioning panels on Overview.
 
 | Tab | Shows | Charts |
 |---|---|---|
-| Overview | Site summary. Points for one equipment: live cards, status chips, I/O table, point table, history. Full also shows the weekly occupancy editor and the RCx panels below. | History is a time-series line (step for Bool). RCx types are in the next table. |
+| Overview | Site summary. Sensor and process points for one equipment: live cards, status chips, I/O table, point table, history. Fault and timeline points stay on Fault detection. The Timescale install also shows the weekly occupancy editor and the retro-commissioning panels below. | History is a time-series line (step for Bool). Retro-commissioning types are in the next table. |
 | Charts | One catalog chart at a time. | See the catalog table. |
-| FDD | Full only. Fault / pass / skipped / insufficient chips, one open rule (SI thresholds, inputs, tune drawer), and a More section (fault heat map, FDD charts, rule-input table). | Open rule: time-series lines, red shade for a confirmed fault, grey shade for equipment off, 0/1 fault lane. Heat map of fault hours. |
-| BACnet Server | Local BACnet objects, present value versus the Haystack point, property cards. | None. |
-| Export | Full only. One CSV of one equipment's I/O and FDD columns. | None. See [Charts and export](charts.html#export). |
-| Model & RDF | Haystack tree, model checks, Turtle and model JSON download, and a SPARQL panel (SELECT, ASK, CONSTRUCT, DESCRIBE). The panel posts the query to the `sparql` hook; Oxigraph runs in the NF Node process. | The tree is an ECharts graph. |
+| Analytics | Timescale install. Scatter, air-handler timeseries, VAV plots and energy. History loads when the tab opens. | See the catalog table. |
+| Fault detection | Timescale install. Fault / pass / skipped / insufficient chips, one open rule (SI thresholds, inputs, tune drawer), and a More section (fault heat map, fault charts, rule-input table). | Open rule: time-series lines, red shade for a confirmed fault, grey shade for equipment off, 0/1 fault lane. Heat map of fault hours. |
+| Backend server | Local BACnet objects, present value versus the Haystack point, property cards. | None. |
+| Export | Timescale install. One CSV of one equipment's I/O and fault columns. | None. See [Charts and export](charts.html#export). |
+| Model/RDF | Haystack tree, model checks, Turtle and model JSON download, and a SPARQL panel (SELECT, ASK, CONSTRUCT, DESCRIBE). Fault and timeline points stay in the Turtle and out of the tree. The panel posts the query to the `sparql` hook; Oxigraph runs in the NF Node process. | The tree is an ECharts graph. |
 
 ## Chart catalog
 
@@ -83,8 +84,8 @@ Registered with `rcxView` in `nf-app/static/`. A panel is omitted when the model
 | `energy-rolling12` | Rolling 12-month EUI | line | Overview |
 | `energy-intensity-heatmap` | Intensity heatmap (site × month) | heatmap | Overview |
 | `energy-stacked-meters` | Stacked monthly energy by meter | stacked bar | Overview |
-| `bas-vs-web-oat` | BAS vs web outdoor-air temperature | line, band, fault lane | FDD |
+| `bas-vs-web-oat` | BAS vs web outdoor-air temperature | line, band, fault lane | Fault detection |
 | `bas-vs-web-oat-hist` | BAS vs web outdoor-air deviation | bar | hidden |
-| `fdd-sensor-fault` | Sensor with the most sweep faults | heatmap | FDD |
+| `fdd-sensor-fault` | Sensor with the most sweep faults | heatmap | Fault detection |
 
-kWh twins of the meter views use the same id with `-kwh`. Editions and export limits are on [Lite vs Full](editions.html).
+kWh twins of the meter views use the same id with `-kwh`. Backends and export limits are on [DuckDB vs Timescale](editions.html).

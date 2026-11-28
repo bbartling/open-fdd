@@ -202,7 +202,7 @@ async function openDuckCore(points, samples, siteId) {
   let api;
   try { api = await import("@duckdb/node-api"); }
   catch (e) {
-    const err = new Error(`DuckDB engine failed to load: ${e && e.message ? e.message : e}. Reinstall the DuckDB build or switch to the Timescale build.`);
+    const err = new Error(`DuckDB engine failed to load: ${e && e.message ? e.message : e}. Reinstall the DuckDB backend or switch to the Timescale backend.`);
     /** @type {any} */ (err).code = "OPENFDD_DUCKDB_UNAVAILABLE";
     throw err;
   }

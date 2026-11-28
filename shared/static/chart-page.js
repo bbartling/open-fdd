@@ -47,7 +47,7 @@ async function draw() {
 async function main() {
   // The unit toggle (Full only, units.js) lives in the dashboard; follow it when it changes.
   window.addEventListener("storage", (e) => { if (e.key === "openfdd-units") draw(); });
-  await initAuth();
+  await whenAuthReady();
   await loadSiteTimeZoneSources();
   model = await loadModel();
   if (!model.sites.some((s) => idOf(s) === sel.site)) sel.site = idOf(model.sites[0]);

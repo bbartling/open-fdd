@@ -1,38 +1,20 @@
 ---
-title: Lite vs Full
+title: DuckDB vs Timescale
 nav_order: 3
 has_children: true
 ---
 
-# Lite vs Full
+# DuckDB vs Timescale
 
-Open-FDD ships two NF apps from one shared source. Pick the edition from the host, not from the building. Both read the same Haystack
-model in NF ([data model](modeling.html)).
+Open-FDD is one product with two storage backends. Both read the same Haystack model in NF ([data model](modeling.html)). Pick the backend from the deployment.
 
-| | **Lite** | **Full** |
+| | **DuckDB** | **Timescale** |
 |---|---|---|
-| NF app id | `open-fdd-lite` | `open-fdd` |
-| Source | [`lite/`](https://github.com/bbartling/open-fdd/tree/master/lite) | [`nf-app/`](https://github.com/bbartling/open-fdd/tree/master/nf-app) |
-| Host | 1 GB, Raspberry Pi class | 2 GB or more; 4 GB or more is comfortable |
-| FDD engine | DuckDB, hourly | DuckDB build (Node `@duckdb/node-api` 2.0.1-r.1, Parquet on disk) or Timescale build |
-| Includes | dashboard, charts, points, NF BACnet server view, CSV export, RDF export, weather hook, `rdf` and `sparql` hooks | Lite plus the FDD tab and the Overview RCx dashboard, fault points, SQL rules and the `sparql-data` hook |
-| Scheduled hooks | `fdd` hourly, `weather` every 20 min; `rdf` and `sparql` on request | `fdd` hourly, `weather` every 20 min; `sparql`, `sparql-data` and `rdf` on request |
-| History it sees | NF's own, about 7 days | NF's, or long-range history from Timescale |
-| Weather BACnet mirror | on by default | off by default |
+| Recommended for | One building: an edge box, a Raspberry Pi, or another embedded host | Several sites, a campus, or a portfolio |
+| History | Parquet on disk, Node `@duckdb/node-api` 2.0.1-r.1 | NF's TimescaleDB connector |
+| Current install | [`lite/`](https://github.com/bbartling/open-fdd/tree/master/lite), app id `open-fdd-lite` | [`nf-app/`](https://github.com/bbartling/open-fdd/tree/master/nf-app), app id `open-fdd` |
+| Screens | Overview, Charts, Backend server, Model/RDF | Those, plus Analytics, Fault detection, Export, and the Overview retro-commissioning panels |
 
-## Use Lite when
+`engine: auto` uses Timescale on a Timescale install or when the `timescale` option is set. Otherwise it uses DuckDB. `sqlite` and `pglite` are not backends. Naming either fails the run.
 
-- the host has about 1 GB of RAM (NF alone uses most of it);
-- you only need live values, a week of trends, the model as Turtle and the BACnet server view;
-- you want the hourly DuckDB rule run, without the Full screens.
-
-## Use Full when
-
-- the host has 2 GB or more and you want faults, RCx charts and fault points in NF. A single site uses the DuckDB build (Parquet on disk). Several sites, or history you want in Timescale, use the Timescale build: enable NF's TimescaleDB connector and set the app option `timescale`.
-  See [`nf-app/timescale`](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).
-
-`auto` runs DuckDB unless this is the Timescale build or `timescale` is set. A missing package, or `sqlite` or `pglite`, fails the run.
-
-## Charts and export
-
-Both editions include [Charts and export](charts.html). Screens and chart types are in the [UI guide](ui-guide.html).
+Charts and CSV export are in [Charts and export](charts.html). Screens are in the [UI guide](ui-guide.html).

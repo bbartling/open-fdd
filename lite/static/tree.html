@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open-FDD Lite · BACnet + Haystack Tree</title>
+<title>Open-FDD · BACnet + Haystack Tree</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https:; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <!-- CSP: script-src allows https: ONLY for the portal path, where nf.js loads the pinned clerk-js from the
      Clerk host named in the portal's publishable key (host unknown until runtime). Everything else is 'self';
@@ -18,7 +18,9 @@
 <script src="vendor/echarts.min.js"></script>  <!-- ECharts 6.1.0, served by NF: no internet needed -->
 <script src="paging.js"></script>
 <script src="nf.js"></script>
+<script src="model.js"></script>
 <script src="theme.js"></script>
+<script src="version.js"></script>
 <link rel="stylesheet" href="base.css">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="tree.css">
@@ -27,6 +29,7 @@
 <header>
   <div>
     <h1>🌳 BACnet + Haystack Tree</h1>
+    <span class="pill app-engine" id="engineBuild" data-ofdd-engine="duckdb">DuckDB backend</span>
     <div class="sub" id="sub">read-only · loading…</div>
   </div>
   <div class="spacer"></div>

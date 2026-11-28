@@ -19,9 +19,14 @@ test("engine selection accepts only duckdb and timescale; auto on this build is 
   assert.deepEqual(await fdd.pickEngine(http, "duckdb", undefined, ok), { kind: "duckdb", note: "" });
   assert.deepEqual(await fdd.pickEngine(http, "timescale", { host: "db" }, ok), { kind: "timescale", note: "" });
   assert.deepEqual(await fdd.pickEngine(http, "auto", { host: "db" }, ok), { kind: "timescale", note: "" });
-  assert.equal(eb.record().label, "DuckDB build");
-  assert.equal(eb.LABELS.duckdb, "DuckDB build");
-  assert.equal(eb.LABELS.timescale, "Timescale build");
+  assert.equal(eb.record().label, "DuckDB backend");
+  assert.equal(eb.LABELS.duckdb, "DuckDB backend");
+  assert.equal(eb.LABELS.timescale, "Timescale backend");
+  assert.equal(eb.resolvedEngineId({}), "duckdb");
+  assert.equal(eb.resolvedEngineId({ engine: "duckdb", timescale: { host: "db" } }), "duckdb");
+  assert.equal(eb.resolvedEngineId({ engine: "auto", timescale: { host: "db" } }), "timescale");
+  assert.equal(eb.resolvedEngineId({ engine: "timescale" }), "timescale");
+  assert.equal(eb.resolvedEngineId({ engine: "auto" }, "timescale"), "timescale");
   assert.doesNotMatch(eb.LABELS.duckdb, /2\.0\.1/);
 });
 
@@ -44,7 +49,7 @@ test("sqlite and pglite fail clearly and name duckdb", async () => {
 
 test("DuckDB failing to load is reported and does not fall back", async () => {
   await assert.rejects(() => fdd.pickEngine(http, "auto", undefined, fail), (e) => {
-    assert.equal(e.message, "DuckDB engine failed to load: no native build for this cpu. Reinstall the DuckDB build or switch to the Timescale build.");
+    assert.equal(e.message, "DuckDB engine failed to load: no native build for this cpu. Reinstall the DuckDB backend or switch to the Timescale backend.");
     assert.equal(e.code, "OPENFDD_DUCKDB_UNAVAILABLE");
     return true;
   });
@@ -67,7 +72,7 @@ test("DuckDB failing to load is reported and does not fall back", async () => {
   assert.equal(summary.written, 0);
   assert.equal(summary.rules, 0);
   assert.match(summary.error, /DuckDB engine failed to load: no native build for this cpu/);
-  assert.match(summary.error, /Reinstall the DuckDB build or switch to the Timescale build/);
+  assert.match(summary.error, /Reinstall the DuckDB backend or switch to the Timescale backend/);
   assert.ok(!/sqlite|pglite/i.test(summary.error));
   assert.ok(logs.some((m) => m === summary.error));
   await assert.rejects(
@@ -78,7 +83,9 @@ test("DuckDB failing to load is reported and does not fall back", async () => {
 
   const s = await schema.handle({ sdk: { logEvent: () => {} }, config: {}, loadDuckdb: fail });
   assert.equal(s.ok, false);
-  assert.equal(s.engine_build, "DuckDB build");
+  assert.equal(s.engine, "duckdb");
+  assert.equal(s.engine_label, "DuckDB backend");
+  assert.equal(s.engine_build, "DuckDB backend");
   assert.equal(s.engine_library, "@duckdb/node-api");
   assert.equal(s.engine_library_version, "2.0.1-r.1");
   assert.equal(s.engine_error, s.error);

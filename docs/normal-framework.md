@@ -7,7 +7,7 @@ has_children: true
 # Normal Framework
 
 Open-FDD is an app for the [Normal Framework](https://docs.normal.dev/) (NF). NF owns the model, point history, field protocols (BACnet,
-Modbus and others), authentication and remote access. Open-FDD adds a browser UI, scheduled hooks and, in Full, the FDD engine. It needs no
+Modbus and others), authentication and remote access. Open-FDD adds a browser UI, scheduled hooks and the FDD engine. It needs no
 second login or historian. For anything about NF itself, use the [official NF documentation](https://docs.normal.dev/).
 
 ```mermaid
@@ -20,7 +20,7 @@ flowchart LR
 
 ## Install
 
-Pick an edition on [Lite vs Full](editions.html), then install from a workstation that can reach the NF console. The installer is Python 3
+Pick a backend on [DuckDB vs Timescale](editions.html), then install from a workstation that can reach the NF console. The installer is Python 3
 standard library only; NF runs the app.
 
 ```bash
@@ -28,7 +28,7 @@ python3 scripts/nf/hooks/nf_app_sync.py --env <protected-env-file> doctor nf-app
 python3 scripts/nf/hooks/nf_app_sync.py --env <protected-env-file> install nf-app/app.json
 ```
 
-Use `lite/app.json` for Lite. The env file sets `NF_CONSOLE_URL`, `CONSOLE_USERNAME` and `CONSOLE_PASSWORD`. Use the local console login: a
+Use `lite/app.json` for the DuckDB install (app id `open-fdd-lite`). The env file sets `NF_CONSOLE_URL`, `CONSOLE_USERNAME` and `CONSOLE_PASSWORD`. Use the local console login: a
 Normal Online API key is read-only and cannot install. `install` syncs files and hooks, restarts the app and verifies the hooks; it
 refuses to overwrite hand-edited files without `--force`.
 

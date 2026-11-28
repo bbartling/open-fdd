@@ -23,7 +23,7 @@ After NF login is enabled the manifest needs `auth.apiKey.scopes`. See `docs/ins
 Installing, upgrading, removing an old version or debugging a 401: use the `install-upgrade-troubleshoot` skill (run `doctor` first).
 
 Before touching a live box read `nf-gotchas.md` (this folder). Related runbooks in `docs/operations/nf/`: `lite-vs-full.md`,
-`front-door-caddy.md` (Caddy; set `APP_ID=open-fdd-lite` on a Lite box so the bare URL opens Lite),
+`front-door-caddy.md` (Caddy; set `APP_ID=open-fdd-lite` on a DuckDB install so the bare URL opens that app),
 `nf-upgrade-compose.md`, `bacnet-validate.md` (see the `bacnet-validate` skill). Read-only checks of a deployed box:
 `scripts/nf/tools/` (`nf_portal_sensors.py`, `nf_sensor_history.py`).
 

@@ -44,13 +44,15 @@ Haystack model and point history directly, and works on the local network or thr
 - All calculations in SI units; the display can be imperial or SI.
 - No site-specific code: equipment and points are bound by Haystack tags and NF classes.
 
-## Editions
+## Backends
 
-| | Open-FDD (`nf-app/`) | Open-FDD Lite (`lite/`) |
+Open-FDD is one product with two storage backends.
+
+| | DuckDB | Timescale |
 |---|---|---|
-| Hardware | 2 GB+ (TimescaleDB on larger hosts) | 1 GB, e.g. Raspberry Pi 3 |
-| Includes | FDD engine, RCx charts, CSV export, SPARQL | Dashboard, charts, weather, BACnet mirror |
-| Deploy | `python3 scripts/nf/hooks/nf_app_sync.py --env <env> push nf-app/app.json` | `... push lite/app.json` |
+| Recommended for | One building: edge, Raspberry Pi, embedded | Several sites, a campus, or a portfolio |
+| Install | `lite/app.json` (app id `open-fdd-lite`) | `nf-app/app.json` (app id `open-fdd`) |
+| Deploy | `python3 scripts/nf/hooks/nf_app_sync.py --env <env> push lite/app.json` | `... push nf-app/app.json` |
 
 ## Quick start
 
@@ -76,8 +78,8 @@ python3 -m pytest tests -q
 
 | Path | Contents |
 |---|---|
-| [`nf-app/`](https://github.com/bbartling/open-fdd/blob/master/nf-app/README.md) | Full edition: UI, hooks, rule packs, tests, mock NF |
-| [`lite/`](https://github.com/bbartling/open-fdd/blob/master/lite/README.md) | Lite edition |
+| [`nf-app/`](https://github.com/bbartling/open-fdd/blob/master/nf-app/README.md) | Timescale-capable install: UI, hooks, rule packs, tests, mock NF |
+| [`lite/`](https://github.com/bbartling/open-fdd/blob/master/lite/README.md) | DuckDB install (app id `open-fdd-lite`) |
 | [`sql/fdd/`](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/README.md) | Fault rules (SQL), registry, role scales, tuning catalog |
 | [`open_fdd/`](https://github.com/bbartling/open-fdd/tree/master/open_fdd) | PyPI package: pandas reference rules and NF agent tools |
 | [`scripts/nf/`](https://github.com/bbartling/open-fdd/tree/master/scripts/nf) | Build and deploy tooling |

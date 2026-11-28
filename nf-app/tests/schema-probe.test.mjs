@@ -11,7 +11,7 @@ const ts = require("../hooks/lib/timescale.js");
 const eb = require("../hooks/lib/engine-build.js");
 const loaded = () => ({ ok: true, reason: "" });
 const handle = (opts) => schema.handle({ loadDuckdb: loaded, ...opts });
-const fields = () => eb.statusFields(loaded);
+const fields = (config) => eb.statusFields(loaded, config);
 
 /** A pg-client stand-in that records every statement. `version` = the stored schema_version (null = no table). */
 function fakeClient(version, failWith, core = true) {
@@ -34,7 +34,10 @@ const cfg = { engine: "timescale", timescale: JSON.stringify({ host: "db.interna
 test("current schema: ok true with installed, required and core_ok only", async () => {
   const s = sdk(), client = fakeClient(ts.SCHEMA_VERSION);
   const r = await handle({ sdk: s, config: cfg, client });
-  assert.deepEqual(r, { ok: true, installed: ts.SCHEMA_VERSION, required: ts.SCHEMA_VERSION, core_ok: true, ...fields() });
+  assert.deepEqual(r, { ok: true, installed: ts.SCHEMA_VERSION, required: ts.SCHEMA_VERSION, core_ok: true, ...fields(cfg) });
+  assert.equal(r.engine, "timescale");
+  assert.equal(r.engine_label, "Timescale backend");
+  assert.equal(r.engine_build, "DuckDB backend");
   assert.equal(client.sql[0], "BEGIN TRANSACTION READ ONLY");
   assert.equal(client.sql.at(-1), "ROLLBACK");
   assert.ok(client.sql.every((q) => !/^(INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)/i.test(q)), "only reads");
@@ -42,21 +45,23 @@ test("current schema: ok true with installed, required and core_ok only", async 
 
 test("schema behind or absent: ok false, installed is the stored version (0 when absent)", async () => {
   assert.deepEqual(await handle({ sdk: sdk(), config: cfg, client: fakeClient(2) }),
-    { ok: false, installed: 2, required: ts.SCHEMA_VERSION, core_ok: false, ...fields() });
+    { ok: false, installed: 2, required: ts.SCHEMA_VERSION, core_ok: false, ...fields(cfg) });
   assert.deepEqual(await handle({ sdk: sdk(), config: cfg, client: fakeClient(null) }),
-    { ok: false, installed: 0, required: ts.SCHEMA_VERSION, core_ok: false, ...fields() });
+    { ok: false, installed: 0, required: ts.SCHEMA_VERSION, core_ok: false, ...fields(cfg) });
 });
 
 test("current version but the core tables / input view are missing: not ok, core_ok false", async () => {
   assert.deepEqual(await handle({ sdk: sdk(), config: cfg, client: fakeClient(ts.SCHEMA_VERSION, null, false) }),
-    { ok: false, installed: ts.SCHEMA_VERSION, required: ts.SCHEMA_VERSION, core_ok: false, ...fields() });
+    { ok: false, installed: ts.SCHEMA_VERSION, required: ts.SCHEMA_VERSION, core_ok: false, ...fields(cfg) });
 });
 
 test("Timescale not selected: a clean skip, no connection attempted", async () => {
   const client = fakeClient(3);
   const r = await handle({ sdk: sdk(), config: {}, client });
   assert.equal(r.ok, true); assert.equal(r.skipped, true);
-  assert.equal(r.engine_build, "DuckDB build");
+  assert.equal(r.engine, "duckdb");
+  assert.equal(r.engine_label, "DuckDB backend");
+  assert.equal(r.engine_build, "DuckDB backend");
   assert.equal(r.engine_error, null);
   assert.equal(client.sql.length, 0);
 });
@@ -85,7 +90,7 @@ test("a database error is redacted in the answer and the log; the transaction is
   assert.ok(!all.includes("s3cret-pw"), "password never leaves the hook");
   assert.ok(!all.includes("db.internal"), "host never leaves the hook");
   assert.deepEqual(Object.keys(await handle({ sdk: sdk(), config: cfg, client: fakeClient(3) })).sort(),
-    ["core_ok", "engine_build", "engine_error", "engine_library", "engine_library_version", "installed", "ok", "required"]);
+    ["core_ok", "engine", "engine_build", "engine_error", "engine_label", "engine_library", "engine_library_version", "installed", "ok", "required"]);
 });
 
 test("an unparsable option is reported without echoing it", async () => {

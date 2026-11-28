@@ -18,18 +18,21 @@ remote access (Normal Online) and config backups. Open-FDD adds a UI and hooks. 
 The UI and the `fdd` hook share code: the hook loads `static/model.js`, `fdd.js`, `units.js` and the catalog, so they
 cannot disagree about binding or units. NF caches static files for 5 minutes.
 
+## Deployment backends
+
+Open-FDD is one product with two storage backends. DuckDB is recommended for single-building deployments (edge, Raspberry Pi, embedded). Timescale is recommended for multi-site, campus or portfolio deployments. Do not reintroduce Lite or Full as product names. The two trees below are install layouts, not product names. The install id `open-fdd-lite` and the `lite/` tree stay so existing installs keep working.
+
 ## Editions
 
-- **Full** (`nf-app/`, app id `open-fdd`): UI tabs Overview, Charts, FDD, RCx, Points, Export, BACnet Server, Model and RDF
+- **Timescale-capable install** (`nf-app/`, app id `open-fdd`): UI tabs Overview, Charts, Analytics, Fault detection, Backend server, Export, Model/RDF
   (with SPARQL). Scheduled hooks: `fdd`, `weather`. On request: `sparql`, `sparql-data`, `analytics`, `schema`,
   `tuning`, `history`, `rdf`. The runtime database is server-side Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`,
   Parquet on disk) or Timescale. There is no DuckDB-WASM and no Python DuckDB runtime. `engine: "auto"` uses
   Timescale on the Timescale build or when that option is set, otherwise DuckDB. If `@duckdb/node-api` cannot load,
-  the run fails. A config that names `sqlite` or `pglite` fails. The header badge is `DuckDB build` or `Timescale build`.
-  Both editions answer SPARQL with the `oxigraph` npm package in the Node process.
-- **Lite** (`lite/`, app id `open-fdd-lite`): the same hourly `fdd` hook as Full, on server-side Node DuckDB
-  (`@duckdb/node-api` `2.0.1-r.1`, no sql.js, no PGlite, no WASM engine), plus the shared `sparql` hook. Overview, Charts, Points, BACnet
-  Server, Model and RDF; `weather` hook with an optional BACnet mirror. For 1 GB boxes.
+  the run fails. A config that names `sqlite` or `pglite` fails. The header badge is `DuckDB backend` or `Timescale backend`, from the resolved engine.
+  Both installs answer SPARQL with the `oxigraph` npm package in the Node process.
+- **DuckDB install** (`lite/`, app id `open-fdd-lite`): the same hourly `fdd` hook as the Timescale-capable install, on server-side Node DuckDB
+  (`@duckdb/node-api` `2.0.1-r.1`, no sql.js, no PGlite, no WASM engine), plus the shared `sparql` hook. Overview, Charts, Backend server, Model/RDF; `weather` hook with an optional BACnet mirror. For one building on an edge box or Pi.
 
 ## Data flow
 

@@ -32,7 +32,7 @@ EDITIONS = {"full": ROOT / "nf-app" / "app.json", "lite": ROOT / "lite" / "app.j
 FIXED_ZIP_TIME = (2026, 1, 1, 0, 0, 0)
 # The two runtime builds. The source tree is the DuckDB build; the Timescale recipe rewrites the badge.
 RECIPES = ("duckdb", "timescale")
-BADGES = {"duckdb": "DuckDB build", "timescale": "Timescale build"}
+BADGES = {"duckdb": "DuckDB backend", "timescale": "Timescale backend"}
 PINS = {"duckdb": ("@duckdb/node-api", "2.0.1-r.1"), "timescale": ("pg", "8.23.1")}
 RECIPE_DEPS = {
     "duckdb": {"@duckdb/node-api": "2.0.1-r.1", "oxigraph": "0.5.13"},

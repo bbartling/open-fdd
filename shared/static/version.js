@@ -27,13 +27,39 @@
       + (v.deployed ? `, deployed ${v.deployed}` : "");
     h1.insertAdjacentElement("afterend", a);
   }
+  const BACKEND_LABEL = { duckdb: "DuckDB backend", timescale: "Timescale backend" };
   function showEngineError(text) {
     const err = document.getElementById("err");
     if (!document.getElementById("engineBuild") || !text || !err) return;
     err.textContent = text;
     err.classList.add("show");
   }
-  function errorFromRun(run) {
+  function applyBackendLabel(id, label) {
+    const badge = document.getElementById("engineBuild");
+    if (!badge) return;
+    const text = label || BACKEND_LABEL[id] || "";
+    if (!text) return;
+    badge.textContent = text;
+    if (id === "duckdb" || id === "timescale") badge.dataset.ofddEngine = id;
+  }
+  function payloadFrom(blob) {
+    const out = { id: "", label: "", error: "" };
+    const take = (b) => {
+      if (!b) return;
+      if (typeof b === "string") {
+        if (b.startsWith("DuckDB engine failed to load:")) out.error = out.error || b;
+        try { b = JSON.parse(b); } catch (e) { return; }
+      }
+      if (!b || typeof b !== "object") return;
+      if (b.engine === "duckdb" || b.engine === "timescale") out.id = b.engine;
+      if (b.engine_label) out.label = String(b.engine_label);
+      if (b.engine_error) out.error = String(b.engine_error);
+    };
+    take(blob);
+    return out;
+  }
+  function payloadFromRun(run) {
+    const found = { id: "", label: "", error: "" };
     const blobs = [];
     const results = (run && run.results) || {};
     for (const g of Object.values(results)) {
@@ -42,35 +68,40 @@
       for (const e of g.events || []) if (e && e.message) blobs.push(e.message);
     }
     for (const b of blobs) {
-      if (b && typeof b === "object" && b.engine_error) return String(b.engine_error);
-      if (typeof b === "string") {
-        try { const j = JSON.parse(b); if (j && j.engine_error) return String(j.engine_error); } catch (e) { /* log line is not JSON */ }
-        if (b.startsWith("DuckDB engine failed to load:")) return b;
-      }
+      const one = payloadFrom(b);
+      if (one.id) found.id = one.id;
+      if (one.label) found.label = one.label;
+      if (one.error) found.error = one.error;
     }
-    return "";
+    return found;
   }
   async function engineHealth() {
     if (!document.getElementById("engineBuild") || typeof api !== "function") return;
     const app = (location.pathname.match(/\/apps\/static\/([^/]+)/) || [])[1] || "open-fdd";
+    // This install has no schema hook. Its only engine is DuckDB. Calling schema would 404.
+    if (app === "open-fdd-lite") { applyBackendLabel("duckdb"); return; }
     try {
-      const started = await api(`/api/v1/apps/${app}/hooks/schema`, {});
-      if (started && started.engine_error) { showEngineError(started.engine_error); return; }
+      if (typeof whenAuthReady === "function") await whenAuthReady();
+      const started = await api(`/api/v1/apps/${app}/hooks/schema`, {}, { method: "POST" });
+      const first = payloadFrom(started);
+      applyBackendLabel(first.id, first.label);
+      if (first.error) { showEngineError(first.error); return; }
       const pid = started && started.pid;
       if (!pid) return;
       const deadline = Date.now() + 20000;
       let waitMs = 1000;
       while (Date.now() < deadline) {
-        const runs = await api(`/api/v1/apps/${app}/hooks/schema/runs?page_size=5&include_results=true`);
+        const runs = await api(`/api/v1/apps/${app}/hooks/schema/runs?page_size=5&include_results=true&include_logs=true`);
         const hit = ((runs && runs.runs) || []).find((r) => String(r.pid) === String(pid));
-        const msg = hit && errorFromRun(hit);
-        if (msg) { showEngineError(msg); return; }
+        const got = hit && payloadFromRun(hit);
+        if (got && (got.id || got.label)) applyBackendLabel(got.id, got.label);
+        if (got && got.error) { showEngineError(got.error); return; }
         const state = String((hit && (hit.state || hit.status)) || "");
         if (hit && /SUCCESS|FAIL|ERROR|CANCEL/.test(state)) return;
         await new Promise((ok) => setTimeout(ok, waitMs));
         waitMs = Math.min(waitMs * 1.5, 5000);
       }
-    } catch (e) { /* the badge still names the build */ }
+    } catch (e) { /* the badge stays on the last label that resolved */ }
   }
   function start() { mount(); engineHealth(); }
   if (document.readyState === "complete") start();
