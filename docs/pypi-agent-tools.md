@@ -8,7 +8,7 @@ nav_order: 7
 
 [`open-fdd`](https://pypi.org/project/open-fdd/) on PyPI is the Python toolbox an AI agent (or an engineer) runs next
 to the Open-FDD app. Everything is SI and read-only toward the building system. Package versions (4.x) are separate
-from the app (5.x). Python 3.11 or newer (3.11-3.15 tested, 3.14 is the default).
+from the app (5.x). Python 3.11 or newer (3.11-3.14 tested, 3.14 is the default).
 
 ```bash
 pip install open-fdd                       # core: ECM / ROI calculators and workbooks

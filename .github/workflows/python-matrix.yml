@@ -1,4 +1,4 @@
-# Python version matrix for the PyPI package open-fdd (3.11 - 3.15; 3.14 is the default in the other workflows).
+# Python version matrix for the PyPI package open-fdd (3.11 - 3.14; 3.14 is the default in the other workflows).
 # Separate from publish-open-fdd.yml, which builds and publishes on open-fdd-v* tags.
 
 name: Python matrix
@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
         with:
