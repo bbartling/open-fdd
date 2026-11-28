@@ -59,6 +59,7 @@
       const pid = started && started.pid;
       if (!pid) return;
       const deadline = Date.now() + 20000;
+      let waitMs = 1000;
       while (Date.now() < deadline) {
         const runs = await api(`/api/v1/apps/${app}/hooks/schema/runs?page_size=5&include_results=true`);
         const hit = ((runs && runs.runs) || []).find((r) => String(r.pid) === String(pid));
@@ -66,7 +67,8 @@
         if (msg) { showEngineError(msg); return; }
         const state = String((hit && (hit.state || hit.status)) || "");
         if (hit && /SUCCESS|FAIL|ERROR|CANCEL/.test(state)) return;
-        await new Promise((ok) => setTimeout(ok, 400));
+        await new Promise((ok) => setTimeout(ok, waitMs));
+        waitMs = Math.min(waitMs * 1.5, 5000);
       }
     } catch (e) { /* the badge still names the build */ }
   }

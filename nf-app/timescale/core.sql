@@ -81,6 +81,20 @@ CREATE TABLE IF NOT EXISTS fdd.schema_meta (
 INSERT INTO fdd.schema_meta (id, core_version)
 SELECT 1, 4 WHERE NOT EXISTS (SELECT 1 FROM fdd.schema_meta WHERE id = 1);
 
+-- A Timescale install may already record openfdd.config schema_version 6 while fdd.schema_meta was never created
+-- (core.sql not re-applied after an older jump). Seed meta from the live point rows so the version-5 migration still runs.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'fdd' AND table_name = 'point')
+     AND NOT EXISTS (SELECT 1 FROM fdd.schema_meta WHERE id = 1) THEN
+    INSERT INTO fdd.schema_meta (id, core_version)
+    SELECT 1, CASE
+      WHEN EXISTS (SELECT 1 FROM fdd.point WHERE role IN ('ahu_sat', 'SAT', 'SAT-SP', 'SAT-SP-1') LIMIT 1) THEN 4
+      ELSE 5
+    END;
+  END IF;
+END $$;
+
 DO $$
 DECLARE
   ver integer;

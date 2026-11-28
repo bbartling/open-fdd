@@ -111,10 +111,13 @@
         ]
       },
       "schedule": {
-        "rrule": "DTSTART:20261101T000000Z\nRRULE:FREQ=MINUTELY;INTERVAL=20"
+        "rrule": "DTSTART:20261101T000300Z\nRRULE:FREQ=MINUTELY;INTERVAL=20"
       },
       "mode": "MODE_SCHEDULED",
-      "invokeTimeout": "190s"
+      "invokeTimeout": "190s",
+      "runtimeConfig": {
+        "memoryLimit": 64
+      }
     },
     {
       "id": "fdd",
@@ -125,13 +128,18 @@
       },
       "config": {
         "engine": "duckdb",
-        "windowHours": 24
+        "windowHours": 24,
+        "duckdbMemoryLimit": "96MB",
+        "duckdbThreads": 1
       },
       "schedule": {
-        "rrule": "DTSTART:20261101T000700Z\nRRULE:FREQ=HOURLY;INTERVAL=1"
+        "rrule": "DTSTART:20261101T002000Z\nRRULE:FREQ=HOURLY;INTERVAL=1"
       },
       "mode": "MODE_SCHEDULED",
-      "invokeTimeout": "300s"
+      "invokeTimeout": "300s",
+      "runtimeConfig": {
+        "memoryLimit": 128
+      }
     },
     {
       "id": "rdf",
@@ -141,7 +149,10 @@
         "noPoints": true
       },
       "mode": "MODE_ON_REQUEST",
-      "invokeTimeout": "60s"
+      "invokeTimeout": "60s",
+      "runtimeConfig": {
+        "memoryLimit": 64
+      }
     },
     {
       "id": "sparql",
@@ -151,7 +162,10 @@
         "noPoints": true
       },
       "mode": "MODE_ON_REQUEST",
-      "invokeTimeout": "60s"
+      "invokeTimeout": "60s",
+      "runtimeConfig": {
+        "memoryLimit": 96
+      }
     }
   ]
 }

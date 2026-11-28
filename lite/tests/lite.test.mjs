@@ -22,6 +22,21 @@ test("manifest: every file it lists exists, and every hook entry point is a list
   for (const h of manifest.hooks) assert.ok(h.entryPoint in manifest.files, h.entryPoint);
 });
 
+test("manifest: scheduled and on-request hooks declare Pi-sized runtime memory caps (MB)", () => {
+  const limits = { "open-meteo-weather": 64, fdd: 128, rdf: 64, sparql: 96 };
+  for (const h of manifest.hooks) {
+    const cap = h.runtimeConfig && h.runtimeConfig.memoryLimit;
+    assert.equal(cap, limits[h.id], `${h.id} runtimeConfig.memoryLimit`);
+    assert.ok(cap >= 64 && cap <= 128, `${h.id} cap ${cap} MB is out of the 64–128 MB band`);
+  }
+  const weather = manifest.hooks.find((h) => h.id === "open-meteo-weather");
+  const fdd = manifest.hooks.find((h) => h.id === "fdd");
+  assert.match(weather.schedule.rrule, /T000300Z/, "weather is offset from the hour");
+  assert.match(fdd.schedule.rrule, /T002000Z/, "fdd is offset from weather");
+  assert.equal(fdd.config.duckdbThreads, 1);
+  assert.equal(fdd.config.duckdbMemoryLimit, "96MB");
+});
+
 test("manifest: every shipped file is listed (static/ and hooks/)", () => {
   const listed = new Set(Object.values(manifest.files));
   const walk = (dir) => readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) =>

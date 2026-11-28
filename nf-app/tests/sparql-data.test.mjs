@@ -262,6 +262,23 @@ test("hardening: NF sample cap at the minimum split is an error, never a silent 
   assert.equal(out.error_code, "too_large");
 });
 
+test("hardening: a response that still exceeds maxBytes after fitting series returns too_large", async () => {
+  const original = hook.fitSeries;
+  hook.fitSeries = (series) => ({ complete: true, nextFrom: null, series, samples: 1 });
+  try {
+    const { sdk } = mockSdk({ series: { [SAT]: ramp(50) } });
+    const out = await hook.handle({
+      sdk,
+      args: { query: PTS_Q, ...range(1), bucket: "raw", pointLimit: "1", maxBytes: "500", includeRows: "true" },
+    });
+    assert.equal(out.ok, false);
+    assert.equal(out.error_code, "too_large");
+    assert.match(out.error, /maxBytes/);
+  } finally {
+    hook.fitSeries = original;
+  }
+});
+
 test("hardening: the byte cap counts UTF-8 bytes; every answer fits", async () => {
   const text = Array.from({ length: 200 }, (_, i) => [T0 + i * 300e3, "°C ±°F — occupied ✓"]);
   const { sdk, logs } = mockSdk({ series: { [SAT]: text } });
