@@ -334,7 +334,8 @@ test("scales: loadHistory applies exactly what siPlan decided (fraction, boolean
   // siPlan's decisions
   const { plan, args } = scaled(r2u, unitsByUuid);
   assert.deepEqual([...plan.scaled], ["supply_fan_command"]);
-  assert.deepEqual([...plan.bool], ["supply_fan_operating_status"]);
+  // A declared-% start/stop command is divided to a 0/1 fraction and is a boolean role, same as the status.
+  assert.deepEqual([...plan.bool].sort(), ["supply_fan_command", "supply_fan_operating_status"]);
   h = await load({ equipId: EQUIP, ...args, ...two });
   r = (await db.query("SELECT max(supply_fan_command) AS fc, max(outdoor_air_intake_relative_humidity) AS oh, max(supply_fan_operating_status) AS fs, min(supply_fan_operating_status) AS fm FROM pg_temp.history")).rows[0];
   assert.ok(r.fc <= 1 && r.fc > 0.5, `supply_fan_command is a fraction (${r.fc})`);
@@ -359,37 +360,43 @@ test("FC1 on declared-% fan commands: Timescale == PGlite for 1 %, 2 % and 99 %"
   const out = {};
   for (const pct of [1, 2, 99]) {
     const equip = `PCT-${pct}`;
-    const ids = { supply_fan_command: `md5('${equip}/supply_fan_command')::uuid`, discharge_air_static_pressure: `md5('${equip}/ds')::uuid`, discharge_air_static_pressure_setpoint: `md5('${equip}/sp')::uuid` };
+    const ids = {
+      supply_fan_speed_command: `md5('${equip}/supply_fan_speed_command')::uuid`,
+      supply_fan_operating_status: `md5('${equip}/supply_fan_operating_status')::uuid`,
+      discharge_air_static_pressure: `md5('${equip}/ds')::uuid`,
+      discharge_air_static_pressure_setpoint: `md5('${equip}/sp')::uuid`,
+    };
     await db.query(
       `INSERT INTO public.data (point_id, "time", value)
        SELECT x.id, g, x.v FROM generate_series($1::timestamptz, $2::timestamptz - interval '5 minutes', interval '5 minutes') g,
-         (VALUES (${ids.supply_fan_command}, ${pct}::double precision), (${ids.discharge_air_static_pressure}, 0::double precision), (${ids.discharge_air_static_pressure_setpoint}, 1.5::double precision)) AS x(id, v)`,
+         (VALUES (${ids.supply_fan_speed_command}, ${pct}::double precision), (${ids.supply_fan_operating_status}, 1::double precision), (${ids.discharge_air_static_pressure}, 0::double precision), (${ids.discharge_air_static_pressure_setpoint}, 1.5::double precision)) AS x(id, v)`,
       [from, to]);
     const uu = {};
     for (const [role, expr] of Object.entries(ids)) uu[role] = (await db.query(`SELECT ${expr}::text AS u`)).rows[0].u;
-    const units = { [uu.supply_fan_command]: "%", [uu.discharge_air_static_pressure]: "inH2O", [uu.discharge_air_static_pressure_setpoint]: "inH2O" };
-    const r2u = { supply_fan_command: uu.supply_fan_command, discharge_air_static_pressure: uu.discharge_air_static_pressure, discharge_air_static_pressure_setpoint: uu.discharge_air_static_pressure_setpoint };
+    const units = { [uu.supply_fan_speed_command]: "%", [uu.supply_fan_operating_status]: "", [uu.discharge_air_static_pressure]: "inH2O", [uu.discharge_air_static_pressure_setpoint]: "inH2O" };
+    const r2u = { supply_fan_speed_command: uu.supply_fan_speed_command, supply_fan_operating_status: uu.supply_fan_operating_status, discharge_air_static_pressure: uu.discharge_air_static_pressure, discharge_air_static_pressure_setpoint: uu.discharge_air_static_pressure_setpoint };
 
-    // Timescale path
-    const n = await load({ equipId: equip, siteId: "s", ...scaled(r2u, units).args, from, to, stepSec: STEP });
+    // Timescale path. Speed is PERCENT 0-100; the status proves the fan is on so 1 % and 2 % are assessed and still not full fan.
+    const n = await load({ equipId: equip, siteId: "s", ...scaled(r2u, units, { [uu.supply_fan_operating_status]: "Bool" }).args, from, to, stepSec: STEP });
     assert.equal(n.rows, 288);
     const tsFc1 = (await ts.runRules(db, pack, ["FC1"])).results.FC1;
-    const fan = (await db.query("SELECT max(supply_fan_command) AS m FROM pg_temp.history")).rows[0].m;
-    assert.ok(Math.abs(fan - pct / 100) < 1e-12, `${pct} % reaches SQL as ${pct / 100} (got ${fan})`);
+    const fan = (await db.query("SELECT max(supply_fan_speed_command) AS m FROM pg_temp.history")).rows[0].m;
+    assert.ok(Math.abs(fan - pct) < 1e-12, `${pct} % reaches SQL as PERCENT ${pct} (got ${fan})`);
 
-    // PGlite path: values converted by the hook's own siPlan (the scale rule lives there)
+    // DuckDB path: values converted by the hook's own siPlan (the scale rule lives there)
     const roles = {
-      supply_fan_command: { uuid: uu.supply_fan_command, name: "fan", units: "%", kind: "Number" },
+      supply_fan_speed_command: { uuid: uu.supply_fan_speed_command, name: "fan", units: "%", kind: "Number" },
+      supply_fan_operating_status: { uuid: uu.supply_fan_operating_status, name: "status", units: "", kind: "Bool" },
       discharge_air_static_pressure: { uuid: uu.discharge_air_static_pressure, name: "ds", units: "inH2O", kind: "Number" },
       discharge_air_static_pressure_setpoint: { uuid: uu.discharge_air_static_pressure_setpoint, name: "sp", units: "inH2O", kind: "Number" },
     };
     const plan = hook.siPlan(roles, catalog);
-    const rawVals = { supply_fan_command: pct, discharge_air_static_pressure: 0, discharge_air_static_pressure_setpoint: 1.5 };
+    const rawVals = { supply_fan_speed_command: pct, supply_fan_operating_status: 1, discharge_air_static_pressure: 0, discharge_air_static_pressure_setpoint: 1.5 };
     const hist = [];
     for (let t = Date.parse(from); t < Date.parse(to); t += STEP * 1000) {
       const row = { equipment_id: equip, ts: t };
       for (const role of Object.keys(roles)) row[role] = plan.convert[role](rawVals[role]);
-      row.operating_status = row.supply_fan_command;            // the hook binds the fan command as this AHU's run proof (#1608)
+      row.operating_status = 1;            // the status proves the unit on; speed is the full-fan gate
       hist.push(row);
     }
     const eng = await createEngine({ kind: "duckdb", pack });
