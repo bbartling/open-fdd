@@ -10,6 +10,21 @@ task skills. Claude Code and Cursor load the skills through the pointers in `.cl
 There is no `CLAUDE.md` and no `.cursor` rules file. `scripts/check_agent_spec.py` checks the paths, commands and
 rule ids those files name.
 
+## Priorities
+
+Work in this order. When two items compete, the lower number wins.
+
+1. **Fault rules: SQL rules and the pandas cookbook.** SQL is primary. pandas and SQL are always kept equal and
+   tested for parity (triple validation). Any rule change lands in both, with the parity tests.
+2. **Data modeling:** 223P, RDF, SPARQL, SHACL and the roles contract.
+3. **The Normal Framework plugin and UI.** Always last of the core three.
+4. **Future enhancements and ideas,** such as DataFusion as another rule engine. Nobody works on these by default.
+
+Open work is tracked in four bucket issues: [#1832](https://github.com/bbartling/open-fdd/issues/1832) (P1 fault
+rules), [#1833](https://github.com/bbartling/open-fdd/issues/1833) (P2 data model),
+[#1834](https://github.com/bbartling/open-fdd/issues/1834) (P3 NF plugin and UI) and
+[#1835](https://github.com/bbartling/open-fdd/issues/1835) (Future). Add new items to the matching bucket instead of
+opening a new issue.
 ## Layout
 
 | Path | What |
