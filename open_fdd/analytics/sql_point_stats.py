@@ -239,12 +239,23 @@ def run_mv_change_point_sql(conn: Any, engine: str, **kwargs: Any) -> list[dict]
 COMFORT_COLUMNS = ("point_key", "equipment_id", "role", "n_occ", "n_in_band", "pct_in_band")
 
 
-def render_zone_comfort_sql(engine: str, occupied: Iterable[tuple[int, int]], *, lo_c: float, hi_c: float,
+def render_zone_comfort_sql(engine: str, occupied: Iterable[tuple[int, int]], *, lo_c: float | None = None,
+                            hi_c: float | None = None, band: dict | None = None,
                             site_id: str = DEFAULT_SITE, point_keys: Iterable[str] | None = None,
                             start_ms: int | None = None, end_ms: int | None = None) -> str:
-    """``occupied``: (start_ms, end_ms) half-open UTC intervals (the site's occupancy calendar); band in degC."""
-    from open_fdd.analytics.sql_runtime import _inline
+    """``occupied``: (start_ms, end_ms) half-open UTC intervals (the site's occupancy calendar); band in degC.
 
+    The ``{lo}`` / ``{hi}`` band is, in order: an explicit ``lo_c`` / ``hi_c`` pair, else the site's saved occupied zone
+    temperature range ``band`` ({lo_c, hi_c}, the calendar's ``zone_band``; validated, clamped to 65-80 F with a 2 F
+    minimum gap), else the 70-75 F default (5.0.22, ``open_fdd.analytics.zone_band``)."""
+    from open_fdd.analytics.sql_runtime import _inline
+    from open_fdd.analytics.zone_band import resolve_band
+
+    if (lo_c is None) != (hi_c is None):
+        raise ValueError("pass both lo_c and hi_c, or neither (the saved band / default is used)")
+    if lo_c is None:
+        saved = resolve_band(band)
+        lo_c, hi_c = saved["lo_c"], saved["hi_c"]
     lo, hi = float(min(lo_c, hi_c)), float(max(lo_c, hi_c))
     if not (math.isfinite(lo) and math.isfinite(hi)):
         raise ValueError("the comfort band must be finite degC")

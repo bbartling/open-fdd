@@ -390,6 +390,16 @@ def _params_for_rule(rule: cb.CookbookRule, params_by_rule: dict[str, dict]) -> 
         if isinstance(source, dict) and "occupancy_schedule" in source:
             p.setdefault("occupancy_schedule", source["occupancy_schedule"])
             break
+    # 5.0.22: the site's occupied zone temperature range ({lo_c, hi_c} degC, the calendar's zone_band) feeds the comfort
+    # pairs (VAV-1 zone_t_lo/hi, SCHED-1 comfort_low/high) under any explicit per-rule override.
+    for source in params_by_rule.values():
+        if isinstance(source, dict) and source.get("zone_band") is not None:
+            from open_fdd.analytics.zone_band import apply_to_params, resolve_band
+
+            band = resolve_band(source["zone_band"])
+            if band["source"] == "saved":
+                p = apply_to_params(p, band, explicit=overrides.keys())
+            break
     # Backward-compatible master sliders/session params. Canonical GL36 ε
     # parameters remain independently adjustable; a changed legacy master
     # intentionally updates each related sensor error unless that specific

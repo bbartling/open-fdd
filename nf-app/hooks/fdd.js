@@ -92,6 +92,7 @@ const { queryPoints } = require('./lib/paging.js');
 const settings = require('./lib/settings.js');
 const roleLimits = require('./lib/role-limits.js');
 const ruleTuning = require('./lib/rule-tuning.js');
+const zoneBand = require('./lib/zone-band.js');
 const engineBuild = require('./lib/engine-build.js');
 // ---- shared code with the UI ------------------------------------------------------
 /** model.js + fdd.js run unchanged in a sandbox: one binding implementation for UI and hook. */
@@ -837,7 +838,17 @@ async function loadRoleLimitOverrides({ engine, pack, log }) {
     if (!r || !r.parameters || r.parameters.reset || !r.parameters.calendar) return null;
     return { revision: r.revision, calendar: r.parameters.calendar };
   };
-  if (!pack.role_limit_templates) return { ...none, occupancyCalendar };   // a pack without tuning templates: calendar only
+  /**
+   * The site's saved occupied zone temperature range (5.0.22; the OCC-CALENDAR document's zone_band, degC), validated
+   * on read: { lo_c, hi_c, revision } or null (none saved, or an unusable value: the shipped 70-75 F default applies).
+   */
+  const siteZoneBand = (/** @type {string} */ siteId) => {
+    const c = occupancyCalendar(siteId);
+    if (!c || !c.calendar || c.calendar.zone_band == null) return null;
+    const b = zoneBand.resolveBand(c.calendar.zone_band);
+    return b.source === 'saved' ? { lo_c: b.lo_c, hi_c: b.hi_c, revision: c.revision } : null;
+  };
+  if (!pack.role_limit_templates) return { ...none, occupancyCalendar, zoneBand: siteZoneBand };   // a pack without tuning templates: calendar only
   const svRows = rows.filter((r) => !r.rule_id || r.rule_id === roleLimits.LIMITS_RULE_ID);
   const ruleRows = rows.filter((r) => r.rule_id && r.rule_id !== roleLimits.LIMITS_RULE_ID);
   summary.source = 'fdd.rule_config';
@@ -884,6 +895,7 @@ async function loadRoleLimitOverrides({ engine, pack, log }) {
   return {
     summary,
     occupancyCalendar,
+    zoneBand: siteZoneBand,
     forEquip(siteId, equipId) {
       const out = getSv(siteId, equipId);
       if (out) summary.equips++;
@@ -893,7 +905,12 @@ async function loadRoleLimitOverrides({ engine, pack, log }) {
       const svHere = roleLimits.SWEEP_RULES.includes(ruleId) ? getSv(siteId, equipId) : null;
       const siteR = byRuleKey.get(`${siteId}\u0001${ruleId}\u0001${ruleTuning.SITE_SCOPE}`);
       const equipR = byRuleKey.get(`${siteId}\u0001${ruleId}\u0001${ruleTuning.EQUIP_SCOPE_PREFIX}${equipId}`);
-      const hasRule = !(emptyRule(siteR) && emptyRule(equipR));
+      const hasExplicit = !(emptyRule(siteR) && emptyRule(equipR));
+      // 5.0.22: a rule with a comfort pair (VAV-1 zone_t_lo/hi, SCHED-1 comfort_low/high) follows the site's saved zone
+      // temperature range unless that key was tuned on the rule itself (shipped < site band < site rule < equipment rule).
+      const ruleTplHere = ruleTpls && ruleTpls.rules && ruleTpls.rules[ruleId];
+      const band = ruleTplHere && zoneBand.rulePairs(ruleTplHere.controls).length ? siteZoneBand(siteId) : null;
+      const hasRule = hasExplicit || !!band;
       if (!hasRule) {
         if (!svHere || !svHere.sweeps[ruleId]) return null;
         return {
@@ -911,12 +928,14 @@ async function loadRoleLimitOverrides({ engine, pack, log }) {
         site: !emptyRule(siteR) ? siteR.parameters.params : null,
         equip: !emptyRule(equipR) ? equipR.parameters.params : null,
       });
-      const cacheKey = `${siteId}\u0001${ruleId}\u0001${siteR ? siteR.revision : ''}|${equipR ? equipR.revision : ''}|${ruleText}|${svHere ? svHere.configHash : ''}`;
+      const bandText = band ? `${band.lo_c}|${band.hi_c}|${band.revision}` : '';
+      const cacheKey = `${siteId}\u0001${ruleId}\u0001${siteR ? siteR.revision : ''}|${equipR ? equipR.revision : ''}|${ruleText}|${svHere ? svHere.configHash : ''}|${bandText}`;
       if (!ruleCache.has(cacheKey)) {
         try {
           const merged = ruleTuning.mergeRuleParams(rTpl.controls, siteR && siteR.parameters, equipR && equipR.parameters, ruleId, rTpl.legacy);
           for (const m of merged.migration) log(`${equipId}: ${ruleId} saved tuner ${m.layer}.${m.key} ${m.action}${m.to || m.by ? ' -> ' + (m.to || m.by) : ''}${m.reason ? ' (' + m.reason + ')' : ''}`);
-          const values = ruleTuning.resolvePlaceholders(ruleTuning.ruleDefaults(ruleTpls, rTpl), rTpl.controls, merged.effective, merged.overrideKeys, pack.poll_seconds);
+          const banded = zoneBand.applyToEffective(rTpl.controls, merged.effective, merged.overrideKeys, band);
+          const values = ruleTuning.resolvePlaceholders(ruleTuning.ruleDefaults(ruleTpls, rTpl), rTpl.controls, banded.effective, merged.overrideKeys, pack.poll_seconds);
           const roleLimitsOpt = roleLimits.SWEEP_RULES.includes(ruleId) && tpl.rules && tpl.rules[ruleId]
             ? {
               roleTemplate: tpl.rules[ruleId],
@@ -927,18 +946,21 @@ async function loadRoleLimitOverrides({ engine, pack, log }) {
           const sql = ruleTuning.renderRuleSql(rTpl.sql, values, ruleId, roleLimitsOpt);
           const timeline_sql = rTpl.timeline_sql ? ruleTuning.renderRuleSql(rTpl.timeline_sql, values, ruleId, roleLimitsOpt) : null;
           const combinedOverrides = {
-            ...(hasRule ? { rule_params: { rule_id: ruleId, site_revision: !emptyRule(siteR) ? siteR.revision : null,
-              equipment_revision: !emptyRule(equipR) ? equipR.revision : null, effective: merged.effective,
+            ...(hasExplicit ? { rule_params: { rule_id: ruleId, site_revision: !emptyRule(siteR) ? siteR.revision : null,
+              equipment_revision: !emptyRule(equipR) ? equipR.revision : null, effective: banded.effective,
               overrides: JSON.parse(ruleText) } } : {}),
+            // the band that fed this run (degC), which parameters took it, and which explicit tuning won
+            ...(band ? { zone_band: { source: 'occupancy_calendar', rule_id: occupancyLib.RULE_ID, revision: band.revision,
+              lo_c: band.lo_c, hi_c: band.hi_c, applied: banded.applied, skipped: banded.skipped, effective: banded.effective } } : {}),
             ...(svHere ? svHere.parameters : {}),
           };
-          const combinedHashInput = svHere ? `${ruleText}|${svHere.configHash}` : ruleText;
+          const combinedHashInput = `${svHere ? `${ruleText}|${svHere.configHash}` : ruleText}${bandText ? `|zone_band:${bandText}` : ''}`;
           ruleCache.set(cacheKey, {
             sql,
             timeline_sql,
             ruleHash: sha(sql),
             configHash: sha(combinedHashInput),
-            configRevision: !emptyRule(equipR) ? equipR.revision : (!emptyRule(siteR) ? siteR.revision : svHere.configRevision),
+            configRevision: !emptyRule(equipR) ? equipR.revision : (!emptyRule(siteR) ? siteR.revision : (band ? band.revision : svHere.configRevision)),
             parameters: combinedOverrides,
           });
         } catch (e) {
@@ -1233,6 +1255,8 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         tuning.forEquip(siteId, equipId);                         // keep SV-LIMITS summary counter / validation up to date
         for (const r of runnable) {
           const tunedHere = tuning.forRule(siteId, equipId, r.rule.id);
+          const zb = tunedHere && tunedHere.parameters && tunedHere.parameters.zone_band;
+          if (zb) log(`${equipId} ${r.rule.id}: occupied zone range ${zb.lo_c.toFixed(3)}..${zb.hi_c.toFixed(3)} degC from the site calendar (rev ${zb.revision}); applied: ${Object.entries(zb.applied).map(([k, v]) => `${k}=${Number(v).toFixed(3)}`).join(', ') || 'none (rule tuning wins)'}`);
           let rows;
           try {
             rows = await engine.query(r.rule.id, tunedHere ? { sql: tunedHere.sql, timeline_sql: tunedHere.timeline_sql } : undefined);

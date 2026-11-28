@@ -131,3 +131,19 @@ tr.clickable:hover td { background: var(--panel2); }
 .occ-editor input[type="time"] { max-width: 110px; }
 .occ-editor > strong { display: block; margin: 8px 0; }
 .occ-editor > button, .occ-editor > span { margin-right: 10px; }
+/* 5.0.22 occupied zone temperature range: two overlaid range inputs over an SVG rail (no inline styles, CSP-safe) */
+.zone-band { margin: 0 0 16px; }
+.zone-band h3 { margin: 0 0 6px; }
+.zone-band > strong { display: block; margin: 8px 0; }
+.zone-band > button, .zone-band > span { margin-right: 10px; }
+.zb-slider { position: relative; max-width: 520px; height: 34px; margin: 6px 0 0; }
+.zb-track { position: absolute; left: 0; top: 14px; width: 100%; height: 12px; }
+.zb-rail { fill: var(--line); }
+.zb-fill { fill: var(--accent); }
+.zb-range { position: absolute; left: 0; top: 0; width: 100%; height: 34px; margin: 0; background: transparent; pointer-events: none; -webkit-appearance: none; appearance: none; }
+.zb-range::-webkit-slider-runnable-track { background: transparent; height: 34px; }
+.zb-range::-moz-range-track { background: transparent; height: 34px; }
+.zb-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; pointer-events: auto; width: 18px; height: 18px; margin-top: 8px; border-radius: 50%; border: 2px solid var(--accent); background: var(--panel); cursor: grab; }
+.zb-range::-moz-range-thumb { pointer-events: auto; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent); background: var(--panel); cursor: grab; }
+.zb-range:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.zb-scale { display: flex; justify-content: space-between; max-width: 520px; font-size: 12px; opacity: 0.75; margin-bottom: 8px; }

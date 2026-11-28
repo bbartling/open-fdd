@@ -32,6 +32,8 @@ class OccupancySchedule:
 
     days: dict[str, DaySchedule] = field(default_factory=dict)
     timezone: str = "America/Chicago"
+    #: the site's occupied zone temperature range {lo_c, hi_c} in degC (5.0.22, zone_band.py); None = the 70-75 F default
+    zone_band: dict[str, float] | None = None
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -41,13 +43,16 @@ class OccupancySchedule:
             }
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "timezone": self.timezone,
             "days": {
                 k: {"occupied": v.occupied, "start": v.start, "end": v.end}
                 for k, v in self.days.items()
             },
         }
+        if self.zone_band is not None:
+            out["zone_band"] = dict(self.zone_band)
+        return out
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> OccupancySchedule:
@@ -62,7 +67,12 @@ class OccupancySchedule:
                 start=str(row.get("start", "06:00")),
                 end=str(row.get("end", "18:00")),
             )
-        return cls(days=days, timezone=str(data.get("timezone") or "America/Chicago"))
+        # 5.0.22: an unusable stored band is dropped (None = the 70-75 F default), like the JS read path
+        from open_fdd.analytics.zone_band import resolve_band
+
+        band = resolve_band(data.get("zone_band")) if data.get("zone_band") is not None else None
+        saved = {"lo_c": band["lo_c"], "hi_c": band["hi_c"]} if band and band["source"] == "saved" else None
+        return cls(days=days, timezone=str(data.get("timezone") or "America/Chicago"), zone_band=saved)
 
 
 def _parse_hhmm(text: str) -> tuple[int, int]:

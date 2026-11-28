@@ -42,7 +42,7 @@ const SQL_GRID_MAX_CHARS = 32 * 1024 * 1024;   // sql_grid: raw JSON per argumen
 const FINE_SEC = 300;                   // the pack grid: native cadence of the FDD timeline points
 const FINE_MAX_SAMPLES = 9000;          // per series per request (NF caps at ~10000)
 const MAX_DAYS = 366;
-const SCRIPTS = ['units.js', 'model.js', 'fdd.js', 'schedule.js', 'occupancy.js', 'charts.js', 'rcx.js', 'rcx-overview.js', 'rcx-presets.js', 'fdd-plots.js', 'energy.js'];
+const SCRIPTS = ['units.js', 'model.js', 'fdd.js', 'schedule.js', 'zone-band.js', 'occupancy.js', 'charts.js', 'rcx.js', 'rcx-overview.js', 'rcx-presets.js', 'fdd-plots.js', 'energy.js'];
 const READ_POSTS = new Set(['/api/v1/point/query', '/api/v1/auth/token']);
 const COOLING_ROLES = ['compressor_operating_status', 'chiller_operating_status', 'chiller_command'];
 

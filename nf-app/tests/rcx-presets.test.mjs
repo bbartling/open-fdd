@@ -25,7 +25,7 @@ function load(fetchData = new Map()) {
     ofddRender: (chart, option, name) => rendered.push({ chart, option, name }),
   });
   ctx.units = "imperial";
-  for (const f of ["units.js", "paging.js", "nf.js", "model.js", "fdd.js", "rcx.js", "rcx-presets.js"]) {
+  for (const f of ["units.js", "paging.js", "nf.js", "model.js", "fdd.js", "zone-band.js", "rcx.js", "rcx-presets.js"]) {
     vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   }
   ctx.get = (name) => vm.runInContext(name, ctx);
@@ -430,9 +430,10 @@ const fixture = (extra, unit) => ({
   devices: [],
   points: extra.points(unit),
 });
-async function renderPreset(id, model, data, units = "imperial") {
+async function renderPreset(id, model, data, units = "imperial", calendars = null) {
   const ctx = load(data);
   ctx.units = units;
+  if (calendars) ctx.ofddOccCalendars = calendars;       // the Overview editor's saved calendars (per siteRef)
   const m = { ...model, points: model.points.map(ctx.toPoint) };
   const view = Array.from(ctx.get("RCX_VIEWS")).find((v) => v.id === id);
   const equips = ctx.rcxBind(view, model.equips, m, catalog);
@@ -462,6 +463,31 @@ test("zone comfort %: a degF zone and a degC zone with the same physical tempera
   const si = await renderPreset("zone_comfort_rank", zoneModel("°F"), new Map([["u-ZT", hours(temps, (x) => x)]]), "si");
   assert.equal(si.rendered[0].option.series[0].data[0], 50);        // same decision in the SI display system
   assert.match(si.note, /±1\.4 Δ°C.*else 21–24 °C/);
+});
+
+test("zone comfort follows the site's saved occupied zone temperature range (5.0.22), SI storage, either point unit", async () => {
+  const temps = [69, 72, 74, 76, 79];                                // default 70-75 F: 72 and 74 are in = 40 %
+  const data = (conv) => new Map([["u-ZT", hours(temps, conv)]]);
+  const pct = async (cal, unit = "°F", units = "imperial") => {
+    const r = await renderPreset("zone_comfort_rank", zoneModel(unit), data(unit === "°F" ? (x) => x : F2C), units, cal);
+    return { pct: r.rendered[0].option.series[0].data[0], note: r.note };
+  };
+  assert.equal((await pct(null)).pct, 40);
+  assert.equal((await pct({})).pct, 40, "no calendar for the site: default");
+  assert.equal((await pct({ s: { timezone: "America/Chicago" } })).pct, 40, "a calendar without a band: default");
+  const saved = (lo, hi) => ({ s: { zone_band: { lo_c: F2C(lo), hi_c: F2C(hi) } } });
+  const a = await pct(saved(72, 78));                                // 72, 74, 76 in
+  assert.equal(a.pct, 60); assert.match(a.note, /else 72–78 °F/);
+  assert.equal((await pct(saved(66, 80))).pct, 100);                 // wide band: everything is comfortable
+  assert.equal((await pct(saved(72, 78), "°C")).pct, 60, "same decision for a degC point");
+  const si = await pct(saved(72, 78), "°F", "si");
+  assert.equal(si.pct, 60); assert.match(si.note, /else 22–26 °C/, "the band reads back in the display units");
+  assert.equal((await pct({ other: { zone_band: { lo_c: 15, hi_c: 16 } } })).pct, 40, "another site's band never applies");
+  // an unusable stored band falls back to the default instead of drawing a bad band
+  for (const bad of [{ lo_c: F2C(78), hi_c: F2C(72) }, { lo_c: "x", hi_c: 24 }, { lo_c: NaN, hi_c: NaN }, {}]) assert.equal((await pct({ s: { zone_band: bad } })).pct, 40, JSON.stringify(bad));
+  // a zone with a setpoint keeps its own setpoint band: the saved range replaces only the hard-coded default
+  const sp = await renderPreset("zone_comfort_rank", zoneModel("°F", true), new Map([["u-ZT", hours([69, 71, 73, 74.8], (x) => x)], ["u-ZSP", hours([72, 72, 72, 72], (x) => x)]]), "imperial", saved(60, 80));
+  assert.equal(sp.rendered[0].option.series[0].data[0], 50);
 });
 
 test("zone comfort with a setpoint: sp +/- 1.3889 delta C (2.5 delta F) in either point unit", async () => {

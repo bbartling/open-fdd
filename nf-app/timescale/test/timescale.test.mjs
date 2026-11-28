@@ -683,6 +683,112 @@ test("sweep role-limit overrides (#1589): tuning hook preview / save / reset / r
   await db.query("DELETE FROM fdd.rule_config WHERE rule_id = 'SV-LIMITS'");
 });
 
+test("occupied zone temperature range (5.0.22): saved with the calendar, it drives VAV-1 and SCHED-1 on a real Timescale run", { skip, timeout: 180000 }, async () => {
+  if (sourceDirty) await seed();
+  const tuning = require("../../hooks/tuning.js");
+  const T = pack.role_limit_templates;
+  const logs = [];
+  const call = (args) => tuning.handle({ sdk: { logEvent: (m) => logs.push(m) }, args, connect: async () => db, templates: T });
+  const SITE = "zb-site", EQ = "ZB-1";
+  await db.query("DELETE FROM fdd.rule_config WHERE site_id = $1", [SITE]);
+  const save = (zb, expected = 0) => call({ action: "save", site: SITE, rule_id: "OCC-CALENDAR", expected_revision: expected, overrides: JSON.stringify({ version: 1, calendar: { timezone: "America/Chicago", ...(zb === undefined ? {} : { zone_band: zb }) } }) });
+  // server side guards: nothing invalid is stored
+  for (const bad of [{ lo_c: 25, hi_c: 20 }, { lo_c: "warm", hi_c: 24 }, { lo_c: null, hi_c: 24 }, {}]) {
+    const r = await save(bad);
+    assert.equal(r.ok, false, JSON.stringify(bad)); assert.match(r.error, /zone_band/);
+  }
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM fdd.rule_config WHERE site_id = $1", [SITE])).rows[0].n, 0, "rejected saves stored nothing");
+
+  // the data: a zone that ramps 16 -> 30 degC over one day, occupied = 1 (VAV-1) or 0 with the fan on (SCHED-1)
+  const from = "2026-11-05T00:00:00Z", to = "2026-11-06T00:00:00Z";
+  const uuidOf = async (expr) => (await db.query(`SELECT ${expr}::text AS u`)).rows[0].u;
+  const run = async (ruleId, occupied, sql) => {
+    const defs = { zone_air_temperature: ["degC", null], occupancy_status: ["", occupied], supply_fan_operating_status: ["", 1] };
+    const r2u = {}, units = {};
+    for (const [role, [u, v]] of Object.entries(defs)) {
+      const id = await uuidOf(`md5('${EQ}/${role}')::uuid`);
+      r2u[role] = id; units[id] = u;
+      await db.query("DELETE FROM public.data WHERE point_id = $1::uuid", [id]);
+      await db.query(
+        `INSERT INTO public.data (point_id, "time", value)
+         SELECT $1::uuid, g, ${v === null ? "16 + 14.0 * extract(epoch FROM g - $2::timestamptz) / 86100.0" : "$4::double precision"}
+         FROM generate_series($2::timestamptz, $3::timestamptz - interval '5 minutes', interval '5 minutes') g`,
+        v === null ? [id, from, to] : [id, from, to, v]);
+    }
+    const { args } = scaled(r2u, units);
+    const n = await load({ equipId: EQ, siteId: SITE, ...args, from, to, stepSec: STEP });
+    assert.equal(n.rows, 288);
+    const engine = await createEngine({ kind: "timescale", pack, client: db });
+    const rows = await engine.query(ruleId, sql);
+    const hist = (await db.query("SELECT * FROM pg_temp.history ORDER BY timestamp_utc")).rows.map(({ timestamp_utc, ...x }) => ({ ...x, ts: timestamp_utc.getTime() }));
+    const duck = await createEngine({ kind: "duckdb", pack });
+    let dRows;
+    try {
+      await duck.load({ historyColumns: pack.contract.history.filter((c) => c.name !== "equipment_id" && c.name !== "timestamp_utc").map((c) => ({ name: c.name, type: c.type })), history: hist, weather: [] });
+      dRows = await duck.query(ruleId, sql);
+    } finally { await duck.close(); }
+    return { row: rows[0], duck: dRows[0] };
+  };
+
+  const def = await run("VAV-1", 1);
+  const s1 = await save({ lo_c: 18.5, hi_c: 26 });
+  assert.equal(s1.ok, true, s1.error); assert.equal(s1.revision, 1);
+  assert.deepEqual(s1.calendar.zone_band, { lo_c: 18.5, hi_c: 26 });
+  const got = await call({ action: "get", site: SITE, rule_id: "OCC-CALENDAR" });
+  assert.deepEqual(got.calendar.zone_band, { lo_c: 18.5, hi_c: 26 }, "persisted per site in fdd.rule_config");
+  assert.deepEqual((await call({ action: "get", site: "other-site", rule_id: "OCC-CALENDAR" })).calendar.zone_band, undefined, "another site keeps the default");
+  // a stored out-of-range band is clamped on save (never negative, never outside 65-80 F, 2 F apart)
+  const clamped = await save({ lo_c: -3, hi_c: 18.9 }, 1);
+  assert.equal(clamped.ok, true); assert.ok(clamped.calendar.zone_band.lo_c >= 18.333 && clamped.calendar.zone_band.hi_c - clamped.calendar.zone_band.lo_c >= 10 / 9 - 1e-9);
+  assert.equal((await save({ lo_c: 18.5, hi_c: 26 }, 2)).revision, 3);
+
+  const engine = await createEngine({ kind: "timescale", pack, client: db });
+  const tuned = await hook.loadRoleLimitOverrides({ engine, pack, log: () => {} });
+  const v1 = tuned.forRule(SITE, EQ, "VAV-1");
+  assert.deepEqual(v1.parameters.zone_band.applied, { zone_t_lo: 18.5, zone_t_hi: 26 });
+  assert.equal(v1.configRevision, 3);
+  assert.equal(tuned.forRule("other-site", EQ, "VAV-1"), null, "another site keeps the shipped band");
+  const band = await run("VAV-1", 1, v1);
+  console.log(`ZONE-BAND-PROOF Timescale VAV-1 run: default 21.1-23.9 C fault_pct ${Number(def.row.fault_pct).toFixed(2)} -> saved band ${JSON.stringify(v1.parameters.zone_band.applied)} fault_pct ${Number(band.row.fault_pct).toFixed(2)} (DuckDB on the same history: ${Number(band.duck.fault_pct).toFixed(2)})`);
+  assert.ok(Number(band.row.fault_pct) < Number(def.row.fault_pct) - 20, "the wider saved band cuts the fault share on Timescale");
+  assert.equal(Number(band.row.fault_pct), Number(band.duck.fault_pct), "Timescale == DuckDB under the saved band");
+  assert.equal(Number(def.row.fault_pct), Number(def.duck.fault_pct));
+
+  // SCHED-1 (unoccupied, fan on, zone already comfortable): comfort_low / comfort_high
+  const sdef = await run("SCHED-1", 0);
+  const s = tuned.forRule(SITE, EQ, "SCHED-1");
+  assert.deepEqual(s.parameters.zone_band.applied, { comfort_low: 18.5, comfort_high: 26 });
+  const sband = await run("SCHED-1", 0, s);
+  console.log(`ZONE-BAND-PROOF Timescale SCHED-1 run: default fault_pct ${Number(sdef.row.fault_pct).toFixed(2)} -> saved band ${JSON.stringify(s.parameters.zone_band.applied)} fault_pct ${Number(sband.row.fault_pct).toFixed(2)} (DuckDB: ${Number(sband.duck.fault_pct).toFixed(2)})`);
+  assert.ok(Number(sband.row.fault_pct) > Number(sdef.row.fault_pct) + 15);
+  assert.equal(Number(sband.row.fault_pct), Number(sband.duck.fault_pct));
+
+  // the run records the band in fdd.rule_result.effective_parameters (config_revision = the calendar revision)
+  const runTs = "2026-11-06T01:00:00Z";
+  const extra = { ruleHash: v1.ruleHash, configHash: v1.configHash, configRevision: v1.configRevision, parameters: v1.parameters };
+  await ts.writeResults(db, [engine.resultRow({ runTs, equip: EQ, site: SITE, ruleId: "VAV-1", row: hook.equipmentResult(pack.rules["VAV-1"], [band.row], EQ), windowStart: from, windowEnd: to, ...extra })]);
+  const stored = (await db.query("SELECT config_revision, effective_parameters FROM fdd.rule_result WHERE rule_id = 'VAV-1' AND site_id = $1 AND created_at = $2", [SITE, runTs])).rows;
+  assert.equal(stored.length, 1);
+  assert.equal(Number(stored[0].config_revision), 3);
+  assert.deepEqual([stored[0].effective_parameters.zone_band.lo_c, stored[0].effective_parameters.zone_band.hi_c], [18.5, 26]);
+
+  // explicit per-rule tuning still wins (site rule override of zone_t_hi), and a calendar reset returns the shipped band
+  const ex = await call({ action: "save", site: SITE, rule_id: "VAV-1", expected_revision: 0, overrides: JSON.stringify({ version: 1, params: { zone_t_hi: 27 } }) });
+  assert.equal(ex.ok, true, ex.error);
+  const t2 = await hook.loadRoleLimitOverrides({ engine, pack, log: () => {} });
+  const v2 = t2.forRule(SITE, EQ, "VAV-1");
+  assert.deepEqual(v2.parameters.zone_band.applied, { zone_t_lo: 18.5 });
+  assert.equal(v2.parameters.rule_params.effective.zone_t_hi, 27);
+  assert.equal((await call({ action: "reset", site: SITE, rule_id: "OCC-CALENDAR", expected_revision: 3 })).ok, true);
+  const t3 = await hook.loadRoleLimitOverrides({ engine, pack, log: () => {} });
+  assert.equal(t3.forRule(SITE, EQ, "SCHED-1"), null, "calendar reset: the shipped 70-75 F band applies again");
+  const v3 = t3.forRule(SITE, EQ, "VAV-1");
+  assert.equal(v3.parameters.zone_band, undefined); assert.equal(v3.parameters.rule_params.effective.zone_t_hi, 27);
+  await db.query("DELETE FROM fdd.rule_config WHERE site_id = $1", [SITE]);
+  await db.query("DELETE FROM fdd.rule_result WHERE site_id = $1", [SITE]);
+  sourceDirty = true;
+});
+
 test("history_buckets and historyRoute (bounds against the real database)", { skip }, async () => {
   const discharge_air_temperature = roleToUuid.discharge_air_temperature;
   const { rows } = await db.query(
