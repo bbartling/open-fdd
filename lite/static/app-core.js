@@ -244,7 +244,7 @@ function renderSummary() {
   const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
   $("summary").innerHTML = [
     stat(siteEquipIds().length, "equips"),
-    stat(model.devices.filter((d) => (d.attrs || {}).siteRef === scope.site).length, "devices"),
+    stat(devicesOnSite(model, scope.site).length, "devices"),
     stat(tagged.length, "tagged points"),
     stat(onSite.length - tagged.length, "untagged objects"),
     stat(points.length, "charted sensors / sp"),
@@ -678,8 +678,11 @@ function renderModelChecks() {
     </div>`).join("");
   const tagSet = new Set(tagged.flatMap((p) => p.tags));
   const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
+  const siteId = refId(scope.site);
+  const siteCount = model.sites.filter((s) => refId(idOf(s)) === siteId).length;
+  const equipCount = model.equips.filter((e) => refId((e.attrs || {}).siteRef) === siteId).length;
   $("modelStats").innerHTML = [
-    stat(model.sites.length, "sites"), stat(model.equips.length, "equips"), stat(model.devices.length, "devices"),
+    stat(siteCount, "sites"), stat(equipCount, "equips"), stat(devicesOnSite(model, scope.site).length, "devices"),
     stat(tagged.length, "tagged points"), stat(onSite.length - tagged.length, "untagged objects"),
     stat(tagSet.size, "distinct markers"), stat(rdf.turtle.split("\n").filter((l) => l.startsWith("local:")).length, "RDF subjects"),
   ].join("");

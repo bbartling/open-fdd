@@ -293,6 +293,51 @@ test("model tree links devices by equipRef or point deviceRef and hides diagnost
   assert.equal(ctx.isDiagnosticPoint(fault), true);
 });
 
+test("Overview and Model counts are scoped to the selected site and include tree devices", () => {
+  const ctx = load();
+  const m = modelFor(ctx);
+  m.sites.push(rec("Other", "SITE", { id: "site-b" }));
+  m.equips.push(equip("VAV-Z", "Other zone"));
+  m.equips[m.equips.length - 1].attrs.siteRef = "site-b";
+  // A controller with no siteRef (Haystack often puts siteRef only on the equip) plus a
+  // point deviceRef that has no DEVICE record: both must show up in the DEVICES tile.
+  m.devices = [rec("dev-1", "DEVICE", { id: "dev-1", dis: "Controller", markers: "device", equipRef: "VAV-A" })];
+  const sensor = m.points.find((p) => p.uuid === "u-ZN-T");
+  sensor.deviceRef = "dev-1";
+  m.points.push(ctx.toPoint(pt("ORPH2", { equipRef: "VAV-A", deviceRef: "ctrl-missing", dis: "Orphan sensor", markers: "point,sensor,zone,temp,his" })));
+  const foreign = ctx.toPoint(pt("ZB", { siteRef: "site-b", equipRef: "VAV-Z", deviceRef: "dev-b", dis: "Other zone temp", markers: "point,sensor,zone,temp,his" }));
+  m.points.push(foreign);
+  m.devices.push(rec("dev-b", "DEVICE", { id: "dev-b", dis: "Other ctrl", markers: "device", siteRef: "site-b", equipRef: "VAV-Z" }));
+  const idOf = ctx.get("idOf");
+  const onA = ctx.devicesOnSite(m, "site-a").map((d) => idOf(d));
+  assert.ok(onA.includes("dev-1"), onA.join(" | "));
+  assert.ok(onA.includes("ctrl-missing"), "synthetic device from a point deviceRef");
+  assert.ok(!onA.includes("dev-b"), "the other site's controller stays out");
+  assert.equal(ctx.devicesOnSite(m, "site-b").length, 1);
+  const found = new Map();
+  const els = {
+    getElementById(id) {
+      if (!found.has(id)) found.set(id, { innerHTML: "", textContent: "", style: {}, replaceChildren() {}, hidden: false });
+      return found.get(id);
+    },
+  };
+  ctx.document = els;
+  ctx.$ = (id) => els.getElementById(id);
+  ctx.assignedModel = m;
+  ctx.rdf = { turtle: "", nonStandard: [] };
+  vm.runInContext('model = assignedModel; scope.site = "site-a"; rdf = assignedModel && rdf;', ctx);
+  ctx.rdf = { turtle: "local:x a hs:Site .\n", nonStandard: [] };
+  vm.runInContext("renderSummary(); renderModelChecks();", ctx);
+  const summary = found.get("summary").innerHTML;
+  const stats = found.get("modelStats").innerHTML;
+  assert.match(summary, />2<\/b><span>devices/);
+  assert.match(stats, />1<\/b><span>sites/);
+  assert.match(stats, />2<\/b><span>equips/);
+  assert.match(stats, />2<\/b><span>devices/);
+  assert.doesNotMatch(stats, />2<\/b><span>sites/, "the leftover site is not counted");
+  assert.doesNotMatch(summary, />0<\/b><span>devices/);
+});
+
 test("FDD hook result points are outputs: never in All signals, the heat-map dropdown, cards or lanes; no two series share a name", () => {
   const ctx = load(), m = modelFor(ctx);
   assert.equal(m.points.filter((p) => p.tags.includes("fault")).length, 3, "the fixture has fault result points");
