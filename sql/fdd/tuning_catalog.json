@@ -4954,7 +4954,7 @@
           "min": 0.0,
           "sql_placeholder": "CONFIRM_SECONDS",
           "step": 5.0,
-          "unit": "min"
+          "unit": "MIN"
         },
         "hw_oat_min": {
           "control": "slider",
@@ -4969,7 +4969,7 @@
           "min": 12.777778,
           "sql_placeholder": "HW_OAT_MIN",
           "step": 0.555556,
-          "unit": "degC"
+          "unit": "DEG_C"
         },
         "hw_on_min": {
           "control": "slider",
@@ -4984,7 +4984,7 @@
           "min": 32.222222,
           "sql_placeholder": "HW_ON_MIN",
           "step": 0.555556,
-          "unit": "degC"
+          "unit": "DEG_C"
         }
       },
       "parity_status": "sql_screening",
@@ -8595,7 +8595,7 @@
           "min": 2.0,
           "sql_placeholder": "MAX_STARTS_PER_HOUR",
           "step": 1.0,
-          "unit": "count"
+          "unit": "NUM"
         },
         "min_on_seconds": {
           "control": "slider",
@@ -8610,7 +8610,7 @@
           "min": 60.0,
           "sql_placeholder": "MIN_ON_SECONDS",
           "step": 60.0,
-          "unit": "sec"
+          "unit": "SEC"
         },
         "min_short_cycles": {
           "control": "slider",
@@ -8625,7 +8625,7 @@
           "min": 1.0,
           "sql_placeholder": "MIN_SHORT_CYCLES",
           "step": 1.0,
-          "unit": "count"
+          "unit": "NUM"
         }
       },
       "parity_status": "sql_screening",
@@ -8685,7 +8685,7 @@
           "min": 0.0,
           "sql_placeholder": "CONFIRM_SECONDS",
           "step": 5.0,
-          "unit": "min"
+          "unit": "MIN"
         },
         "mix_band": {
           "control": "slider",
@@ -8700,7 +8700,7 @@
           "min": 0.277778,
           "sql_placeholder": "MIX_BAND",
           "step": 0.138889,
-          "unit": "degC"
+          "unit": "DEG_C"
         },
         "require_run_proof": {
           "control": "slider",
@@ -8715,7 +8715,7 @@
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
-          "unit": "bool"
+          "unit": "boolean"
         }
       },
       "parity_status": "sql_screening",
@@ -8775,7 +8775,7 @@
           "min": 0.0,
           "sql_placeholder": "CONFIRM_SECONDS",
           "step": 30.0,
-          "unit": "min"
+          "unit": "MIN"
         },
         "copy_tol": {
           "control": "slider",
@@ -8790,7 +8790,7 @@
           "min": 0.0,
           "sql_placeholder": "COPY_TOL",
           "step": 0.01,
-          "unit": "degC"
+          "unit": "DEG_C"
         },
         "change_min": {
           "control": "slider",
@@ -8805,7 +8805,7 @@
           "min": 0.277778,
           "sql_placeholder": "CHANGE_MIN",
           "step": 0.138889,
-          "unit": "degC"
+          "unit": "DEG_C"
         }
       },
       "parity_status": "sql_screening",
@@ -8862,7 +8862,7 @@
           "min": 0.0,
           "sql_placeholder": "CONFIRM_SECONDS",
           "step": 5.0,
-          "unit": "min"
+          "unit": "MIN"
         },
         "clip_share": {
           "control": "slider",
@@ -8877,7 +8877,7 @@
           "min": 1.0,
           "sql_placeholder": "CLIP_SHARE",
           "step": 1.0,
-          "unit": "pct"
+          "unit": "PERCENT"
         },
         "co2_round": {
           "control": "slider",
@@ -8892,7 +8892,7 @@
           "min": 50.0,
           "sql_placeholder": "CO2_ROUND",
           "step": 50.0,
-          "unit": "ppm"
+          "unit": "PPM"
         },
         "static_round": {
           "control": "slider",
@@ -8907,7 +8907,7 @@
           "min": 5.0,
           "sql_placeholder": "STATIC_ROUND",
           "step": 5.0,
-          "unit": "Pa"
+          "unit": "PA"
         },
         "flow_round": {
           "control": "slider",
@@ -8922,7 +8922,7 @@
           "min": 5.0,
           "sql_placeholder": "FLOW_ROUND",
           "step": 5.0,
-          "unit": "L_per_s"
+          "unit": "L-PER-SEC"
         }
       },
       "parity_status": "sql_screening",

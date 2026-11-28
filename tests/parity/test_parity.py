@@ -111,7 +111,7 @@ def test_rules_without_pandas_twin_are_listed(report):
 
 def test_catalog_units_are_si():
     cat = json.loads((ROOT / "sql/fdd/tuning_catalog.json").read_text(encoding="utf-8"))["rules"]
-    allowed = {"DEG_C", "K", "K-PER-HR", "PA", "L-PER-SEC", "KiloW-HR", "MIN", "HR", "PERCENT", "PPM",
+    allowed = {"DEG_C", "K", "K-PER-HR", "PA", "L-PER-SEC", "KiloW-HR", "MIN", "SEC", "HR", "PERCENT", "PPM",
                "boolean", "x", "NUM", "unit"}
     for r in cat:
         for k, d in r["parameters"].items():
@@ -147,7 +147,7 @@ def test_pandas_defaults_equal_sql_catalog(report):
             continue
         for p in rule.params:
             q = sql["parameters"].get(p.key)
-            if q and q["unit"] in ("degC", "degC_delta", "L_per_s", "Pa"):
+            if q and q["unit"] in ("degC", "degC_delta", "L_per_s", "Pa", "DEG_C", "L-PER-SEC", "PA"):
                 if abs(float(p.default) - float(q["default"])) > 1e-4 * max(1.0, abs(float(q["default"]))):
                     bad.append((rid, p.key, p.default, q["default"]))
     assert not bad, bad[:10]

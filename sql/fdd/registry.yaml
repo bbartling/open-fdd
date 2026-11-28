@@ -5173,7 +5173,7 @@ rules:
       min: 0.0
       max: 3600.0
       step: 300.0
-      unit: sec
+      unit: SEC
       kind: duration_seconds
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
@@ -5183,7 +5183,7 @@ rules:
       min: 12.777778
       max: 23.888889
       step: 0.555556
-      unit: degC
+      unit: DEG_C
       kind: absolute_temperature
       frontend_control: slider
       sql_placeholder: HW_OAT_MIN
@@ -5193,7 +5193,7 @@ rules:
       min: 32.222222
       max: 60.0
       step: 0.555556
-      unit: degC
+      unit: DEG_C
       kind: absolute_temperature
       frontend_control: slider
       sql_placeholder: HW_ON_MIN
@@ -5219,7 +5219,7 @@ rules:
       min: 2.0
       max: 20.0
       step: 1.0
-      unit: count
+      unit: NUM
       kind: count
       frontend_control: slider
       sql_placeholder: MAX_STARTS_PER_HOUR
@@ -5229,7 +5229,7 @@ rules:
       min: 60.0
       max: 1800.0
       step: 60.0
-      unit: sec
+      unit: SEC
       kind: duration_seconds
       frontend_control: slider
       sql_placeholder: MIN_ON_SECONDS
@@ -5239,7 +5239,7 @@ rules:
       min: 1.0
       max: 10.0
       step: 1.0
-      unit: count
+      unit: NUM
       kind: count
       frontend_control: slider
       sql_placeholder: MIN_SHORT_CYCLES
@@ -5264,7 +5264,7 @@ rules:
       min: 0.0
       max: 3600.0
       step: 300.0
-      unit: sec
+      unit: SEC
       kind: duration_seconds
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
@@ -5274,7 +5274,7 @@ rules:
       min: 0.277778
       max: 5.555556
       step: 0.138889
-      unit: degC
+      unit: DEG_C
       kind: temperature_difference
       frontend_control: slider
       sql_placeholder: MIX_BAND
@@ -5284,7 +5284,7 @@ rules:
       min: 0.0
       max: 1.0
       step: 1.0
-      unit: bool
+      unit: boolean
       kind: boolean
       frontend_control: slider
       sql_placeholder: REQUIRE_RUN_PROOF
@@ -5310,7 +5310,7 @@ rules:
       min: 1800.0
       max: 43200.0
       step: 1800.0
-      unit: sec
+      unit: SEC
       kind: duration_seconds
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
@@ -5320,7 +5320,7 @@ rules:
       min: 0.0
       max: 0.5
       step: 0.01
-      unit: degC
+      unit: DEG_C
       kind: temperature_difference
       frontend_control: slider
       sql_placeholder: COPY_TOL
@@ -5330,7 +5330,7 @@ rules:
       min: 0.277778
       max: 5.555556
       step: 0.138889
-      unit: degC
+      unit: DEG_C
       kind: temperature_difference
       frontend_control: slider
       sql_placeholder: CHANGE_MIN
@@ -5356,7 +5356,7 @@ rules:
       min: 0.0
       max: 3600.0
       step: 300.0
-      unit: sec
+      unit: SEC
       kind: duration_seconds
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
@@ -5366,7 +5366,7 @@ rules:
       min: 1.0
       max: 50.0
       step: 1.0
-      unit: pct
+      unit: PERCENT
       kind: percent
       frontend_control: slider
       sql_placeholder: CLIP_SHARE
@@ -5376,7 +5376,7 @@ rules:
       min: 50.0
       max: 1000.0
       step: 50.0
-      unit: ppm
+      unit: PPM
       kind: dimensionless
       frontend_control: slider
       sql_placeholder: CO2_ROUND
@@ -5386,7 +5386,7 @@ rules:
       min: 5.0
       max: 250.0
       step: 5.0
-      unit: Pa
+      unit: PA
       kind: air_pressure
       frontend_control: slider
       sql_placeholder: STATIC_ROUND
@@ -5396,7 +5396,7 @@ rules:
       min: 5.0
       max: 500.0
       step: 5.0
-      unit: L_per_s
+      unit: L-PER-SEC
       kind: volumetric_flow
       frontend_control: slider
       sql_placeholder: FLOW_ROUND

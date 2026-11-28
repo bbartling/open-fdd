@@ -4452,7 +4452,7 @@
       "min": 0.0,
       "max": 60.0,
       "step": 5.0,
-      "unit": "min",
+      "unit": "MIN",
       "default": 15.0,
       "sql_placeholder": "CONFIRM_SECONDS"
      },
@@ -4463,7 +4463,7 @@
       "min": 12.777778,
       "max": 23.888889,
       "step": 0.555556,
-      "unit": "degC",
+      "unit": "DEG_C",
       "default": 18.333333,
       "sql_placeholder": "HW_OAT_MIN"
      },
@@ -4474,7 +4474,7 @@
       "min": 32.222222,
       "max": 60.0,
       "step": 0.555556,
-      "unit": "degC",
+      "unit": "DEG_C",
       "default": 43.333333,
       "sql_placeholder": "HW_ON_MIN"
      }
@@ -6318,7 +6318,7 @@
       "min": 2.0,
       "max": 20.0,
       "step": 1.0,
-      "unit": "count",
+      "unit": "NUM",
       "default": 6.0,
       "sql_placeholder": "MAX_STARTS_PER_HOUR"
      },
@@ -6329,7 +6329,7 @@
       "min": 60.0,
       "max": 1800.0,
       "step": 60.0,
-      "unit": "sec",
+      "unit": "SEC",
       "default": 600.0,
       "sql_placeholder": "MIN_ON_SECONDS"
      },
@@ -6340,7 +6340,7 @@
       "min": 1.0,
       "max": 10.0,
       "step": 1.0,
-      "unit": "count",
+      "unit": "NUM",
       "default": 3.0,
       "sql_placeholder": "MIN_SHORT_CYCLES"
      }
@@ -6361,7 +6361,7 @@
       "min": 0.0,
       "max": 60.0,
       "step": 5.0,
-      "unit": "min",
+      "unit": "MIN",
       "default": 15.0,
       "sql_placeholder": "CONFIRM_SECONDS"
      },
@@ -6372,7 +6372,7 @@
       "min": 0.277778,
       "max": 5.555556,
       "step": 0.138889,
-      "unit": "degC",
+      "unit": "DEG_C",
       "default": 1.111111,
       "sql_placeholder": "MIX_BAND"
      },
@@ -6383,7 +6383,7 @@
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
-      "unit": "bool",
+      "unit": "boolean",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
@@ -6400,7 +6400,7 @@
       "min": 0.0,
       "max": 720.0,
       "step": 30.0,
-      "unit": "min",
+      "unit": "MIN",
       "default": 120.0,
       "sql_placeholder": "CONFIRM_SECONDS"
      },
@@ -6411,7 +6411,7 @@
       "min": 0.0,
       "max": 0.5,
       "step": 0.01,
-      "unit": "degC",
+      "unit": "DEG_C",
       "default": 0.02,
       "sql_placeholder": "COPY_TOL"
      },
@@ -6422,7 +6422,7 @@
       "min": 0.277778,
       "max": 5.555556,
       "step": 0.138889,
-      "unit": "degC",
+      "unit": "DEG_C",
       "default": 1.0,
       "sql_placeholder": "CHANGE_MIN"
      }
@@ -6439,7 +6439,7 @@
       "min": 0.0,
       "max": 60.0,
       "step": 5.0,
-      "unit": "min",
+      "unit": "MIN",
       "default": 0.0,
       "sql_placeholder": "CONFIRM_SECONDS"
      },
@@ -6450,7 +6450,7 @@
       "min": 1.0,
       "max": 50.0,
       "step": 1.0,
-      "unit": "pct",
+      "unit": "PERCENT",
       "default": 5.0,
       "sql_placeholder": "CLIP_SHARE"
      },
@@ -6461,7 +6461,7 @@
       "min": 50.0,
       "max": 1000.0,
       "step": 50.0,
-      "unit": "ppm",
+      "unit": "PPM",
       "default": 100.0,
       "sql_placeholder": "CO2_ROUND"
      },
@@ -6472,7 +6472,7 @@
       "min": 5.0,
       "max": 250.0,
       "step": 5.0,
-      "unit": "Pa",
+      "unit": "PA",
       "default": 25.0,
       "sql_placeholder": "STATIC_ROUND"
      },
@@ -6483,7 +6483,7 @@
       "min": 5.0,
       "max": 500.0,
       "step": 5.0,
-      "unit": "L_per_s",
+      "unit": "L-PER-SEC",
       "default": 50.0,
       "sql_placeholder": "FLOW_ROUND"
      }

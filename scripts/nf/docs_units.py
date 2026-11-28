@@ -238,7 +238,7 @@ def param_unit(p: dict) -> tuple[str, bool]:
     if label is None:
         raise SystemExit(f"parameter unit {unit!r} has no docs label (add it to docs_units.PARAM_UNIT)")
     delta = p.get("kind") == "temperature_difference" or unit in ("degC_delta", "degC_delta_per_h")
-    if delta and unit == "degC":
+    if delta and unit in ("degC", "DEG_C"):
         label = "Δ°C"
     return label, delta
 
