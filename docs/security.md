@@ -14,7 +14,7 @@ internet.
 - Store console credentials and database secrets outside the repository.
 - A Normal Online API key can read data but cannot install or deploy the app.
 - Use TLS with a trusted certificate for remote access. Do not disable certificate verification.
-- The optional Caddy front door can protect console and write routes. Follow the short guidance in
+- The optional Caddy front door leaves the dashboard and its read-only GETs open on the LAN and protects the console and write routes. Follow the short guidance in
   [Install](install.html) and the repository's deploy/nf-caddy README.
 - Open-FDD writes its own result points and weather variables. It does not write to field devices.
 

@@ -17,7 +17,7 @@
 :{$TLS_PORT:443} {
 	bind {$LAN_IP}
 	tls /certs/server.crt /certs/server.key
-	import /etc/caddy/routes.caddy
+	import routes.caddy
 }
 
 # Plain HTTP only redirects to HTTPS.

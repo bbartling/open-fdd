@@ -199,7 +199,7 @@ test("optional pgweb sidecar stays off by default, private, TLS + basic_auth, re
   assert.match(pgCaddy, /@pgweb path \/pgweb \/pgweb\/\*/);
   assert.match(pgCaddy, /basic_auth/);
   assert.match(pgTls, /tls \/certs\/server\.crt \/certs\/server\.key/);
-  assert.match(pgTls, /import \/etc\/caddy\/pgweb\.caddy/);
+  assert.match(pgTls, /import pgweb\.caddy/);
   assert.match(pgGrants, /default_transaction_read_only = on/);
   assert.match(pgGrants, /statement_timeout = '10s'/);
   assert.doesNotMatch(pgGrants, /(INSERT|UPDATE|DELETE|TRUNCATE|ALTER TABLE|CREATE TABLE)/i);

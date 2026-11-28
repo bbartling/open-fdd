@@ -1,29 +1,49 @@
-# Which NF URLs are open and which need a login. Imported by Caddyfile (plain HTTP)
-# and Caddyfile.tls (HTTPS), so both front doors apply the same rules.
+# Which NF URLs are open and which need a login. Imported by Caddyfile (plain HTTP,
+# Full and Lite) and Caddyfile.tls (HTTPS), so both front doors apply the same rules.
+# Lite sets APP_ID=open-fdd-lite; the matchers below name both app ids explicitly.
 #
-#   open (no login)  NF app static pages + the read-only API calls they make
-#   basic auth       everything else: NF console, app/hook config, every write
+#   open (no login)     the Open-FDD static app and the read-only calls the page makes
+#   no challenge        two calls the page makes that must not pop a browser login dialog
+#                       and must not succeed anonymously (app listing, tuning hook)
+#   basic auth          everything else: NF console, app config, every write
 #
-# The login lives in /etc/caddy/auth.caddy (one line: `<user> <bcrypt hash>` from
+# The login lives in auth.caddy next to this file (one line: `<user> <bcrypt hash>` from
 # `caddy hash-password`) and is never committed.
+#
+# A 401 with WWW-Authenticate on any sub-resource makes the browser show its login dialog
+# even when the dashboard document itself is open. Public routes never do that. The two
+# no-challenge routes answer 403 with no WWW-Authenticate when the request has no
+# Authorization header, and still require the login when a credential is presented.
 
-# App pages (Open-FDD dashboard and any other NF app) — files only, no app config.
-# (+ NF's favicon: browsers ask for /favicon.ico on every page, else a 401 per load)
+# App pages (Open-FDD and Lite, files only) plus the icons browsers request from the
+# origin on every load. A 401 on those icons is enough to pop the dialog.
 @appStatic {
 	method GET HEAD
-	path /api/v1/apps/static/* /favicon.ico
+	path /api/v1/apps/static/* /favicon.ico /favicon.png /favicon.svg /apple-touch-icon.png /apple-touch-icon-precomposed.png
 }
-@favicon path /favicon.ico
-# Read-only API the pages use: history, platform info, BACnet server reads.
+@browserIcons path /favicon.ico /favicon.png /favicon.svg /apple-touch-icon.png /apple-touch-icon-precomposed.png
+# Read-only GETs the dashboard uses: history, platform info, BACnet server reads,
+# site timezone, occupancy schedules.
 @readGet {
 	method GET HEAD
 	path /api/v1/point/data /api/v1/platform/info
 	path /api/v1/bacnet/configuration /api/v1/bacnet/local /api/v1/bacnet/ports /api/v1/bacnet/readproperty
+	path /api/v1/sites /api/v1/sites/* /api/v1/schedules /api/v1/schedules/*
 }
-# Reads that are POSTs in NF's API; the token call still needs a client id/secret.
+# Reads that are POSTs in NF's API. point/query and auth/token were already open.
+# schema and analytics are read-only hooks the page starts while it draws; the same
+# POST on fdd, history, weather, tuning or sparql is not listed here.
 @readPost {
 	method POST
 	path /api/v1/point/query /api/v1/auth/token
+	path /api/v1/apps/open-fdd/hooks/schema /api/v1/apps/open-fdd-lite/hooks/schema
+	path /api/v1/apps/open-fdd/hooks/analytics /api/v1/apps/open-fdd-lite/hooks/analytics
+}
+# Results of those two hooks only (the page polls them). Not other hooks' run logs.
+@hookRuns {
+	method GET HEAD
+	path /api/v1/apps/open-fdd/hooks/schema/runs /api/v1/apps/open-fdd-lite/hooks/schema/runs
+	path /api/v1/apps/open-fdd/hooks/analytics/runs /api/v1/apps/open-fdd-lite/hooks/analytics/runs
 }
 # Live values NF pushes (PointManager.ObserveDataUpdates, read-only, one long
 # chunked response). Flush every chunk at once instead of buffering it.
@@ -31,17 +51,28 @@
 	method GET
 	path /api/v1/point/updates/data
 }
+# The app listing carries options (a database URL can sit there). The tuning hook's
+# one POST both reads and saves. Anonymous callers get 403 and no login dialog;
+# a presented credential is checked, and a wrong one is still a 401.
+@appList {
+	method GET HEAD
+	path /api/v1/apps
+}
+@tuningPost {
+	method POST
+	path /api/v1/apps/open-fdd/hooks/tuning /api/v1/apps/open-fdd-lite/hooks/tuning
+}
 
 # Access log: one JSON line per request, rolled by size, secrets redacted.
 #   - Authorization / Cookie / Set-Cookie headers and token-like query parameters never reach the file.
 #   - Bounded: 5 MiB per file, 5 files kept, nothing older than 30 days (roll_*), on the caddy_logs volume.
-#   - Not logged at all (log_skip): /favicon.ico and the live stream (one line per ~15 s per open tab,
+#   - Not logged at all (log_skip): browser icons and the live stream (one line per ~15 s per open tab,
 #     it would push everything useful out of the 5 files).
 # Everything that needs a decision (who got in, what was written, which status) is in the file.
-log_skip @favicon
+log_skip @browserIcons
 log_skip @liveStream
 log {
-	output file /var/log/caddy/access.log {
+	output file {$CADDY_ACCESS_LOG:/var/log/caddy/access.log} {
 		roll_size 5MiB
 		roll_keep 5
 		roll_keep_for 720h
@@ -111,9 +142,42 @@ handle @readGet {
 handle @readPost {
 	reverse_proxy {$NF_UPSTREAM}
 }
+handle @hookRuns {
+	reverse_proxy {$NF_UPSTREAM}
+}
+# Optional login: no header means 403 and no WWW-Authenticate (the dashboard's fetch fails
+# and the browser stays quiet). A Basic credential is checked before the request is proxied.
+handle @appList {
+	route {
+		@appListCred header Authorization *
+		handle @appListCred {
+			basic_auth {
+				import auth.caddy
+			}
+			reverse_proxy {$NF_UPSTREAM}
+		}
+		handle {
+			respond 403
+		}
+	}
+}
+handle @tuningPost {
+	route {
+		@tuningCred header Authorization *
+		handle @tuningCred {
+			basic_auth {
+				import auth.caddy
+			}
+			reverse_proxy {$NF_UPSTREAM}
+		}
+		handle {
+			respond 403
+		}
+	}
+}
 handle {
 	basic_auth {
-		import /etc/caddy/auth.caddy
+		import auth.caddy
 	}
 	reverse_proxy {$NF_UPSTREAM}
 }

@@ -50,19 +50,27 @@ folder.
 
 A page that needs another read-only endpoint: add its path to `@readGet` (GET) or `@readPost` (POST that only
 reads) in `routes.caddy`, restart Caddy (`docker compose restart caddy`; the admin API is off so there is no live
-reload). **Never open a write method.** Everything not listed falls through to basic auth.
+reload). **Never open a write method.** A write hook (`fdd`, `history`, `weather`, `tuning`, `sparql`) stays in the
+final basic-auth block. Everything not listed falls through to basic auth. Do not answer those paths with 200 just
+to silence a browser login dialog: a 401 on a sub-resource is what pops it, and the fix is to stop challenging the
+read the page actually needs, not to open the console.
 
 ## Verify
 
 Replace `<nf-host>` and the credentials; add `--cacert <cert>` when using the self-signed HTTPS variant.
 
 ```bash
-H=http://<nf-host>:8090      # or https://<nf-host>
-curl -s -o /dev/null -w '%{http_code}\n' $H/api/v1/apps/static/open-fdd/     # 200 (open)
-curl -s -o /dev/null -w '%{http_code}\n' $H/                                 # 401 (console is locked)
-curl -s -o /dev/null -w '%{http_code}\n' -u admin:<password> $H/api/v1/apps  # 200 (with login)
-curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://<nf-host>:8090/         # refused if NF no longer listens on the LAN
+H=http://<nf-host>:8090      # or https://<nf-host> ; the port that serves routes, not the :80 redirect
+curl -s -D - -o /dev/null $H/api/v1/apps/static/open-fdd/ | grep -i -E 'HTTP/|WWW-Authenticate'   # 200, no challenge
+curl -s -D - -o /dev/null $H/api/v1/sites | grep -i -E 'HTTP/|WWW-Authenticate'                   # 200, no challenge
+curl -s -D - -o /dev/null $H/ | grep -i -E 'HTTP/|WWW-Authenticate'                               # 401 Basic realm="restricted"
+curl -s -o /dev/null -w '%{http_code}\n' -X POST $H/api/v1/bacnet/local                            # 401 (write stays locked)
+curl -s -D - -o /dev/null $H/api/v1/apps | grep -i -E 'HTTP/|WWW-Authenticate'                    # 403, no challenge
+curl -s -o /dev/null -w '%{http_code}\n' -u admin:<password> $H/api/v1/apps                       # 200 (with login)
+curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://<nf-host>:8090/                              # refused if NF no longer listens on the LAN
 ```
+
+Cancelling the 401 on `/` returns the front door's refusal, not the console. The same `routes.caddy` is what Lite uses; set `APP_ID=open-fdd-lite` so `:80` redirects to the Lite dashboard.
 
 - Run an app hook once (NF console, or `manage_hooks run` with the hook uuid in the NF MCP): it should succeed,
   because hooks use loopback.
@@ -84,7 +92,7 @@ rejected me", "Login recovery" and "Open pages and NF auth".
   `Import-Certificate -FilePath nf-ca.crt -CertStoreLocation Cert:\CurrentUser\Root`. Do it yourself; it is a
   trust decision.
 - **Deploys** (`nf_app_sync.py`) run on the NF host against loopback, or through the Caddy URL with the basic-auth
-  user, because `/api/v1/apps*` is locked.
+  user. `GET /api/v1/apps` answers 403 with no login challenge until that credential is sent; a wrong credential is 401.
 
 ## Details worth knowing
 

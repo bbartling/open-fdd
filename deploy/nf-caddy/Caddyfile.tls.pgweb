@@ -7,8 +7,8 @@
 :{$TLS_PORT:443} {
 	bind {$LAN_IP}
 	tls /certs/server.crt /certs/server.key
-	import /etc/caddy/pgweb.caddy
-	import /etc/caddy/routes.caddy
+	import pgweb.caddy
+	import routes.caddy
 }
 
 :80 {

@@ -3,7 +3,7 @@
 @pgweb path /pgweb /pgweb/*
 handle @pgweb {
 	basic_auth {
-		import /etc/caddy/auth.caddy
+		import auth.caddy
 	}
 	reverse_proxy pgweb:8081
 }

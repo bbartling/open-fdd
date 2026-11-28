@@ -59,7 +59,7 @@ or expose the console to the public internet. See [Security](security.html).
 The workstation must reach the NF console over the site LAN, an approved VPN, or a temporary SSH forward. If the
 console is behind a TLS proxy, trust its certificate with the installer CA-file or certificate-pin option. Do not
 disable certificate verification. Use the front-door URL that the workstation can reach and confirm that the proxy
-and NF accept the same console login. Plain HTTP is for a trusted local network only. The portal API key path is for
+and NF accept the same console login. Plain HTTP is for a trusted local network only. On that front door the dashboard and its read-only GETs are open; the console and writes ask for the login, and cancelling it does not show the console. The portal API key path is for
 reads and is not a deployment route.
 
 ## Timescale option and schema preflight

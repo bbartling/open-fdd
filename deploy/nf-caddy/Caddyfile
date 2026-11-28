@@ -6,8 +6,11 @@
 # portal tunnel, app hooks and the NF MCP keep using that. Caddy takes the LAN side:
 #
 #   http://<lan-ip>/                              redirect to the Open-FDD dashboard
-#   http://<lan-ip>:<port>/api/v1/apps/static/open-fdd/   dashboard + read-only API, open
+#   http://<lan-ip>:<port>/api/v1/apps/static/<app>/      dashboard + read-only API, open
 #   http://<lan-ip>:<port>/  (console, config, writes)    basic auth
+#
+# Full and Lite use this same file. Lite sets APP_ID=open-fdd-lite so the :80 redirect
+# opens Lite; the route policy is routes.caddy (both app ids). On a Pi, :80 is the bare URL.
 #
 # Env (see docker-compose.yml): LAN_IP, NF_UPSTREAM, NF_PORT, APP_ID (which NF app the bare URL opens).
 {
@@ -17,7 +20,7 @@
 
 :{$NF_PORT:8090} {
 	bind {$LAN_IP}
-	import /etc/caddy/routes.caddy
+	import routes.caddy
 }
 
 # The box's bare URL is the dashboard.

@@ -1,0 +1,33 @@
+# Front-door route matrix: which paths are public, which stay behind basic auth.
+name: Caddy routes
+
+on:
+  push:
+    branches: [master, "release/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  routes:
+    name: Public vs protected paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Caddy 2.11.9
+        run: |
+          curl -fsSL -o /tmp/caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_linux_amd64.tar.gz
+          sudo tar -xzf /tmp/caddy.tar.gz -C /usr/local/bin caddy
+          caddy version
+
+      - name: Route matrix (Full and Lite share routes.caddy)
+        run: python3 deploy/nf-caddy/test_routes.py
