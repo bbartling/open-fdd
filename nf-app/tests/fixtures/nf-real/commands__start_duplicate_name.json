@@ -1,0 +1,18 @@
+{
+ "id": "commands__start_duplicate_name",
+ "request": {
+  "method": "POST",
+  "path": "/api/v2/command",
+  "body": {
+   "name": "contract-probe-b",
+   "duration": "300s"
+  }
+ },
+ "response": {
+  "status": 409,
+  "contentType": "application/grpc",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

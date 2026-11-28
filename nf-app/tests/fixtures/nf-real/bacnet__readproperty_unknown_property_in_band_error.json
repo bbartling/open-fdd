@@ -1,0 +1,17 @@
+{
+ "id": "bacnet__readproperty_unknown_property_in_band_error",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/bacnet/readproperty?object_id.object_type=OBJECT_ANALOG_VALUE&object_id.instance=8022&property_id=PROP_PRIORITY_ARRAY&device_address.mac=<loopback-mac>&device_address.port_id=1&array_index=4294967295"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "error": {
+    "errorClass": "ERROR_CLASS_PROPERTY",
+    "errorCode": "ERROR_CODE_UNKNOWN_PROPERTY"
+   }
+  }
+ }
+}

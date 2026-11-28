@@ -1,0 +1,34 @@
+{
+ "id": "hook_runs__sparql__without_results",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/apps/open-fdd-lite/hooks/sparql/runs?page_size=1"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "runs": [
+    {
+     "hookId": "",
+     "pid": "1",
+     "state": "STATE_SUCCESS",
+     "message": "",
+     "trigger": "TRIGGER_REQUEST",
+     "startTime": "2026-11-28T14:43:29.315923792Z",
+     "endTime": "2026-11-28T14:43:31.314686642Z",
+     "args": {
+      "query": "SELECT * WHERE {?s ?p ?o} LIMIT 1"
+     },
+     "results": {},
+     "version": "",
+     "enqueuedTime": "2026-11-28T14:43:28.661664809Z",
+     "stats": {
+      "6": "1"
+     }
+    }
+   ],
+   "totalCount": "1"
+  }
+ }
+}

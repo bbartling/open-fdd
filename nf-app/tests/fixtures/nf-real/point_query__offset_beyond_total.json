@@ -1,0 +1,21 @@
+{
+ "id": "point_query__offset_beyond_total",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/point/query",
+  "body": {
+   "layer": "default",
+   "pageSize": 5,
+   "pageOffset": 5000
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "points": [],
+   "totalCount": "896",
+   "nextPageToken": ""
+  }
+ }
+}

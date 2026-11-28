@@ -1,0 +1,75 @@
+{
+ "id": "point_query__site_field",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/point/query",
+  "body": {
+   "layer": "default",
+   "pageSize": 1,
+   "structuredQuery": {
+    "field": {
+     "property": "siteRef",
+     "text": "nfft-sim-site"
+    }
+   }
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "points": [
+    {
+     "uuid": "0046d229-7341-5491-987d-861560b44a6c",
+     "name": "nfft-sim-site/nfft-sim-vav-203/FCU-SENSOR-NULL",
+     "layer": "default",
+     "version": "",
+     "attrs": {
+      "fddWindowHours": "24",
+      "equipRef": "nfft-sim-vav-203",
+      "fddOutputSince": "2026-11-28T14:40:00.000Z",
+      "label": "FCU-SENSOR-NULL",
+      "description": "Own zone setpoint present but zone temperature null for at least 90% of window",
+      "group_key": "nfft-sim-site/nfft-sim-vav-203",
+      "units": "%",
+      "type": "fdd-result",
+      "sensorRef": "",
+      "fddSummary": "equip",
+      "roleRef": "",
+      "fddStatus": "not-assessed",
+      "dis": "VAV-23 East FCU-SENSOR-NULL",
+      "ruleRef": "FCU-SENSOR-NULL",
+      "fddLastRun": "2026-11-28T14:42:35.949Z",
+      "markers": "point,his,fault,fdd",
+      "equipUuid": "1467bf39-23d6-5892-8667-34bb19fa08d8",
+      "fddCoverageHours": "0",
+      "fddSensorFaultHours": "",
+      "fddOccSource": "",
+      "unit": "%",
+      "siteRef": "nfft-sim-site",
+      "fddOutput": "fault_pct",
+      "application_id": "open-fdd",
+      "fddReason": "no covered time in the window (covered_hours 0)",
+      "kind": "Number"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    }
+   ],
+   "totalCount": "881",
+   "nextPageToken": ""
+  }
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "id": "apps__unknown_app",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/apps/nope"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "applications": [],
+   "totalCount": "0"
+  }
+ }
+}

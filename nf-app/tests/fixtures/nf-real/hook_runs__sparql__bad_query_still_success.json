@@ -1,0 +1,54 @@
+{
+ "id": "hook_runs__sparql__bad_query_still_success",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/apps/open-fdd-lite/hooks/sparql/runs?page_size=1&include_results=true&include_logs=true"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "runs": [
+    {
+     "hookId": "",
+     "pid": "3",
+     "state": "STATE_SUCCESS",
+     "message": "",
+     "trigger": "TRIGGER_REQUEST",
+     "startTime": "2026-11-28T14:51:43.291260690Z",
+     "endTime": "2026-11-28T14:51:44.291388050Z",
+     "args": {
+      "query": "SELEKT nonsense"
+     },
+     "results": {
+      "": {
+       "endTime": "2026-11-28T14:51:43.920678773Z",
+       "state": "STATE_SUCCESS",
+       "invocationCount": "0",
+       "returnValue": "",
+       "events": [
+        {
+         "ts": "2026-11-28T14:51:43.918Z",
+         "message": "{\"ok\":false,\"ms\":1446,\"error\":\"only SELECT, ASK, CONSTRUCT and DESCRIBE are allowed (got SELEKT): SPARQL here is read-only\"}"
+        }
+       ],
+       "startTime": "2026-11-28T14:51:42.470639105Z",
+       "enqueuedTime": "2026-11-28T14:51:42.468096246Z",
+       "group": "",
+       "pid": "3",
+       "taskUuid": "",
+       "args": {},
+       "runtimePid": 1329
+      }
+     },
+     "version": "",
+     "enqueuedTime": "2026-11-28T14:51:42.468096246Z",
+     "stats": {
+      "6": "1"
+     }
+    }
+   ],
+   "totalCount": "3"
+  }
+ }
+}

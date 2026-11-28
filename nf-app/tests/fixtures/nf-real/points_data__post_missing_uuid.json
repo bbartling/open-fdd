@@ -1,0 +1,26 @@
+{
+ "id": "points_data__post_missing_uuid",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/points/data",
+  "body": {
+   "points": [
+    {
+     "values": [
+      {
+       "ts": "2026-01-01T00:00:00Z",
+       "real": 1
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "response": {
+  "status": 400,
+  "contentType": "application/grpc",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

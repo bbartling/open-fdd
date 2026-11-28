@@ -1,0 +1,87 @@
+{
+ "id": "platform__info",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/platform/info"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "siteName": "Example Site",
+   "provider": "IAM_NONE",
+   "domain": "",
+   "clientid": "",
+   "scopes": "",
+   "authority": "",
+   "version": "3.10.11-6",
+   "license": {
+    "name": "Example Site",
+    "issuedAt": "2026-11-28T14:34:50Z",
+    "expiresAt": "2026-12-05T14:34:50Z",
+    "licenseId": "<redacted>",
+    "userId": "",
+    "sku": "",
+    "machineId": "<redacted>",
+    "services": [
+     {
+      "name": "tunnel",
+      "expiresAt": "2026-12-12T14:34:50Z"
+     },
+     {
+      "name": "backup",
+      "expiresAt": "2026-12-12T14:34:50Z"
+     },
+     {
+      "name": "metrics",
+      "expiresAt": "2026-12-12T14:34:50Z"
+     }
+    ],
+    "instanceId": "00000000-0000-0000-0000-000000000000",
+    "tenantId": "org_EXAMPLE",
+    "gracePeriod": "2026-12-12T14:34:50Z",
+    "type": "Free"
+   },
+   "machineInfo": "",
+   "services": [],
+   "logo": "",
+   "thumbnail": "",
+   "favIcon": "",
+   "footerText": "[Docs](https://docs.normal.dev/)  | © 2021-2025 Normal Software, Inc.",
+   "enableAuth": true,
+   "resources": [
+    {
+     "storage": {
+      "mountPoint": "/var/nf",
+      "sizeBytes": "1081101176832",
+      "usedBytes": "2405015552",
+      "freeBytes": "1078696161280"
+     }
+    },
+    {
+     "memory": {
+      "totalBytes": "25203200000",
+      "usedBytes": "5559242752",
+      "freeBytes": "19643957248"
+     }
+    }
+   ],
+   "nfOnlineUrl": "https://portal.normal-online.net",
+   "systemType": "SYSTEM_TYPE_GA",
+   "systemTime": "2026-11-28T14:46:47.243164950Z",
+   "ipAddresses": [
+    {
+     "address": "192.0.2.10",
+     "interface": "eth0"
+    }
+   ],
+   "redisStatus": {
+    "loading": false,
+    "loadedPercentage": 0,
+    "etaSeconds": 0,
+    "unreachable": false
+   },
+   "timezone": "Etc/UTC"
+  }
+ }
+}

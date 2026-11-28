@@ -1,0 +1,223 @@
+{
+ "id": "point_query__model_layer_page_b",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/point/query",
+  "body": {
+   "layer": "model",
+   "pageSize": 6,
+   "pageOffset": 0
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "points": [
+    {
+     "uuid": "0046d229-7341-5491-987d-861560b44a6c",
+     "name": "nfft-sim-site/nfft-sim-vav-203/FCU-SENSOR-NULL",
+     "layer": "model",
+     "version": "",
+     "attrs": {
+      "fddSensorFaultHours": "",
+      "fddWindowHours": "24",
+      "fddOccSource": "",
+      "fddLastRun": "2026-11-28T14:42:35.949Z",
+      "kind": "Number",
+      "fddCoverageHours": "0",
+      "fddStatus": "not-assessed",
+      "fddOutputSince": "2026-11-28T14:40:00.000Z",
+      "unit": "%",
+      "roleRef": "",
+      "fddOutput": "fault_pct",
+      "equipUuid": "1467bf39-23d6-5892-8667-34bb19fa08d8",
+      "dis": "VAV-23 East FCU-SENSOR-NULL",
+      "fddSummary": "equip",
+      "sensorRef": "",
+      "ruleRef": "FCU-SENSOR-NULL",
+      "markers": "point,his,fault,fdd",
+      "fddReason": "no covered time in the window (covered_hours 0)",
+      "siteRef": "nfft-sim-site",
+      "equipRef": "nfft-sim-vav-203"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    },
+    {
+     "uuid": "004cad60-3c0a-5d66-abb1-34bbcecd7e02",
+     "name": "nfft-sim-site/nfft-sim-vav-01/VAV-7",
+     "layer": "model",
+     "version": "",
+     "attrs": {
+      "fddWindowHours": "24",
+      "roleRef": "",
+      "markers": "point,his,fault,fdd",
+      "equipRef": "nfft-sim-vav-01",
+      "fddOutputSince": "2026-11-28T14:40:00.000Z",
+      "sensorRef": "",
+      "siteRef": "nfft-sim-site",
+      "dis": "VAV-01 Office VAV-7",
+      "unit": "%",
+      "fddOutput": "fault_pct",
+      "equipUuid": "ab3237a9-f937-5b81-af34-00c69ec9c94d",
+      "fddStatus": "not-assessed",
+      "ruleRef": "VAV-7",
+      "fddLastRun": "2026-11-28T14:42:35.949Z",
+      "fddReason": "no covered time in the window (covered_hours 0)",
+      "kind": "Number",
+      "fddCoverageHours": "0",
+      "fddSensorFaultHours": "",
+      "fddSummary": "equip",
+      "fddOccSource": ""
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    },
+    {
+     "uuid": "007abbc9-9abc-5955-ad56-f1cccefc66e7",
+     "name": "nfft-sim-site/nfft-sim-vav-207/FAULT-ELAPSED-HOURS",
+     "layer": "model",
+     "version": "",
+     "attrs": {
+      "fddSummary": "equip",
+      "roleRef": "",
+      "fddOccSource": "",
+      "dis": "VAV-27 Storage FAULT-ELAPSED-HOURS",
+      "siteRef": "nfft-sim-site",
+      "sensorRef": "",
+      "ruleRef": "FAULT-ELAPSED-HOURS",
+      "fddReason": "no covered time in the window (covered_hours 0)",
+      "fddOutput": "fault_pct",
+      "kind": "Number",
+      "fddStatus": "not-assessed",
+      "fddCoverageHours": "0",
+      "equipRef": "nfft-sim-vav-207",
+      "fddWindowHours": "24",
+      "fddOutputSince": "2026-11-28T14:40:00.000Z",
+      "markers": "point,his,fault,fdd",
+      "unit": "%",
+      "fddSensorFaultHours": "",
+      "equipUuid": "60ba692d-6ebf-5f87-86a0-7a244f2b756f",
+      "fddLastRun": "2026-11-28T14:42:35.949Z"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    },
+    {
+     "uuid": "01058b64-6c36-531d-bceb-55fcb4c49bad",
+     "name": "nfft-sim-site/nfft-sim-vav-99/PID-HUNT-1",
+     "layer": "model",
+     "version": "",
+     "attrs": {
+      "fddOutput": "fault_pct",
+      "siteRef": "nfft-sim-site",
+      "dis": "VAV-99 Unassigned PID-HUNT-1",
+      "unit": "%",
+      "fddLastRun": "2026-11-28T14:42:35.949Z",
+      "fddSensorFaultHours": "",
+      "fddWindowHours": "24",
+      "markers": "point,his,fault,fdd",
+      "fddOutputSince": "2026-11-28T14:40:00.000Z",
+      "fddCoverageHours": "0",
+      "roleRef": "",
+      "fddStatus": "not-assessed",
+      "fddOccSource": "",
+      "fddReason": "no_run_proof: no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound",
+      "equipUuid": "cd3f1184-6e4f-5051-8cc2-32e812024d13",
+      "kind": "Number",
+      "fddSummary": "equip",
+      "ruleRef": "PID-HUNT-1",
+      "sensorRef": "",
+      "equipRef": "nfft-sim-vav-99"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    },
+    {
+     "uuid": "011a0243-327b-5f11-981c-aa71605d6f00",
+     "name": "nfft-sim-site/nfft-sim-ahu-2/OA-1/timeline",
+     "layer": "model",
+     "version": "",
+     "attrs": {
+      "equipRef": "nfft-sim-ahu-2",
+      "fddWindowHours": "24",
+      "equipUuid": "a4896564-6d31-5bd1-bc06-ffc2dd4ff39f",
+      "markers": "point,his,fault_timeline",
+      "unit": "",
+      "dis": "AHU-2 OA-1 fault timeline",
+      "siteRef": "nfft-sim-site",
+      "ruleRef": "OA-1",
+      "fddLastRun": "2026-11-28T14:42:35.949Z",
+      "fddTimelineOf": "e84e51aa-4f3c-59ba-a606-9e5e130cd1a1",
+      "kind": "Number",
+      "fddKind": "fault-timeline"
+     },
+     "displayUnits": "",
+     "parentUuid": "",
+     "protocolId": "",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "",
+     "parentName": "",
+     "units": "UNITS_UNKNOWN",
+     "hplDriver": "",
+     "conversionId": "",
+     "qualityFlags": [
+      "QUALITY_FLAG_NEVER_REPORTED"
+     ],
+     "writability": "WRITABILITY_UNKNOWN"
+    }
+   ],
+   "totalCount": "882"
+  }
+ }
+}

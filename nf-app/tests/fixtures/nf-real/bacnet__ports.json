@@ -1,0 +1,45 @@
+{
+ "id": "bacnet__ports",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/bacnet/ports"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "ports": [
+    {
+     "portId": 1,
+     "localNetwork": 51901,
+     "networks": [],
+     "name": "ip:eth0:47808",
+     "ip": {
+      "localIfname": "eth0",
+      "localIfAddress": "192.0.2.10/24",
+      "localBcastAddress": "192.0.2.255",
+      "port": 47808,
+      "requestedIfAddress": ""
+     },
+     "status": "NETWORK_PORT_STATUS_READY",
+     "error": "",
+     "metric": 0,
+     "siteRef": "",
+     "routingEnabled": false
+    },
+    {
+     "portId": 2,
+     "localNetwork": 33910,
+     "networks": [],
+     "name": "vlan:",
+     "virtual": {},
+     "status": "NETWORK_PORT_STATUS_READY",
+     "error": "",
+     "metric": 0,
+     "siteRef": "",
+     "routingEnabled": false
+    }
+   ]
+  }
+ }
+}

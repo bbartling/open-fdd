@@ -1,0 +1,22 @@
+{
+ "id": "points_data__post_malformed_uuid",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/points/data",
+  "body": {
+   "points": [
+    {
+     "uuid": "not-a-uuid",
+     "values": []
+    }
+   ]
+  }
+ },
+ "response": {
+  "status": 400,
+  "contentType": "application/grpc",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

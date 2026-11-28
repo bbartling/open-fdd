@@ -1,0 +1,19 @@
+{
+ "id": "point_query__no_page_size",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/point/query",
+  "body": {
+   "layer": "model"
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "points": [],
+   "totalCount": "882",
+   "nextPageToken": ""
+  }
+ }
+}

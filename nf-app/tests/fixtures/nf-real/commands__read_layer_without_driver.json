@@ -1,0 +1,40 @@
+{
+ "id": "commands__read_layer_without_driver",
+ "request": {
+  "method": "POST",
+  "path": "/api/v2/command/read",
+  "body": {
+   "reads": [
+    {
+     "point": {
+      "uuid": "<sim-point-uuid>",
+      "layer": "hpl:bacnet:local"
+     }
+    }
+   ]
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "results": [],
+   "errors": [
+    {
+     "point": {
+      "uuid": "086235e2-df14-3929-bdac-bb24eacb02e4",
+      "layer": "hpl:bacnet:local"
+     },
+     "error": {
+      "ts": "2026-11-28T14:53:36.108451100Z",
+      "message": "layer has no hpl driver",
+      "error": {
+       "@type": "type.googleapis.com/normalgw.hpl.v2.GenericError",
+       "message": "layer has no hpl driver"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

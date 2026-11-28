@@ -1,0 +1,46 @@
+{
+ "id": "commands__write_pending_backoff",
+ "request": {
+  "method": "POST",
+  "path": "/api/v2/command/write",
+  "body": {
+   "command_id": 3,
+   "cancel_on_conflict": true,
+   "writes": [
+    {
+     "point": {
+      "uuid": "<sim-point-uuid>",
+      "layer": "hpl:bacnet:local"
+     },
+     "priority": 8,
+     "value": {
+      "real": 0
+     }
+    }
+   ]
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "writes": [],
+   "errors": [
+    {
+     "point": {
+      "uuid": "086235e2-df14-3929-bdac-bb24eacb02e4",
+      "layer": "hpl:bacnet:local"
+     },
+     "error": {
+      "ts": "2026-11-28T14:53:36.247701195Z",
+      "message": "rpc error: code = Internal desc = Error reading writeback value",
+      "error": {
+       "@type": "type.googleapis.com/normalgw.hpl.v2.GenericError",
+       "message": "rpc error: code = Internal desc = Error reading writeback value"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

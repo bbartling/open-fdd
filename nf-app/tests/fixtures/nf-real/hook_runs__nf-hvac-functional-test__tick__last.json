@@ -1,0 +1,47 @@
+{
+ "id": "hook_runs__nf-hvac-functional-test__tick__last",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/apps/nf-hvac-functional-test/hooks/tick/runs?page_size=1&include_results=true"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "runs": [
+    {
+     "hookId": "",
+     "pid": "21",
+     "state": "STATE_SUCCESS",
+     "message": "",
+     "trigger": "TRIGGER_SCHEDULE",
+     "startTime": "2026-11-28T14:46:30.441322798Z",
+     "endTime": "2026-11-28T14:46:30.441312697Z",
+     "args": {},
+     "results": {
+      "": {
+       "endTime": "2026-11-28T14:46:30.014157028Z",
+       "state": "STATE_SUCCESS",
+       "invocationCount": "0",
+       "returnValue": "",
+       "events": [],
+       "startTime": "2026-11-28T14:46:30.000858385Z",
+       "enqueuedTime": "2026-11-28T14:46:29.999497999Z",
+       "group": "",
+       "pid": "21",
+       "taskUuid": "",
+       "args": {},
+       "runtimePid": 1299
+      }
+     },
+     "version": "",
+     "enqueuedTime": "2026-11-28T14:46:29.999497999Z",
+     "stats": {
+      "6": "1"
+     }
+    }
+   ],
+   "totalCount": "21"
+  }
+ }
+}

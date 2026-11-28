@@ -1,0 +1,226 @@
+{
+ "id": "bacnet__local_objects",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/bacnet/local"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "objects": [
+    {
+     "objectId": {
+      "objectType": "OBJECT_ANALOG_VALUE",
+      "instance": 1
+     },
+     "props": [
+      {
+       "property": "PROP_OBJECT_NAME",
+       "value": {
+        "characterString": "WEB OA-T",
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_UNITS",
+       "value": {
+        "enumerated": 64,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_DESCRIPTION",
+       "value": {
+        "characterString": "Open-Meteo outdoor air dry bulb, app-settings (obs 2026-11-28T14:30)",
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_PRESENT_VALUE",
+       "value": {
+        "real": 37.1,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_STATUS_FLAGS",
+       "value": {
+        "bitString": {
+         "length": 4,
+         "setBits": []
+        },
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_EVENT_STATE",
+       "value": {
+        "enumerated": 0,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_MIN_PRES_VALUE",
+       "value": {
+        "real": 0,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_MAX_PRES_VALUE",
+       "value": {
+        "real": 0,
+        "array": []
+       }
+      }
+     ],
+     "uuid": "1b18fff9-1a23-30fa-a37a-c7effb4e2c09",
+     "localDeviceInstanceOffset": 0,
+     "virtualAddress": ""
+    },
+    {
+     "objectId": {
+      "objectType": "OBJECT_ANALOG_VALUE",
+      "instance": 2
+     },
+     "props": [
+      {
+       "property": "PROP_OBJECT_NAME",
+       "value": {
+        "characterString": "WEB OA-H",
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_UNITS",
+       "value": {
+        "enumerated": 29,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_DESCRIPTION",
+       "value": {
+        "characterString": "Open-Meteo outdoor air RH, app-settings (obs 2026-11-28T14:30)",
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_PRESENT_VALUE",
+       "value": {
+        "real": 82,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_STATUS_FLAGS",
+       "value": {
+        "bitString": {
+         "length": 4,
+         "setBits": []
+        },
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_EVENT_STATE",
+       "value": {
+        "enumerated": 0,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_MIN_PRES_VALUE",
+       "value": {
+        "real": 0,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_MAX_PRES_VALUE",
+       "value": {
+        "real": 0,
+        "array": []
+       }
+      }
+     ],
+     "uuid": "713b67bb-476c-3412-afde-4672f204c4a2",
+     "localDeviceInstanceOffset": 0,
+     "virtualAddress": ""
+    },
+    {
+     "objectId": {
+      "objectType": "OBJECT_ANALOG_VALUE",
+      "instance": 3
+     },
+     "props": [
+      {
+       "property": "PROP_OBJECT_NAME",
+       "value": {
+        "characterString": "WEB OA-DP",
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_UNITS",
+       "value": {
+        "enumerated": 64,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_DESCRIPTION",
+       "value": {
+        "characterString": "Open-Meteo outdoor air dewpoint, app-settings (obs 2026-11-28T14:30)",
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_PRESENT_VALUE",
+       "value": {
+        "real": 32.1,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_STATUS_FLAGS",
+       "value": {
+        "bitString": {
+         "length": 4,
+         "setBits": []
+        },
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_EVENT_STATE",
+       "value": {
+        "enumerated": 0,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_MIN_PRES_VALUE",
+       "value": {
+        "real": 0,
+        "array": []
+       }
+      },
+      {
+       "property": "PROP_MAX_PRES_VALUE",
+       "value": {
+        "real": 0,
+        "array": []
+       }
+      }
+     ],
+     "uuid": "434c52c1-e1cc-3f04-a9f5-3b85ab7fc098",
+     "localDeviceInstanceOffset": 0,
+     "virtualAddress": ""
+    }
+   ]
+  }
+ },
+ "note": "first 3 objects only"
+}

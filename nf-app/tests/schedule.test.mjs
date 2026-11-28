@@ -387,8 +387,8 @@ test("mock NF serves read-only schedules and the binding works end to end", asyn
   const one = await api("/api/v1/schedules/" + list.schedules[0].uuid);
   assert.equal(one.schedule.uuid, list.schedules[0].uuid);
   assert.equal((await fetch(base + "/api/v1/schedules/nope")).status, 404);
-  assert.equal((await fetch(base + "/api/v1/schedules", { method: "POST", body: "{}" })).status, 404, "read-only: no create");
-  assert.equal((await fetch(base + "/api/v1/schedules/" + list.schedules[0].uuid, { method: "DELETE" })).status, 404, "read-only: no delete");
+  assert.ok([404, 405].includes((await fetch(base + "/api/v1/schedules", { method: "POST", body: "{}" })).status), "read-only: no create");
+  assert.ok([404, 405].includes((await fetch(base + "/api/v1/schedules/" + list.schedules[0].uuid, { method: "DELETE" })).status), "read-only: no delete");
   const scheds = await S.loadSchedules(api);
   assert.equal(scheds.length, 1);
   assert.equal(scheds[0].hoursPerWeek, 55, "Mon-Fri 07:00-18:00");

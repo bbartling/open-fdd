@@ -1,0 +1,19 @@
+{
+ "id": "point_data__unknown_uuid",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/point/data?uuids=<sim-point-uuid>&count=3"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "data": [
+    {
+     "uuid": "00000000-0000-0000-0000-000000000000",
+     "values": []
+    }
+   ]
+  }
+ }
+}

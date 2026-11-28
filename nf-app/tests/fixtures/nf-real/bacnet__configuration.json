@@ -1,0 +1,32 @@
+{
+ "id": "bacnet__configuration",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/bacnet/configuration"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "backgroundScansEnabled": false,
+   "deviceInstance": 10,
+   "deviceName": "NF",
+   "debug": false,
+   "availableInterfaces": [
+    {
+     "name": "lo",
+     "addresses": [
+      "127.0.0.1/8"
+     ]
+    },
+    {
+     "name": "eth0",
+     "addresses": [
+      "192.0.2.10/24"
+     ]
+    }
+   ],
+   "segmentationEnabled": false
+  }
+ }
+}

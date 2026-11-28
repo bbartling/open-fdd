@@ -30,27 +30,28 @@ before(async () => {
 });
 after(() => { child.removeAllListeners("exit"); child.kill(); });
 
+const U1 = "00000000-0000-4000-8000-000000000001", U2 = "00000000-0000-4000-8000-000000000002";   // NF rejects a malformed uuid
 test("mock NF: starts empty, stores point/points, point/data and the batched points/data writes", async () => {
   assert.deepEqual(await writes(), { points: [], data: [], calls: [] });
 
-  let r = await post("/api/v1/point/points", { points: [{ uuid: "u1", name: "a", layer: "model" }, { uuid: "u2", name: "b", layer: "automation" }] });
+  let r = await post("/api/v1/point/points", { points: [{ uuid: U1, name: "a", layer: "model" }, { uuid: U2, name: "b", layer: "automation" }] });
   assert.equal(r.status, 200);
-  assert.deepEqual((await r.json()).results.map((x) => [x.uuid, x.success]), [["u1", true], ["u2", true]]);
+  assert.deepEqual((await r.json()).results.map((x) => [x.uuid, x.success]), [[U1, true], [U2, true]]);
 
-  r = await post("/api/v1/point/data", { uuid: "u1", values: [{ ts: "2026-11-05T12:00:00Z", real: 1.5 }] });
+  r = await post("/api/v1/point/data", { uuid: U1, values: [{ ts: "2026-11-05T12:00:00Z", real: 1.5 }] });
   assert.equal(r.status, 200);
   assert.deepEqual(await r.json(), { success: true });
 
   r = await post("/api/v1/points/data", { points: [
-    { uuid: "u1", values: [{ ts: "2026-11-05T12:05:00Z", real: 2 }] },
-    { uuid: "u2", values: [{ ts: "2026-11-05T12:05:00Z", real: 3 }] },
+    { uuid: U1, values: [{ ts: "2026-11-05T12:05:00Z", real: 2 }] },
+    { uuid: U2, values: [{ ts: "2026-11-05T12:05:00Z", real: 3 }] },
   ] });
   assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { success: true });
+  assert.deepEqual(await r.json(), { success: true, taskUuid: "" });
 
   const w = await writes();
-  assert.deepEqual(w.points.map((p) => p.uuid), ["u1", "u2"]);
-  assert.deepEqual(w.data.map((d) => [d.uuid, d.values[0].real]), [["u1", 1.5], ["u1", 2], ["u2", 3]]);
+  assert.deepEqual(w.points.map((p) => p.uuid), [U1, U2]);
+  assert.deepEqual(w.data.map((d) => [d.uuid, d.values[0].real]), [[U1, 1.5], [U1, 2], [U2, 3]]);
   assert.deepEqual(w.calls, [{ route: "/api/v1/point/points", n: 2 }, { route: "/api/v1/point/data", n: 1 }, { route: "/api/v1/points/data", n: 2 }]);
 });
 
@@ -67,9 +68,9 @@ test("mock NF: rejects malformed writes with 400 and survives them; DELETE clear
 });
 
 test("mock NF: the GET history route still works next to the POST data route", async () => {
-  const r = await fetch(base + "/api/v1/point/data?uuids=nope&window=300s&method=AVERAGE");
+  const r = await fetch(base + "/api/v1/point/data?uuids=00000000-0000-0000-0000-000000000000&window=300s&method=AVERAGE");
   assert.equal(r.status, 200);
-  assert.deepEqual((await r.json()).data, [{ uuid: "nope", values: [] }]);
+  assert.deepEqual((await r.json()).data, [{ uuid: "00000000-0000-0000-0000-000000000000", values: [] }]);
 });
 
 test("mock NF: app metadata is served as JSON without content sniffing", async () => {

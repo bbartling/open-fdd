@@ -1,0 +1,14 @@
+{
+ "id": "commands__cancel_again",
+ "request": {
+  "method": "DELETE",
+  "path": "/api/v2/command/2"
+ },
+ "response": {
+  "status": 404,
+  "contentType": "application/grpc",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

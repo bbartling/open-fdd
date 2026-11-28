@@ -1,0 +1,14 @@
+{
+ "id": "commands__zombies",
+ "request": {
+  "method": "GET",
+  "path": "/api/v2/command/zombies"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "zombies": []
+  }
+ }
+}

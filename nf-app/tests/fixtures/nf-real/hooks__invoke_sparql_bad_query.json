@@ -1,0 +1,20 @@
+{
+ "id": "hooks__invoke_sparql_bad_query",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/apps/open-fdd-lite/hooks/sparql",
+  "body": {
+   "query": "SELEKT nonsense"
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "pid": "3",
+   "groups": [
+    ""
+   ]
+  }
+ }
+}

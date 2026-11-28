@@ -1,0 +1,15 @@
+{
+ "id": "schedules__list_empty",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/schedules?pageSize=1&pageOffset=0"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "schedules": [],
+   "totalCount": "0"
+  }
+ }
+}

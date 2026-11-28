@@ -1,0 +1,12 @@
+{
+ "id": "commands__extend",
+ "request": {
+  "method": "POST",
+  "path": "/api/v2/command/2"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {}
+ }
+}

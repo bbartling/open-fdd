@@ -1,0 +1,14 @@
+{
+ "id": "point_data__window_without_unit",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/point/data?uuids=<sim-point-uuid>&count=3&window=300&method=AVERAGE"
+ },
+ "response": {
+  "status": 400,
+  "contentType": "text/plain",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

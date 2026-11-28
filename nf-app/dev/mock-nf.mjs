@@ -15,6 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import * as real from "./nf-real.mjs";   // real NF 3.10.11 shapes and quirks, recorded in tests/fixtures/nf-real
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const STATIC = process.env.MOCK_STATIC ? path.resolve(process.env.MOCK_STATIC) : path.join(HERE, "..", "static");   // MOCK_STATIC=lite/static serves the Lite pages
@@ -207,22 +208,32 @@ function query(body) {
   const out = [...new Map([...seedPoints, ...updatedPoints]).values()].filter((r) => (layer === "default" || r.layer === layer)
     && (!f || String((r.attrs || {})[f[0]] ?? "") === f[1])).map(withLatest)
     .sort((a, b) => a.uuid.localeCompare(b.uuid));
-  // Like NF 3.10.x: pages by pageOffset + pageSize and reports totalCount, with NO nextPageToken (#1550).
-  // NF 3.10.9-1 returns no rows for an absent/zero pageSize and ignores tokens.
-  const size = Number(body.pageSize) || 0;
-  const off = Number(body.pageOffset) > 0 ? Number(body.pageOffset) : 0;
-  return { points: out.slice(off, off + size), totalCount: String(out.length) };
+  // Like NF 3.10.x: pages by pageOffset + pageSize and reports totalCount; nextPageToken is always "" (#1550).
+  // NF 3.10.9-1 returns no rows for an absent/zero pageSize and ignores tokens. NF takes the proto field names in
+  // camelCase or snake_case (page_size / page_offset), and ignores fields it does not know.
+  const size = Number(body.pageSize ?? body.page_size) || 0;
+  const offRaw = Number(body.pageOffset ?? body.page_offset);
+  const off = offRaw > 0 ? offRaw : 0;
+  return { points: out.slice(off, off + size).map((r) => real.realPoint(r, layer)), totalCount: String(out.length), nextPageToken: "" };
 }
 
 const AGG = {
   AVERAGE: (xs) => xs.reduce((a, b) => a + b, 0) / xs.length, MIN: (xs) => Math.min(...xs), MAX: (xs) => Math.max(...xs),
   SUM: (xs) => xs.reduce((a, b) => a + b, 0), FIRST: (xs) => xs[0], LAST: (xs) => xs[xs.length - 1], COUNT: (xs) => xs.length,
 };
+// NF answers a malformed GET /point/data with an empty 400: text/plain for a bad window, method or time, application/grpc for a bad uuid.
+function dataProblem(params) {
+  if (params.getAll("uuids").some((u) => !real.UUID_RE.test(u))) return "application/grpc";
+  if (params.has("window") && real.parseWindow(params.get("window")) === null) return "text/plain";
+  if (params.has("window") && params.has("method") && !real.AGG_METHODS.has(params.get("method"))) return "text/plain";
+  for (const k of ["from", "to"]) if (params.has(k) && !Number.isFinite(Date.parse(params.get(k)))) return "text/plain";
+  return "";
+}
 function data(params) {
   const uuids = params.getAll("uuids");
   const from = Math.max(START, Date.parse(params.get("from") || new Date(START).toISOString()));
   const to = Math.min(NOW, Date.parse(params.get("to") || new Date(NOW).toISOString()));
-  const win = Math.max(0, parseInt(params.get("window") || "0", 10) || 0) * 1e3;
+  const win = (params.has("window") ? real.parseWindow(params.get("window")) : 0) * 1e3;
   const count = Math.min(10000, Math.max(1, parseInt(params.get("count") || "10000", 10) || 10000));
   const reverse = params.get("reverse") === "true";
   const agg = AGG[params.get("method") || "AVERAGE"] || AGG.AVERAGE;
@@ -239,7 +250,7 @@ function data(params) {
     const ordered = [...buckets];
     if (reverse) ordered.reverse();
     return { uuid, values: ordered.slice(0, count).map(([t, xs]) => ({
-      ts: new Date(t).toISOString(), double: Math.round((win ? agg(xs) : xs[0]) * 1000) / 1000,
+      ts: win ? real.bucketTs(t) : real.rawTs(t), double: Math.round((win ? agg(xs) : xs[0]) * 1000) / 1000,
     })) };
   }) };
 }
@@ -249,7 +260,9 @@ const json = (res, code, body) => {
   res.end(JSON.stringify(body));
 };
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json" };
-let runs = [];
+// Hook runs per "app/hook", newest first, in NF's shape (nf-real.mjs makeRun). pid counts up per hook.
+const hookRuns = new Map();
+const hookIds = real.manifestHookIds(path.join(HERE, "..", ".."));
 // In-memory store of what a client WROTE (the synthetic building itself stays read-only).
 //   POST /api/v1/point/points  { points: [record] }                   -> writes.points
 //   POST /api/v1/point/data    { uuid, values: [..] }                 -> writes.data  (one point)
@@ -261,7 +274,7 @@ const note = (route, n) => writes.calls.push({ route, n });
 
 // Minimal installer API fixture. It is isolated from the synthetic point store and exists only
 // to exercise snapshot/verify/rollback behavior; it does not model authentication or NF secrets.
-const installApp = { id: "open-fdd", name: "Open-FDD", status: "APP_STATUS_INSTALLED", files: [],
+const installApp = { id: "open-fdd", name: "Open-FDD", status: "STATUS_INSTALLED", files: [],
   options: [], configuration: {}, hooks: [] };
 const installFiles = new Map();
 let failVersionRead = false;
@@ -279,7 +292,7 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
   let body = "";
   for await (const chunk of req) body += chunk;
   let b = {};
-  try { b = body ? JSON.parse(body) : {}; } catch (e) { return json(res, 400, { error: "mock-nf: invalid JSON body" }); }
+  try { b = body ? JSON.parse(body) : {}; } catch (e) { return real.textError(res, 400); }   // NF: an empty 400 text/plain
   if (p === "/api/v1/_mock/install/state" && req.method === "POST") {
     installApp.files = Array.isArray(b.files) ? b.files.map((path) => ({ path })) : [];
     installApp.options = b.options || [];
@@ -293,7 +306,20 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
   }
   if (p === "/api/v1/apps") {
     const options = [...(installApp.options || []).filter((o) => o.name !== "timezone"), ...(APP_TZ_OPTION ? [{ name: "timezone", value: { string: APP_TZ_OPTION } }] : [])];
-    return json(res, 200, { applications: [{ ...installApp, options }] });
+    // The real list entry has every one of these fields; files carry mtime / hash / size (size is an int64 string).
+    const files = installApp.files.map((f) => ({ path: f.path, mtime: new Date(NOW).toISOString(), hash: "",
+      size: String((installFiles.get(f.path) || Buffer.alloc(0)).length) }));
+    const app = { id: installApp.id, name: installApp.name, description: "", runtime: "RUNTIME_NODE_JS", compatibilityDate: "",
+      hooks: installApp.hooks, files, gitUrl: "", status: installApp.status, options, minNfVersion: "", statusMessage: "",
+      configuration: installApp.configuration,   // mock-only: the installer tests read back what they PATCHed (real NF lists no such field)
+      auth: { apiKey: { scopes: ["normalgw.hpl.v1.readwrite"], clientId: "<redacted>", clientSecret: "<redacted>" } } };
+    return json(res, 200, { applications: [app], totalCount: "1" });
+  }
+  const oneApp = p.match(/^\/api\/v1\/apps\/([^/]+)$/);
+  if (oneApp && req.method === "GET") {         // an app that is not installed is an EMPTY list, not a 404
+    if (oneApp[1] !== installApp.id) return json(res, 200, { applications: [], totalCount: "0" });
+    const options = installApp.options || [];
+    return json(res, 200, { applications: [{ id: installApp.id, name: installApp.name, status: installApp.status, hooks: installApp.hooks, options }], totalCount: "1" });
   }
   const appFile = p.match(/^\/api\/v1\/apps\/open-fdd\/files(\/.*)$/);
   if (appFile && req.method === "DELETE") {
@@ -353,12 +379,17 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
       "Content-Security-Policy": "frame-ancestors 'self'" });
     return res.end(fs.readFileSync(file));
   }
-  if (p === "/api/v1/platform/info") return json(res, 200, { version: "mock-3.10", provider: "", ...(REAL_NF ? { timezone: "Etc/UTC" } : {}), resources: [{ memory: { totalBytes: String(4 * 1024 ** 3) } }] });
+  if (p === "/api/v1/platform/info") return json(res, 200, real.platformInfo({ real: REAL_NF, version: "mock-3.10", timezone: REAL_NF ? "Etc/UTC" : "" }));
   if (p === "/api/v1/point/query") {
-    if (Number(b.pageOffset) < 0 || Number(b.pageSize) < 0) return json(res, 400, { error: "negative paging argument" });
+    // NF: an empty application/grpc 400 for a negative paging argument or a layer it does not have.
+    if (Number(b.pageOffset ?? b.page_offset) < 0 || Number(b.pageSize ?? b.page_size) < 0) return real.grpcError(res, 400);
+    if (b.layer && !real.LAYER_NAMES.has(b.layer)) return real.grpcError(res, 400);
     return json(res, 200, query(b));
   }
-  if (p === "/api/v1/point/data" && req.method !== "POST") return json(res, 200, data(url.searchParams));
+  if (p === "/api/v1/point/data" && req.method !== "POST") {
+    const bad = dataProblem(url.searchParams);
+    return bad ? real.emptyError(res, 400, bad) : json(res, 200, data(url.searchParams));
+  }
   if (p === "/api/v1/_mock/writes") {
     if (req.method === "DELETE") {
       writes.points.length = 0;
@@ -374,13 +405,17 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
       return json(res, 400, { error: "points must be an array of records with UUIDs" });
     }
     for (const point of b.points) {
+      // Real NF accepts a record with no layer, or with "default" or an unknown layer name, answers success:true
+      // and applies NOTHING (only an explicit base layer such as "model" or "automation" is written). Tags posted
+      // without layer:"model" are silently lost.
+      if (!real.BASE_LAYERS.has(point.layer)) continue;
       const key = pointKey(point);
       const prior = updatedPoints.get(key) || seedPoints.get(key);
       const attrs = Object.fromEntries(Object.entries(point.attrs ?? {}).map(([k, v]) => [k, v ?? ""]));
       updatedPoints.set(key, { ...prior, ...point, attrs: { ...prior?.attrs, ...attrs } });
     }
     writes.points.push(...b.points); note(p, b.points.length);
-    return json(res, 200, { results: b.points.map((r) => ({ uuid: r.uuid, success: true, newVersion: "1" })) });
+    return json(res, 200, { results: b.points.map((r, i) => real.updateResult(r, writes.points.length - b.points.length + i)) });
   }
   if (req.method === "POST" && p === "/api/v1/point/data") {
     if (!b.uuid || !Array.isArray(b.values)) return json(res, 400, { error: "uuid and values are required" });
@@ -388,10 +423,10 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
     return json(res, 200, { success: true });
   }
   if (req.method === "POST" && p === "/api/v1/points/data") {
-    if (!Array.isArray(b.points) || b.points.some((x) => !x || !x.uuid)) return json(res, 400, { error: "points[].uuid is required" });
+    if (!Array.isArray(b.points) || b.points.some((x) => !x || !real.UUID_RE.test(String(x.uuid || "")))) return real.grpcError(res, 400);   // NF: empty 400 grpc for a missing or malformed uuid
     for (const x of b.points) writes.data.push({ uuid: x.uuid, values: x.values || [] });
     note(p, b.points.length);
-    return json(res, 200, { success: true });
+    return json(res, 200, { success: true, taskUuid: "" });
   }
   if (req.method === "GET" && p === "/api/v1/schedules") {   // ScheduleManager.GetSchedules (read-only)
     const off = parseInt(url.searchParams.get("pageOffset") || "0", 10) || 0, size = parseInt(url.searchParams.get("pageSize") || "100", 10) || 100;
@@ -400,21 +435,47 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
   const sched = p.match(/^\/api\/v1\/schedules\/([^/]+)$/);
   if (req.method === "GET" && sched) {                         // ScheduleManager.GetScheduleById
     const one = schedules.find((x) => x.uuid === decodeURIComponent(sched[1]));
-    return one ? json(res, 200, { schedule: one }) : json(res, 404, { error: "schedule not found" });
+    return one ? json(res, 200, { schedule: one }) : real.grpcError(res, 404);   // NF: an empty application/grpc 404
   }
+  if (p === "/api/v1/equipment/classes") return json(res, 200, real.recorded("equipment__classes"));   // empty list without a page size, total as a string
   if (p === "/api/v1/point/updates/data") { res.writeHead(204); return res.end(); }
-  if (p === "/api/v1/sites") return json(res, 200, REAL_NF ? { sites: [], totalCount: "0" } : { sites: sites.map((s) => ({ id: s.id, name: s.dis, latitude: s.lat, longitude: s.lon, timezone: s.tz })) });
-  if (p === "/api/v1/bacnet/configuration") return json(res, 200, { deviceInstance: 54321, deviceName: "MockNF" });
-  if (p === "/api/v1/bacnet/ports") return json(res, 200, { ports: [] });
-  if (p === "/api/v1/bacnet/local") return json(res, 200, { objects: [] });
+  // Real NF 3.10: GET /sites lists none until a site is configured, yet its totalCount still counts the model SITE records.
+  if (p === "/api/v1/sites") return json(res, 200, REAL_NF ? { sites: [], totalCount: String(sites.length) } : { sites: sites.map((s) => ({ id: s.id, name: s.dis, latitude: s.lat, longitude: s.lon, timezone: s.tz })) });
+  if (p === "/api/v1/bacnet/configuration") return json(res, 200, REAL_NF ? real.recorded("bacnet__configuration") : { ...real.recorded("bacnet__configuration"), deviceInstance: 54321, deviceName: "MockNF" });
+  if (p === "/api/v1/bacnet/ports") return json(res, 200, REAL_NF ? real.recorded("bacnet__ports") : { ports: [] });
+  if (p === "/api/v1/bacnet/local") return json(res, 200, REAL_NF ? real.recorded("bacnet__local_objects") : { objects: [] });
   if (p === "/api/v1/bacnet/readproperty") {
-    const prop = url.searchParams.get("property_id") || "";
-    return json(res, 200, { value: { characterString: { PROP_OBJECT_NAME: "MockNF", PROP_VENDOR_NAME: "Normal (mock)", PROP_MODEL_NAME: "mock-nf", PROP_FIRMWARE_REVISION: "3.10-mock" }[prop] || "" } });
+    // Real NF: property/object names are enum names (a bad name is an empty 400 text/plain); the reply echoes the property
+    // and the value carries "array":[]; BACnet-level failures are IN-BAND, a 200 with {error:{errorClass, errorCode}}.
+    const q = url.searchParams, prop = q.get("property_id") || "", type = q.get("object_id.object_type") || "";
+    // NF checks the names against the BACnet enums; the mock knows only the common ones (a mock-only approximation).
+    const KNOWN_PROPS = ["PROP_OBJECT_NAME", "PROP_OBJECT_TYPE", "PROP_OBJECT_IDENTIFIER", "PROP_VENDOR_NAME", "PROP_MODEL_NAME", "PROP_FIRMWARE_REVISION", "PROP_DESCRIPTION", "PROP_PRESENT_VALUE", "PROP_PRIORITY_ARRAY", "PROP_RELINQUISH_DEFAULT", "PROP_UNITS", "PROP_STATUS_FLAGS", "PROP_OUT_OF_SERVICE", "PROP_OBJECT_LIST"];
+    if (!KNOWN_PROPS.includes(prop) || !/^OBJECT_[A-Z0-9_]+$/.test(type)) return real.textError(res, 400);
+    const property = { objectId: { objectType: type, instance: Number(q.get("object_id.instance") || 0) }, propertyId: prop, arrayIndex: Number(q.get("array_index") || 4294967295) };
+    const deviceProps = { PROP_OBJECT_NAME: "MockNF", PROP_VENDOR_NAME: "Normal (mock)", PROP_MODEL_NAME: "mock-nf", PROP_FIRMWARE_REVISION: "3.10-mock" };
+    if (type === "OBJECT_DEVICE" && prop in deviceProps) return json(res, 200, { property, value: { characterString: deviceProps[prop], array: [] } });
+    if (prop === "PROP_PRESENT_VALUE") return json(res, 200, { property, value: { real: 0, array: [] } });
+    return json(res, 200, { error: { errorClass: "ERROR_CLASS_PROPERTY", errorCode: "ERROR_CODE_UNKNOWN_PROPERTY" } });
   }
   const hook = p.match(/^\/api\/v1\/apps\/([^/]+)\/hooks\/([^/]+)(\/runs)?$/);
-  if (hook && !hook[3] && req.method === "POST") { const pid = runs.length + 1; runs.push({ pid, state: "STATE_SUCCESS", results: { "": { events: [{ message: "mock run: nothing executed" }] } } }); return json(res, 200, { pid }); }
-  if (hook && hook[3]) return json(res, 200, { runs });
-  json(res, 404, { error: `mock-nf: no route for ${req.method} ${p}` });
+  if (hook) {
+    const id = decodeURIComponent(hook[2]), key = `${hook[1]}/${id}`;
+    if (!hookIds.has(id) && !installApp.hooks.some((h) => h.id === id)) return real.grpcError(res, 404);   // unknown hook: empty 404
+    const list = hookRuns.get(key) || [];
+    if (!hook[3] && req.method === "POST") {
+      const run = real.makeRun(list.length + 1, b, ["mock run: nothing executed"]);
+      hookRuns.set(key, [run, ...list]);
+      return json(res, 200, { pid: run.pid, groups: [""] });
+    }
+    if (hook[3] && req.method === "GET") {
+      // page_size runs, newest first; "results" stays {} unless include_results=true (events are in results).
+      const size = Number(url.searchParams.get("page_size")) || 10;
+      const withResults = url.searchParams.get("include_results") === "true";
+      return json(res, 200, { runs: list.slice(0, size).map((r) => (withResults ? r : { ...r, results: {} })), totalCount: String(list.length) });
+    }
+  }
+  // Anything else is not an NF route (see nf-real.mjs unknownRoute): the web console for a GET, 405 otherwise.
+  real.unknownRoute(res, req.method);
 });
 // MOCK_HOST=0.0.0.0 lets a container (e.g. a local ZAP scan) reach the mock; default stays loopback.
 const HOST = process.env.MOCK_HOST || "127.0.0.1";

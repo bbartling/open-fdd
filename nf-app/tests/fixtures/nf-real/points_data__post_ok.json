@@ -1,0 +1,29 @@
+{
+ "id": "points_data__post_ok",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/points/data",
+  "body": {
+   "points": [
+    {
+     "uuid": "00000000-0000-0000-0000-000000000000",
+     "values": [
+      {
+       "ts": "2026-01-01T00:00:00Z",
+       "real": 1
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "success": true,
+   "taskUuid": ""
+  }
+ },
+ "note": "History samples. NF reads `real`; an unknown uuid is accepted."
+}

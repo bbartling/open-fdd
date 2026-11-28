@@ -1,0 +1,15 @@
+{
+ "id": "sites__list",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/sites"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "sites": [],
+   "totalCount": "1"
+  }
+ }
+}

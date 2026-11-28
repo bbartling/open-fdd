@@ -1,0 +1,14 @@
+{
+ "id": "point_data__window_bad_method",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/point/data?uuids=<sim-point-uuid>&count=3&window=300s&method=BOGUS"
+ },
+ "response": {
+  "status": 400,
+  "contentType": "text/plain",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

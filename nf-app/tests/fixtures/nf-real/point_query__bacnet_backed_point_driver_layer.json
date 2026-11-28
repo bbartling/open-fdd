@@ -1,0 +1,82 @@
+{
+ "id": "point_query__bacnet_backed_point_driver_layer",
+ "request": {
+  "method": "POST",
+  "path": "/api/v1/point/query",
+  "body": {
+   "layer": "hpl:bacnet:local",
+   "pageSize": 300
+  }
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "nextPageToken": "",
+   "points": [
+    {
+     "uuid": "2969823e-a2c6-339c-80b3-5c2c005ae2b4",
+     "name": "nfft-sim.ahu-1.rat",
+     "layer": "hpl:bacnet:local",
+     "version": "",
+     "attrs": {
+      "object_id": "av.8005",
+      "instance": "8005",
+      "prop_max_pres_value": "0.000000",
+      "bacnet_net": "0",
+      "prop_event_state": "0",
+      "device_uuid": "6a87f0f2-0900-11ed-b737-c32fabea95ef",
+      "prop_status_flags": "",
+      "device_id": "10",
+      "device_prop_object_name": "NF",
+      "prop_units": "62",
+      "prop_min_pres_value": "0.000000",
+      "type": "OBJECT_ANALOG_VALUE",
+      "prop_object_name": "nfft-sim.ahu-1.rat",
+      "prop_description": "AHU-1 return air temperature"
+     },
+     "hpldata": {
+      "@type": "type.googleapis.com/normalgw.bacnet.v1.BACnetPoint",
+      "uuid": "",
+      "deviceAddress": {
+       "mac": "",
+       "net": 0,
+       "adr": "",
+       "maxApdu": 0,
+       "deviceId": 10,
+       "bbmd": "",
+       "portId": 0
+      },
+      "property": {
+       "objectId": {
+        "objectType": "OBJECT_ANALOG_VALUE",
+        "instance": 8005
+       },
+       "propertyId": "PROP_PRESENT_VALUE",
+       "arrayIndex": 4294967295
+      },
+      "hasPriorityArray": false
+     },
+     "latestValue": {
+      "ts": "2026-11-28T14:50:08.207Z",
+      "double": 24
+     },
+     "displayUnits": "°C",
+     "parentUuid": "6a87f0f2-0900-11ed-b737-c32fabea95ef",
+     "protocolId": "av.8005",
+     "pointType": "POINT",
+     "splitAttrs": [],
+     "description": "AHU-1 return air temperature",
+     "parentName": "NF",
+     "units": "DEGREES_CELSIUS",
+     "hplDriver": "hpl:bacnet:local",
+     "conversionId": "",
+     "qualityFlags": [],
+     "writability": "WRITABILITY_UNKNOWN"
+    }
+   ],
+   "totalCount": "1"
+  }
+ },
+ "note": "one simulated BACnet-backed point (hpldata, latestValue, units enums)"
+}

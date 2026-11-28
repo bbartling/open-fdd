@@ -1,0 +1,24 @@
+{
+ "id": "commands__read_unknown_point",
+ "request": {
+  "method": "POST",
+  "path": "/api/v2/command/read",
+  "body": {
+   "reads": [
+    {
+     "point": {
+      "uuid": "00000000-0000-0000-0000-000000000000",
+      "layer": "default"
+     }
+    }
+   ]
+  }
+ },
+ "response": {
+  "status": 400,
+  "contentType": "application/grpc",
+  "body": {
+   "$kind": "empty"
+  }
+ }
+}

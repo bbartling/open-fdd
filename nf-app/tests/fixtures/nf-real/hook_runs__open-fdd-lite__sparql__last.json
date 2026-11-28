@@ -1,0 +1,54 @@
+{
+ "id": "hook_runs__open-fdd-lite__sparql__last",
+ "request": {
+  "method": "GET",
+  "path": "/api/v1/apps/open-fdd-lite/hooks/sparql/runs?page_size=1&include_results=true"
+ },
+ "response": {
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+   "runs": [
+    {
+     "hookId": "",
+     "pid": "1",
+     "state": "STATE_SUCCESS",
+     "message": "",
+     "trigger": "TRIGGER_REQUEST",
+     "startTime": "2026-11-28T14:43:29.315923792Z",
+     "endTime": "2026-11-28T14:43:31.314686642Z",
+     "args": {
+      "query": "SELECT * WHERE {?s ?p ?o} LIMIT 1"
+     },
+     "results": {
+      "": {
+       "endTime": "2026-11-28T14:43:30.348731765Z",
+       "state": "STATE_SUCCESS",
+       "invocationCount": "0",
+       "returnValue": "",
+       "events": [
+        {
+         "ts": "2026-11-28T14:43:30.342Z",
+         "message": "{\"ok\":true,\"ms\":1669,\"base\":\"urn:nf:\",\"format\":\"json\",\"kind\":\"select\",\"vars\":[\"o\",\"p\",\"s\"],\"rows\":[[\"site-specific tag (not in the Haystack libs)\",\"http://www.w3.org/2000/01/rdf-schema#comment\",\"urn:nf:vfd\"]],\"total\":1,\"truncated\":false,\"results\":{\"head\":{\"vars\":[\"o\",\"p\",\"s\"]},\"results\":{\"bindings\":[{\"o\":{\"type\":\"literal\",\"value\":\"site-specific tag (not in the Haystack libs)\"},\"p\":{\"type\":\"literal\",\"value\":\"http://www.w3.org/2000/01/rdf-schema#comment\"},\"s\":{\"type\":\"literal\",\"value\":\"urn:nf:vfd\"}}]}}}"
+        }
+       ],
+       "startTime": "2026-11-28T14:43:28.665696930Z",
+       "enqueuedTime": "2026-11-28T14:43:28.661664809Z",
+       "group": "",
+       "pid": "1",
+       "taskUuid": "",
+       "args": {},
+       "runtimePid": 1329
+      }
+     },
+     "version": "",
+     "enqueuedTime": "2026-11-28T14:43:28.661664809Z",
+     "stats": {
+      "6": "1"
+     }
+    }
+   ],
+   "totalCount": "1"
+  }
+ }
+}
