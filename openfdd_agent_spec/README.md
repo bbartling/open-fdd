@@ -19,6 +19,8 @@ Skills: [add-rcx-chart](skills/add-rcx-chart.md), [add-or-tune-fdd-rule](skills/
 
 1. Start with the repo-root `AGENTS.md` (layout, rules, release, tests, what never to do). Cursor, Codex and
    Claude Code read that file. There is no separate `CLAUDE.md`.
+   It also sets the priority order (fault rules, then data model, then NF plugin and UI, then future ideas) and the four
+   bucket issues #1832 to #1835; add new items there instead of opening new issues.
 2. Open the one skill that matches the task and follow its steps and test list.
 3. Pointers in `.claude/skills/<name>/SKILL.md` and `.agents/skills/<name>/SKILL.md` let Claude Code and Cursor
    auto-select a skill; they only point here, so edit the skill files in this folder.
