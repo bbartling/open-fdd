@@ -250,6 +250,25 @@ test("overview point list is sensors and process points, not fault or timeline o
   assert.ok(!names.some((n) => /fault|timeline/i.test(n)));
 });
 
+test("overview totals count sensors and process points, not fault or timeline outputs", () => {
+  const ctx = load();
+  const m = modelFor(ctx);
+  m.points.push(ctx.toPoint(pt("TL2", { equipRef: "VAV-A", dis: "SV-RANGE timeline", markers: "point,his,fault_timeline", ruleRef: "SV-RANGE" })));
+  ctx.assignedModel = m;
+  vm.runInContext('model = assignedModel; scope.site = "site-a";', ctx);
+  const all = vm.runInContext("taggedOnSite().length", ctx);
+  const counted = vm.runInContext("countedTaggedOnSite().length", ctx);
+  const diag = m.points.filter((p) => ctx.isDiagnosticPoint(p) && p.siteRef === "site-a").length;
+  assert.ok(diag >= 4, "the fixture has fault, FDD and timeline points");
+  assert.equal(counted, all - diag, "the header and the Overview tile skip diagnostic points");
+  assert.match(text("app-core.js"), /stat\(tagged\.length, "tagged points"\)/);
+  assert.match(text("app-core.js"), /const tagged = countedTaggedOnSite\(\);/);
+});
+
+test("the backend badge poll asks for run logs, where the schema hook writes its result", () => {
+  const src = text("version.js");
+  assert.match(src, /hooks\/schema\/runs\?page_size=5&include_results=true&include_logs=true/);
+});
 test("model tree links devices by equipRef or point deviceRef and hides diagnostic points", () => {
   const ctx = load();
   const m = modelFor(ctx);

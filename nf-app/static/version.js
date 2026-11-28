@@ -92,7 +92,7 @@
       const deadline = Date.now() + 20000;
       let waitMs = 1000;
       while (Date.now() < deadline) {
-        const runs = await api(`/api/v1/apps/${app}/hooks/schema/runs?page_size=5&include_results=true`);
+        const runs = await api(`/api/v1/apps/${app}/hooks/schema/runs?page_size=5&include_results=true&include_logs=true`);
         const hit = ((runs && runs.runs) || []).find((r) => String(r.pid) === String(pid));
         const got = hit && payloadFromRun(hit);
         if (got && (got.id || got.label)) applyBackendLabel(got.id, got.label);

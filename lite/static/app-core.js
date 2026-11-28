@@ -72,6 +72,8 @@ function saveOverviewEquipForSite(site, equipId) {
 const siteEquips = () => model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site);
 const siteEquipIds = () => siteEquips().map(idOf);
 const taggedOnSite = () => model.points.filter((p) => p.siteRef === scope.site && has(p, "point"));
+/** Tagged points the dashboard counts: fault, FDD and timeline outputs are diagnostics, not sensors, so they stay out of the totals. */
+const countedTaggedOnSite = () => taggedOnSite().filter((p) => !isDiagnosticPoint(p));
 const equipLabelOf = (e) => (e.attrs || {}).dis || e.name;
 const eligibleSingleEquips = (m, site) => sortOverviewEquips((m?.equips || []).filter((e) => (e.attrs || {}).siteRef === site && isOverviewEligibleEquip(e)));
 
@@ -185,7 +187,7 @@ async function applyScope() {
   if (typeof cancelHistory === "function") cancelHistory();
   ({ cards: points, weather: variables, status: statusPts } = scopedSets());
   rdf = modelToTurtle(model, rdfBaseOf());   // host-independent subjects, same as the hooks (#1773)
-  const tagged = taggedOnSite();
+  const tagged = countedTaggedOnSite();
   const site = model.sites.find((s) => idOf(s) === scope.site);
   $("sub").textContent = `${site?.name ?? scope.site} · ${siteEquipIds().length} equips · ${tagged.length} tagged points · ${location.host}`;
   renderSummary();
@@ -237,8 +239,8 @@ const since = (arr, hours) => {
 
 // ---- Overview tab ---------------------------------------------------------------------
 function renderSummary() {
-  const tagged = taggedOnSite();
-  const onSite = model.points.filter((p) => p.siteRef === scope.site);
+  const tagged = countedTaggedOnSite();
+  const onSite = model.points.filter((p) => p.siteRef === scope.site && !isDiagnosticPoint(p));
   const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
   $("summary").innerHTML = [
     stat(siteEquipIds().length, "equips"),
