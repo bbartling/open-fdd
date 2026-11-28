@@ -34,26 +34,26 @@ def _series(col, n, step_s, fn):
 CASES = {
     # on 3 min / off 2 min: a start every 5 min (12/h), 180 s on-times. The third seen short cycle ends at min 17 and
     # the trailing hour holds >= 3 of them from then on: fault 17..180 min = 2.716667 h.
-    "boiler_12_starts_180s": (_series("boiler_status", 181, 60, lambda m: 1.0 if m % 5 < 3 else 0.0), 2.716667),
+    "boiler_12_starts_180s": (_series("boiler_operating_status", 181, 60, lambda m: 1.0 if m % 5 < 3 else 0.0), 2.716667),
     # 2 starts/h, 20 min on-times: pass
-    "boiler_2_starts_20min": (_series("boiler_status", 181, 60, lambda m: 1.0 if m % 30 < 20 else 0.0), 0.0),
+    "boiler_2_starts_20min": (_series("boiler_operating_status", 181, 60, lambda m: 1.0 if m % 30 < 20 else 0.0), 0.0),
     # on-time exactly 600 s (10 x 60 s) is not short: pass (threshold edge)
-    "compressor_on_600s_edge": (_series("compressor_status", 181, 60, lambda m: 1.0 if m % 20 < 10 else 0.0), 0.0),
+    "compressor_on_600s_edge": (_series("compressor_operating_status", 181, 60, lambda m: 1.0 if m % 20 < 10 else 0.0), 0.0),
     # 540 s on-times, 3 per hour: the third ends at min 68 -> fault 68..180 = 1.866667 h
-    "compressor_on_540s": (_series("compressor_status", 181, 60, lambda m: 1.0 if m % 20 < 9 else 0.0), 1.866667),
+    "compressor_on_540s": (_series("compressor_operating_status", 181, 60, lambda m: 1.0 if m % 20 < 9 else 0.0), 1.866667),
     # 540 s on-times but only 2 per trailing hour: below min_short_cycles (edge) -> pass
-    "compressor_two_short_per_hour": (_series("compressor_status", 181, 60, lambda m: 1.0 if m % 30 < 9 else 0.0), 0.0),
+    "compressor_two_short_per_hour": (_series("compressor_operating_status", 181, 60, lambda m: 1.0 if m % 30 < 9 else 0.0), 0.0),
     # no status: chiller current above MECH_AMPS_MIN is the proof (same cycling as the first case)
-    "chiller_amps_fallback": (_series("chiller_amps", 181, 60, lambda m: 50.0 if m % 5 < 3 else 0.0), 2.716667),
+    "chiller_amps_fallback": (_series("chiller_electric_current", 181, 60, lambda m: 50.0 if m % 5 < 3 else 0.0), 2.716667),
     # no run status, current or power at all: never a silent pass
-    "no_run_status": (_series("hw_supply_t", 181, 60, lambda m: 60.0), "no_run_status"),
+    "no_run_status": (_series("supply_hot_water_temperature", 181, 60, lambda m: 60.0), "no_run_status"),
     # 15 min of firing per hour resampled to 1 h by AVERAGE: duty 0.25 every hour. Coarser than max_interval and the
     # start floor stays below the cap: not assessed, never a pass
-    "hourly_duty_quarter": (_series("boiler_status", 25, 3600, lambda h: 0.25), "insufficient_trend"),
+    "hourly_duty_quarter": (_series("boiler_operating_status", 25, 3600, lambda h: 0.25), "insufficient_trend"),
 }
 
 # parameter edges (run with overrides): starts every 10 min with 5 min on-times = exactly 6 starts per trailing hour
-STARTS_6 = _series("boiler_status", 181, 60, lambda m: 1.0 if m % 10 < 5 else 0.0)
+STARTS_6 = _series("boiler_operating_status", 181, 60, lambda m: 1.0 if m % 10 < 5 else 0.0)
 PARAM_CASES = {
     # 6 starts is not above a cap of 6: pass
     "starts_6_cap_6": (STARTS_6, {"max_starts_per_hour": 6.0, "min_short_cycles": 10.0, "min_on_seconds": 60.0}, 0.0),
@@ -61,7 +61,7 @@ PARAM_CASES = {
     "starts_6_cap_5": (STARTS_6, {"max_starts_per_hour": 5.0, "min_short_cycles": 10.0, "min_on_seconds": 60.0}, 2.0),
     # 16 min trend (coarser than 900 s), 30 % duty then off: each partial sample is a seen, completed 288 s cycle.
     # One short cycle is enough here, so the floor reaches the threshold: FAULT with the coarse-floor caveat
-    "coarse_floor_fault": (_series("boiler_status", 46, 960, lambda i: 0.3 if i % 2 == 0 else 0.0),
+    "coarse_floor_fault": (_series("boiler_operating_status", 46, 960, lambda i: 0.3 if i % 2 == 0 else 0.0),
                            {"min_short_cycles": 1.0}, "coarse_floor"),
 }
 

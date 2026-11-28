@@ -1,10 +1,11 @@
 """Canonical point roles (ASHRAE 223P) from ``roles/openfdd-roles.json``.
 
-The vocabulary is the rule-input contract (version ``1.1.0-draft.1``). A rule input is the role's
-``role`` name. ``legacy_keys`` and ``aliases`` still resolve to that name. The hyphenated local
-names in ``role_map.json`` (``discharge-air-temp``) are the pandas column the reference rules read;
-they are not the rule-input name. :func:`pandas_column` maps a role, a legacy key or that column
-onto the pandas column. :func:`resolve` maps any of those onto the role name.
+The vocabulary is the rule-input contract (version ``1.1.0-draft.1``). A rule input and the pandas
+column are the role's ``role`` name. ``legacy_keys`` and ``aliases`` still resolve to that name.
+The hyphenated columns the reference rules used before this migration (``discharge-air-temp``) live
+in ``legacy_pandas_columns.json`` and still resolve; they are not the column the rules read.
+:func:`pandas_column` maps a role, a legacy key or a hyphenated column onto the role name.
+:func:`resolve` maps any of those onto the role name.
 
 Haystack tag sets in the file are an optional overlay. The role itself is the 223P pattern.
 """
@@ -148,6 +149,14 @@ def _role_map() -> dict[str, str]:
 
 
 @lru_cache(maxsize=1)
+def _legacy_pandas() -> dict[str, str]:
+    """Hyphenated pandas column from before the role-name migration -> role name."""
+    path = Path(__file__).resolve().parent / "data" / "legacy_pandas_columns.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return {str(k): str(v) for k, v in raw.items() if isinstance(v, str)}
+
+
+@lru_cache(maxsize=1)
 def _alias_index() -> dict[str, str]:
     """Every accepted spelling except the hyphenated pandas column -> role name."""
     index: dict[str, str] = {}
@@ -178,6 +187,9 @@ def resolve(name: str) -> str | None:
         if text in ambiguous and text != found:
             return None
         return found
+    legacy = _legacy_pandas().get(text)
+    if legacy:
+        return legacy
     for sql_key, column in _role_map().items():
         if text == column:
             return _alias_index().get(sql_key)
@@ -185,31 +197,20 @@ def resolve(name: str) -> str | None:
 
 
 def pandas_column(name: str) -> str:
-    """Pandas column for a role, a legacy key or a column that is already that name.
+    """Pandas column for a role, a legacy key or an older hyphenated column.
 
-    The reference rules read the hyphenated local name (``discharge-air-temp``). A 223P role
-    with one ``legacy_keys`` entry in ``role_map.json`` uses that column. A role with several
-    (``chiller_amps`` and ``chiller_current``) uses the first key listed on the role.
+    The reference rules read the role name (``discharge_air_temperature``). ``sat`` and
+    ``discharge-air-temp`` both resolve to that column.
     """
     text = str(name).strip()
-    columns = _role_map()
-    if text in columns:
-        return columns[text]
-    if text in set(columns.values()):
-        return text
     canon = resolve(text)
-    if not canon:
-        return text
-    rec = roles()[canon]
-    for key in rec.get("legacy_keys") or []:
-        if key in columns:
-            return columns[key]
-    return text
+    return canon if canon else text
 
 
 def accepted_names() -> set[str]:
     """Spellings :func:`resolve` accepts: role names, legacy keys, aliases and hyphenated columns."""
     names = set(_alias_index())
+    names.update(_legacy_pandas())
     for sql_key, column in _role_map().items():
         if sql_key in _alias_index():
             names.add(column)
@@ -220,4 +221,5 @@ def clear_cache() -> None:
     """Drop cached loads (tests that swap the file)."""
     load_vocabulary.cache_clear()
     _role_map.cache_clear()
+    _legacy_pandas.cache_clear()
     _alias_index.cache_clear()

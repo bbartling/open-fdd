@@ -504,7 +504,10 @@ test("vocabulary: Unit is the roles file's QUDT local names plus HR and null, sa
 test("vocabulary: every role the spec names (InputName table, examples) is a roles-file role with its unit", () => {
   const rows = [...spec.components.schemas.InputName.description.matchAll(/^\| `([a-z0-9_]+)` \| (`[^`]*`|null) \|/gm)];
   assert.ok(rows.length > 0, "InputName description has a role table");
-  for (const [, name, unit] of rows) assertRole(name, unit === "null" ? null : unit.slice(1, -1), undefined, "InputName table");
+  for (const [, name, unit] of rows) {
+    const raw = unit === "null" ? null : unit.slice(1, -1);
+    assertRole(name, raw === "null" ? null : raw, undefined, "InputName table");
+  }
   assert.ok(VOCAB.has(spec.components.schemas.InputName.example), "InputName example is a role");
   const pt = spec.components.schemas.Point.example;
   assertRole(pt.input, pt.unit, pt.value_type, "Point example", pt.unit_display);

@@ -46,11 +46,11 @@ def test_legacy_keys_resolve_and_hyphenated_columns_do_not_replace_the_role_name
     assert resolve("not_a_role") is None
     assert resolve("cooling_valve_position") == "cooling_valve_position"
     assert resolve("outside_air_damper_position") is None
-    assert pandas_column("discharge_air_temperature") == "discharge-air-temp"
-    assert pandas_column("sat") == "discharge-air-temp"
-    assert pandas_column("discharge-air-temp") == "discharge-air-temp"
-    assert column_for("fan_status") == "fan-status"
-    assert column_for("supply_fan_operating_status") == "fan-status"
+    assert pandas_column("discharge_air_temperature") == "discharge_air_temperature"
+    assert pandas_column("sat") == "discharge_air_temperature"
+    assert pandas_column("discharge-air-temp") == "discharge_air_temperature"
+    assert column_for("fan_status") == "supply_fan_operating_status"
+    assert column_for("supply_fan_operating_status") == "supply_fan_operating_status"
     listed = set(role_names())
     assert "discharge-air-temp" not in listed
     assert "discharge_air_temperature" in listed

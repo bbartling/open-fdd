@@ -62,8 +62,9 @@ def role_columns() -> dict[str, str]:
 def column_for(role: str) -> str:
     """Pandas column for a rule input.
 
-    The column is the hyphenated local name the reference rules read (``discharge-air-temp``).
-    ``role`` may be that column, a SQL key (``sat``) or the 223P role (``discharge_air_temperature``).
+    The column is the role name the reference rules read (``discharge_air_temperature``).
+    ``role`` may be that name, a legacy key (``sat``) or the older hyphenated column
+    (``discharge-air-temp``).
     The rule-input name is :func:`open_fdd.point_roles.resolve`.
     """
     from open_fdd.point_roles import pandas_column
@@ -162,13 +163,16 @@ def equip_kinds(equip: Mapping[str, Any], catalog: Mapping | None = None) -> lis
     return [k for k, marks in cat["equipment_kinds"].items() if any(has_kind_marker(ms, m) for m in marks)]
 
 
-def _is_web(role: str) -> bool:
-    return role.startswith("web_")
+def _is_web(role: str, definition: Mapping | None = None) -> bool:
+    """Weather roles bind only weather points. ``web_*`` is the older prefix; ``weather_service_*`` is the role name."""
+    if definition and definition.get("binding_scope") == "weather":
+        return True
+    return role.startswith("web_") or role.startswith("weather_service_")
 
 
 def role_score(p: Point, role: str, definition: Mapping) -> int:
     """How well ``p`` fills ``role`` (0 = not at all): class match 2, all markers 1."""
-    if _is_web(role) != p.has("weather"):
+    if _is_web(role, definition) != p.has("weather"):
         return 0
     forbid = definition.get("forbid") or []
     if forbid and any(tag in p.tags for tag in forbid):
@@ -300,9 +304,26 @@ def si_plan_for(role: str, p: Point, catalog: Mapping | None = None) -> RolePlan
 
         def to_bool(s, div=div):
             x = s / 100.0 if div else s
+            if not hasattr(x, "where"):
+                try:
+                    v = float(x)
+                except (TypeError, ValueError):
+                    return None
+                return v if -1e-9 <= v <= 1 + 1e-9 else None
             return x.where((x >= -1e-9) & (x <= 1 + 1e-9)).clip(0.0, 1.0)
 
         return RolePlan(to_bool, "bool", scaled=div)
+    if scale == "PERCENT":
+        import pandas as pd
+
+        def as_percent(s):
+            x = pd.to_numeric(s, errors="coerce")
+            finite = x.dropna()
+            if not finite.empty and float(finite.abs().max()) <= 1.5:
+                return x * 100.0
+            return x
+
+        return RolePlan(as_percent, "PERCENT")
     if scale == "text":
         return skip("is a text role; numeric history cannot feed it")
     want = role_quantity(role, catalog)

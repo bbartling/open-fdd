@@ -69,6 +69,8 @@ CORE_DUCKDB_SUBS = [
     (r"\bjsonb\b", "JSON"),
     (r" GENERATED ALWAYS AS IDENTITY", ""),
     (r"CREATE UNIQUE INDEX IF NOT EXISTS rule_config_one_active [^\n]*\n", ""),
+    # Postgres migration (core_version 5). A fresh DuckDB schema already uses the role names, so the block is not loaded.
+    (r"DO \$\$[\s\S]*?END \$\$;\n", ""),
 ]
 SQL_TYPE = {"text": "text", "timestamp": "timestamptz", "double": "double precision"}
 
@@ -115,7 +117,8 @@ def role_inputs(contract: dict, roles_doc: dict) -> dict[str, dict]:
     """Contract role key -> its roles-file role (223P-derived id, unit as the roles file spells it, SQL scale)."""
     by_key: dict[str, list[dict]] = {}
     for r in roles_doc["roles"]:
-        for key in r.get("legacy_keys") or []:
+        # The contract key is the role name. legacy_keys still name the same role for older packs.
+        for key in [r["role"], *(r.get("legacy_keys") or [])]:
             by_key.setdefault(key, []).append(r)
     units = roles_doc["units"]
     out, errs = {}, []
@@ -126,7 +129,7 @@ def role_inputs(contract: dict, roles_doc: dict) -> dict[str, dict]:
             continue
         r = hits[0]
         scale = spec["scale"]
-        sql_scale = scale[3:] if scale.startswith("si:") else SQL_SCALE[scale]
+        sql_scale = scale[3:] if scale.startswith("si:") else SQL_SCALE.get(scale, scale)
         # unit: the QUDT local name (wire token, #1807); unit_display: the Haystack symbol, display only
         unit = r["unit"].split(":", 1)[1] if r.get("unit") else None
         if unit is not None and unit != units[r["unit"]]["wire"]:
@@ -275,7 +278,10 @@ def validate(manifest: dict) -> list[str]:
     for r in manifest["rules"]:
         for i in r["inputs"]:
             ref = roles.get(i["role"])
-            if ref is None or i["legacy_key"] not in (ref.get("legacy_keys") or []):
+            accepted = set(ref.get("legacy_keys") or []) if ref else set()
+            if ref:
+                accepted.add(ref["role"])
+            if ref is None or i["legacy_key"] not in accepted:
                 errs.append(f"{r['rule_id']}: input {i['legacy_key']} -> {i['role']} is not in roles/openfdd-roles.json")
             elif (f"unit:{i['unit']}" if i["unit"] else None) != ref.get("unit"):
                 errs.append(f"{r['rule_id']}: numeric input {i['role']} unit differs from the roles file")

@@ -121,7 +121,7 @@ def test_a_ref_never_crosses_sites_and_never_guesses():
 
 def test_one_ahu_and_no_airref_is_assumed_and_can_be_turned_off():
     c = spec()
-    a = ProofNode("AHU-1", "s", roles=frozenset({"fan_status"}), kinds=frozenset({"ahu"}))
+    a = ProofNode("AHU-1", "s", roles=frozenset({"supply_fan_operating_status"}), kinds=frozenset({"ahu"}))
     v = ProofNode("VAV-1", "s", kinds=frozenset({"vav"}))
     dangling = ProofNode("VAV-2", "s", refs={"airRef": "missing"}, kinds=frozenset({"vav"}))
     boiler = ProofNode("B-1", "s", kinds=frozenset({"boiler"}))
@@ -130,7 +130,7 @@ def test_one_ahu_and_no_airref_is_assumed_and_can_be_turned_off():
     assert not resolve_run_proof(v, [a, v], c, assume_single_feeder=False).found
     assert not resolve_run_proof(dangling, [a, dangling], c).found
     assert not resolve_run_proof(boiler, [a, boiler], c).found
-    other = ProofNode("AHU-2", "s", roles=frozenset({"fan_cmd"}), kinds=frozenset({"ahu"}))
+    other = ProofNode("AHU-2", "s", roles=frozenset({"supply_fan_command"}), kinds=frozenset({"ahu"}))
     assert not resolve_run_proof(v, [a, other, v], c).found
 
 

@@ -225,9 +225,9 @@ def _identical_overlap(train, frame):
 
 #: Roles behind each AHU gray-box residual (the single-zone families come from ``grey_box_families`` when present).
 _GREY_BOX_ROLES = {
-    "oa_fraction": ["mixed-air-temp", "return-air-temp", "outside-air-temp", "outside-air-damper"],
-    "coil_delta_t": ["mixed-air-temp", "discharge-air-temp", "cooling-valve"],
-    "sat_error": ["discharge-air-temp", "discharge-air-temp-sp", "cooling-valve"],
+    "oa_fraction": ["mixed_air_temperature", "return_air_temperature", "outdoor_air_intake_temperature", "outdoor_air_intake_damper_position_command"],
+    "coil_delta_t": ["mixed_air_temperature", "discharge_air_temperature", "cooling_valve_position_command"],
+    "sat_error": ["discharge_air_temperature", "discharge_air_temperature_setpoint", "cooling_valve_position_command"],
 }
 
 

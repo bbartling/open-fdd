@@ -18,7 +18,8 @@ const CATALOG = readJson("nf-app/static/fdd-catalog.json");
 export const ROLE = new Map(ROLES.roles.map((r) => [r.role, {
   unit: r.unit ? r.unit.replace(/^unit:/, "") : null, unit_display: r.haystack.unit ?? null, value_type: r.value_type,
 }]));
-const BY_LEGACY = new Map(ROLES.roles.flatMap((r) => r.legacy_keys.map((k) => [k, r.role])));
+const BY_LEGACY = new Map(ROLES.roles.flatMap((r) => [r.role, ...r.legacy_keys].map((k) => [k, r.role])));
+const RULE_INPUT = new Set(ROLES.roles.filter((r) => r.rule_input !== false).map((r) => r.role));
 
 function role(name) {
   const r = ROLE.get(name);
@@ -60,7 +61,6 @@ const AHU_ROLES = [
   "supply_fan_speed_command",
   "supply_fan_operating_status",
   "outdoor_air_intake_damper_position_command",
-  "outdoor_air_intake_damper_position",
   "cooling_valve_position_command",
 ];
 
@@ -69,7 +69,8 @@ for (const eq of EQUIPMENT) {
   if (eq.kind === "ahu") {
     for (const input of AHU_ROLES) {
       if (eq.id === "ahu-2" && input === "cooling_valve_position_command") continue; // unbound: FC8 is NOT_ASSESSED on ahu-2
-      defs.push({ id: `${eq.id}.${input}`, name: `${eq.name} ${input}`, equipment_id: eq.id, input, ...role(input) });
+      defs.push({ id: `${eq.id}.${input}`, name: `${eq.name} ${input}`, equipment_id: eq.id,
+        input: RULE_INPUT.has(input) ? input : null, ...role(input) });
     }
     if (eq.id === "ahu-1") {
       defs.push({ id: "ahu-1.filter_pressure_drop", name: "AHU-1 filter pressure drop", equipment_id: "ahu-1", input: null, unit: "PA", unit_display: "Pa", value_type: "number" });
@@ -142,6 +143,7 @@ function ruleFrom(ruleId, kind, title) {
   const add = (key, required) => {
     const name = BY_LEGACY.get(key);
     if (!name) throw new Error(`${ruleId}: catalog role ${key} has no role in roles/openfdd-roles.json`);
+    if (!RULE_INPUT.has(name)) return;
     if (!inputs.some((x) => x.name === name)) inputs.push({ name, required, unit: role(name).unit, unit_display: role(name).unit_display });
   };
   c.required_roles.forEach((k) => add(k, true));
