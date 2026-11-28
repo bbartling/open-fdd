@@ -383,6 +383,8 @@ const duckRows = (reader) => reader.getRowObjectsJS().map((r) => {
 });
 
 async function createDuckDb(pack, opts = {}) {
+  const fs = require("fs");
+  const path = require("path");
   const cfg = { ...(opts.config || {}) };
   if (cfg.parquetDir) {
     fs.mkdirSync(path.join(String(cfg.parquetDir), "tmp"), { recursive: true });
