@@ -833,8 +833,10 @@ async function refreshLive() {
 }
 
 function setLive(ok, txt) {
-  $("liveDot").classList.toggle("bad", !ok);
-  $("liveTxt").textContent = txt;
+  const dot = $("liveDot"), live = $("liveTxt");
+  if (!dot || !live) return;
+  dot.classList.toggle("bad", !ok);
+  live.textContent = txt;
 }
 
 function showErr(e) {

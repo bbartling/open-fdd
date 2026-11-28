@@ -386,7 +386,7 @@ async function handle({ sdk, args = {}, config: rawConfig = {}, now = () => Date
         samples: fit.samples, series, run_proof_series: runProofSeries });
     }
     result.ms = now() - t0;
-    if (bytes(result) > a.maxBytes) throw new Error('answer exceeds UTF-8 byte limit; lower pointLimit or includeRows=false');
+    if (bytes(result) > a.maxBytes) throw Object.assign(new Error('answer exceeds UTF-8 byte limit; lower pointLimit or includeRows=false'), { code: 'too_large' });
   } catch (e) {
     result = { ok: false, ms: now() - t0, error: String((e && e.message) || e), ...(e && e.code ? { error_code: String(e.code) } : {}) };
   }

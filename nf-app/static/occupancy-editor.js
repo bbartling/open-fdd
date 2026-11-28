@@ -86,6 +86,7 @@
       drawState();
     };
     const drawState = () => {
+      if (!save.isConnected) return;
       const h = O().occupiedHoursPerWeek(st.calendar);
       hours.textContent = `Bare-min occupied hours/week: ${h}`;
       const dirty = JSON.stringify(st.calendar) !== st.saved;

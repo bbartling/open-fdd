@@ -597,6 +597,7 @@ function syncRangeInputs(container, bounds, siteTz = "UTC") {
  * @param {{key?:string,state?:any,siteTz?:string,onChange?:(state:any)=>void}} options
  */
 function renderRangeControl(container, { key = "default", state = getChartRangeState(key), siteTz = "UTC", onChange } = {}) {
+  if (!container) return state;
   const tz = chartTimeZone(siteTz), now = Date.now();
   container.classList.add("chart-range-control");
   // The inputs start from a placeholder ("All" does not know its oldest sample yet); resolveChartSelection writes the

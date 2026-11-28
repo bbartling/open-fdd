@@ -134,7 +134,9 @@ async function renderFdd() {
 const APP_ID = (location.pathname.match(/\/apps\/static\/([^/]+)\//) || [])[1] || "open-fdd";
 async function runFddNow() {
   const state = $("fddRunState");
-  $("fddRunNow").disabled = true;
+  const btn = $("fddRunNow");
+  if (!btn) return;
+  btn.disabled = true;
   try {
     state.textContent = "starting…";
     const { pid } = await api(`/api/v1/apps/${APP_ID}/hooks/fdd`, {});
@@ -151,7 +153,8 @@ async function runFddNow() {
     }
     state.textContent = "still running; reload later";
   } finally {
-    $("fddRunNow").disabled = false;
+    const done = $("fddRunNow");
+    if (done) done.disabled = false;
   }
 }
 
@@ -449,7 +452,12 @@ async function renderViewTab(tab) {
   const equips = fleet || weatherOnly ? siteEquips : fddEquipsInScope(), single = !fleet && !!tabEquip();
   const ahuOn = fleet ? renderAhuControl(siteEquips, catalog) : false;
   const rangeState = getChartRangeState(T.key), siteTz = siteTimeZone();
-  renderRangeControl($(T.range), { key: T.key, state: rangeState, siteTz,
+  const rangeEl = $(T.range);
+  if (!rangeEl) {
+    if ($(T.status)) $(T.status).textContent = "";
+    return;
+  }
+  renderRangeControl(rangeEl, { key: T.key, state: rangeState, siteTz,
     onChange: () => {
       const pending = renderViewTab(tab), requested = viewTabRuns[tab];
       pending.catch((e) => { if (requested === viewTabRuns[tab]) $(T.status).textContent = `Could not load this range: ${e.message}`; });
@@ -667,8 +675,10 @@ async function queryTimescaleHistoryBatch({ cleanIds, fromMs, toMs, bucket, olde
     throw e;
   }
   const deadline = Date.now() + 25e3;
+  let pollMs = 800;
   while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, pollMs));
+    pollMs = Math.min(pollMs * 1.5, 3000);
     const runs = (await api(`/api/v1/apps/${APP_ID}/hooks/history/runs?page_size=5&include_results=true&include_logs=true`)).runs || [];
     const hit = runs.find((r) => r.pid === pid || (r.run && r.run.pid === pid));
     if (!hit) continue;

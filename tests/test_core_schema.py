@@ -74,6 +74,37 @@ def test_catalog_pins_the_keys_downstream_relies_on():
         assert f"'{value}'" in status
 
 
+def test_core_sql_repairs_missing_schema_meta_before_the_version_five_migration():
+    text = core.SOURCE.read_text(encoding="utf-8")
+    assert "openfdd.config schema_version 6 while fdd.schema_meta was never created" in text
+    assert "INSERT INTO fdd.schema_meta (id, core_version)\n    SELECT 1, CASE" in text
+
+
+@needs_node
+def test_schema_meta_repair_script_applies_on_top_of_schema_version_six_without_meta():
+    prelude = """
+CREATE SCHEMA IF NOT EXISTS fdd;
+CREATE SCHEMA IF NOT EXISTS openfdd;
+CREATE TABLE IF NOT EXISTS openfdd.config (key text PRIMARY KEY, value jsonb NOT NULL);
+INSERT INTO openfdd.config (key, value) VALUES ('schema_version', to_jsonb(6))
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+CREATE TABLE IF NOT EXISTS fdd.point (
+  site_id text NOT NULL, point_key text NOT NULL, role text,
+  si_unit text, si_scale double precision DEFAULT 1,
+  PRIMARY KEY (site_id, point_key));
+INSERT INTO fdd.point (site_id, point_key, role, si_unit)
+VALUES ('s', 'p1', 'discharge_air_temperature', 'CEL');
+"""
+    merged = ROOT / "tmp_core_meta_repair.sql"
+    merged.write_text(prelude + core.SOURCE.read_text(encoding="utf-8"), encoding="utf-8")
+    try:
+        live = core.pg_catalog(merged)
+        assert "fdd.schema_meta" in live
+        assert "schema_meta" in live["_relations"]
+    finally:
+        merged.unlink(missing_ok=True)
+
+
 def test_build_script_check_passes():
     if shutil.which("node") is None:
         pytest.skip("node is required")
