@@ -3,7 +3,7 @@
 Run:  python -m pytest tests/parity -q      (needs node + `npm ci` in nf-app, and pandas/numpy/pyyaml)
 
 Everything is SI. The dataset is nf-app/tests/fixtures/synthetic_dataset.js (deterministic; AHU-1 mostly healthy,
-AHU-2 "sick" with injected fault windows), run through PGlite + sql.js by tests/parity/sql_run.mjs.
+AHU-2 "sick" with injected fault windows), run through Node DuckDB by tests/parity/sql_run.mjs.
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def test_dataset_is_si(data):
     # every declared unit is an SI unit (or the two deliberate probes: missing and °F, which the SQL gate masks)
     declared = set(data["units"].values())
     assert declared <= {"°C", "%", "Pa", "°F", None}, declared
-    pg = data["results"]["pglite"]
+    pg = data["results"]["duckdb"]
     assert len(pg) == 83
 
 
@@ -72,33 +72,15 @@ def test_dataset_follows_the_declared_scales(data):
     assert seen["fraction"] >= 20 and seen["boolean"] >= 10, seen
 
 
-def test_sql_engines_agree(data):
-    pg, lite = data["results"]["pglite"], data["results"]["sqlite"]
-    assert set(pg) == set(lite), (set(pg) - set(lite), set(lite) - set(pg))
-    bad = []
-    for rule in pg:
-        a = sorted(pg[rule], key=h.sql_result_key)
-        b = sorted(lite[rule], key=h.sql_result_key)
-        if len(a) != len(b):
-            bad.append(f"{rule}: {len(a)} vs {len(b)} rows")
-            continue
-        for ra, rb in zip(a, b):
-            if set(ra) != set(rb):
-                bad.append(f"{rule}.{h.sql_result_key(ra)}: columns differ {sorted(ra)} vs {sorted(rb)}")
-                continue
-            for k in ra:
-                x, y = ra[k], rb.get(k)
-                if isinstance(x, (int, float)) and isinstance(y, (int, float)):
-                    if abs(x - y) > 1e-9 + 1e-6 * max(abs(x), abs(y)):
-                        bad.append(f"{rule}.{h.sql_result_key(ra)}.{k}: {x} vs {y}")
-                elif x != y:
-                    bad.append(f"{rule}.{h.sql_result_key(ra)}.{k}: {x} vs {y}")
-    assert not bad, bad[:10]
+def test_duckdb_returns_every_rule(data):
+    pg = data["results"]["duckdb"]
+    assert len(pg) == 83
+    assert all(isinstance(rows, list) for rows in pg.values())
 
 
 def test_sweep_rows_retain_series_identity_and_coverage(data):
     for rule in SWEEP_RULES:
-        rows = data["results"]["pglite"][rule]
+        rows = data["results"]["duckdb"][rule]
         assert rows, rule
         assert all({"equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours"} <= set(row) for row in rows), rule
         identities = [h.sql_result_key(row) for row in rows]
@@ -201,17 +183,12 @@ def duplicate_sensor_data(tmp_path_factory):
     return d
 
 
-def test_duplicate_role_sensor_series_are_distinct_and_sql_engines_agree(duplicate_sensor_data):
+def test_duplicate_role_sensor_series_are_distinct(duplicate_sensor_data):
     """Two points with the same SAT role must survive SQL authorization as separate identities."""
-    pg, lite = duplicate_sensor_data["results"]["pglite"], duplicate_sensor_data["results"]["sqlite"]
+    pg = duplicate_sensor_data["results"]["duckdb"]
     assert set(pg) == set(SWEEP_RULES)
     for rule in SWEEP_RULES:
         a = sorted(pg[rule], key=h.sql_result_key)
-        b = sorted(lite[rule], key=h.sql_result_key)
-        assert len(a) == len(b), (rule, len(a), len(b))
-        assert [h.sql_result_key(row) for row in a] == [h.sql_result_key(row) for row in b], rule
-        for ra, rb in zip(a, b):
-            assert ra == rb, (rule, h.sql_result_key(ra), ra, rb)
         sat = [row for row in a if row["equipment_id"] == "AHU-1" and row.get("sensor_role") == "sat"]
         ids = {row["series_id"] for row in sat}
         assert len(sat) == 2 and len(ids) == 2, (rule, sat)

@@ -8,7 +8,6 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { createEngine } = require("../hooks/lib/engines.js");
 const pgPack = JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8"));
-const litePack = JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8"));
 const START = Date.UTC(2026, 0, 1);
 const MIN = 60_000;
 const GATED = ["SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-RATE"];
@@ -29,7 +28,7 @@ function input({ proof, offset = 60, days = 1, value = () => 90 }) {
 
 async function run(inp, rules = ["SV-RANGE"]) {
   const out = {};
-  for (const [kind, pack] of [["pglite", pgPack], ["sqlite", litePack]]) {
+  for (const [kind, pack] of [["duckdb", pgPack]]) {
     const eng = await createEngine({ kind, pack });
     try {
       await eng.load(inp);
@@ -43,13 +42,7 @@ async function run(inp, rules = ["SV-RANGE"]) {
       await eng.close();
     }
   }
-  for (const r of rules) {
-    for (const k of ["fault_hours", "covered_hours", "confirmed_rows"]) {
-      const a = out.pglite[r][k], b = out.sqlite[r][k];
-      assert.ok(a === b || near(a, b), `${r}.${k}: pglite ${a} vs sqlite ${b}`);
-    }
-  }
-  return out.pglite;
+  return out.duckdb;
 }
 
 test("the #1631 repro: proof OFF all day, sensor 60 s off the proof grid -> no fault (was 23.9 h)", async () => {

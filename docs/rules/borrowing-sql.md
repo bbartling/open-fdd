@@ -103,8 +103,7 @@ Each release tag attaches `open-fdd-rules-<version>.zip` and its `.zip.sha256`. 
 |---|---|---|
 | PostgreSQL 14+ | `nf-app/rules/pack-postgres.json` or `sql/fdd/postgres/rules/*.sql` | Run `sql/fdd/postgres/postgres_helpers.sql` once (`fdd.try_double`, `fdd.mask_sweep_val` and the unit gates); `SET TimeZone = 'UTC'` |
 | Timescale | same as PostgreSQL | same; Timescale only supplies `history` |
-| DuckDB | the PostgreSQL pack | In-process (`duckdb>=2.0.1`). Run `sql/fdd/duckdb/duckdb_helpers.sql` (the `fdd.*` helpers as macros; plpgsql does not parse); occupancy and sensor-sweep rules; `SET TimeZone = 'UTC'`. The NF app loads it only when the engine option is `duckdb`. |
-| SQLite | `nf-app/rules/pack-sqlite.json` | Built in; use the SQLite pack, not the PostgreSQL one |
+| DuckDB | the PostgreSQL pack | In-process (`duckdb>=2.0.1`). Run `sql/fdd/duckdb/duckdb_helpers.sql` (macros; plpgsql does not parse) and `SET TimeZone = 'UTC'`. |
 
 `DATE_TRUNC('hour', timestamp_utc)` follows the session time zone, so always set UTC.
 

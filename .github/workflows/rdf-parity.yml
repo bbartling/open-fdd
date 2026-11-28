@@ -33,6 +33,9 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install the app dependencies (oxigraph, in the Node process)
+        run: cd nf-app && npm ci
+
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"

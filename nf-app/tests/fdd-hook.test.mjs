@@ -469,7 +469,7 @@ test("every sweep publishes only its canonical assessable sensor roles", async (
     "return-air-temp-sensor": "rat", "discharge-air-pressure-sensor": "duct_static",
   })[p.attrs.class];
   const createEngine = async () => ({
-    kind: "sqlite", async load(input) { assert.equal(input.sensorSeries.length, 6); }, async close() {},
+    kind: "duckdb", async load(input) { assert.equal(input.sensorSeries.length, 6); }, async close() {},
     async query(ruleId) {
       const all = multiSensorEquip.points.filter((p) => p.attrs.equipRef === "AHU-A");
       const supported = ruleId === "SV-RANGE" ? all : all.filter((p) => p.attrs.class !== "discharge-air-pressure-sensor");
@@ -661,7 +661,7 @@ test("sweep publishing handles duplicate display labels and reordered point disc
     },
   };
   const makeEngine = () => async () => ({
-    kind: "sqlite",
+    kind: "duckdb",
     async load() {},
     async query() {
       return [

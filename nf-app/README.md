@@ -26,9 +26,9 @@ What it uses from NF and why: [NF_FEATURES.md](../docs/migration/nf-plugin/NF_FE
 | `static/energy.js` | Demand, monthly energy, degree-day baseline, M&V, EUI / peers | browser |
 | `static/app-core.js`, `charts.js`, `theme.js`, `base.css`, `style.css`, `vendor/` | The shared dashboard shell (top bar, tab router, Overview, Charts, Points, BACnet Server, Model & RDF), chart catalog, light/dark themes, CSS base + Full's own rules, vendored ECharts 6.1.0 (ESM). `app.js` adds the Full-only tabs (FDD, RCx, Export) | browser |
 | `hooks/fdd.js` | Hourly FDD: bind roles, read NF history (5-min grid), run the SQL pack, write result points, optional BACnet AVs | NF Node runtime |
-| `hooks/lib/engines.js` | Runtime SQL engines: `duckdb` (Node `@duckdb/node-api` 2.0.1-r.1) and `timescale`. `sqlite` / `pglite` stay for parity tests only | FDD hook |
+| `hooks/lib/engines.js` | Runtime SQL engines: `duckdb` (Node `@duckdb/node-api` 2.0.1-r.1, Parquet) and `timescale`. `sqlite` and `pglite` were removed | FDD hook |
 | `hooks/weather.js` | **Shared with Lite** (one source). Open-Meteo outdoor air every 20 min → global variables (site lat/lon from NF) | NF Node runtime |
-| `rules/` | `pack-postgres.json` / `pack-sqlite.json` (built from `sql/fdd`), role overrides, NF class list | build scripts |
+| `rules/` | `pack-postgres.json` (built from `sql/fdd`), role overrides, NF class list | build scripts |
 | `rcx-parity.json` | Where every chart of the old central UI lives now (CI-enforced) | `tests/parity.test.mjs` |
 | `dev/mock-nf.mjs` | Mock NF + synthetic two-site building for local development | developers |
 | `tests/` | `node --test nf-app/tests/*.test.mjs` | CI (`nf-app-ci.yml`) |
@@ -102,7 +102,7 @@ The whole "API" of the app is these NF hooks (`POST /api/v1/apps/<id>/hooks/<hoo
 |---|---|---|---|---|
 | `fdd` | Full | scheduled hourly (+ run-now) | dashboard (run-now, runs), installer, `export.js`, `rcx.js` | reads NF points + history; writes result points (and `openfdd.fdd_results` with the Timescale engine) |
 | `weather` (Full) / `open-meteo-weather` (Lite) | both | scheduled every 20 min | writes the `*_web` global variables the pages and rules read | one shared source (`shared/hooks/open_meteo_weather.js`); writes 3 global variables; both editions also export them through the `exporters` list (default `bacnet-av`, only when NF's BACnet server is present; app option `bacnetMirror: false` removes it). App option `weather: false` = off: no outbound request, `{skipped, reason: "weather disabled"}`, rules fall back to the local OA sensor ([install reference](../docs/install.md)) |
-| `sparql` | Full | on request | agents and docs (the browser runs the same engine in `static/sparql.js`) | read-only |
+| `sparql` | both | on request | the Model & RDF tab and agents (`static/sparql.js` fetches this route) | read-only; `oxigraph` in the Node process |
 | `analytics` | Full | on request | agents (`rcx-overview.js` exposes the entry points) | read-only; 6 tools via `args.tool`: `analyze_ahu_weekly_runtime`, `analyze_mechanical_cooling`, `analyze_economizer`, `get_fdd_fault_timeline`, `resolve_equipment_roles`, `explain_missing_rcx_view` |
 | `schema` | Full | on request | installer / `doctor` | read-only (`BEGIN TRANSACTION READ ONLY`); reports the Timescale `schema_version` |
 | `history` | Full | on request | `doctor` and agents (charts read `/api/v1/point/data` directly); agent-only API | read-only; server-side bucketed history from Timescale |
@@ -127,12 +127,12 @@ The Lite edition creates no FDD tables. Node DuckDB (`@duckdb/node-api` `2.0.1-r
 ## DuckDB build
 
 The DuckDB build is the single-site engine. `engine: "auto"` and `engine: "duckdb"` run the Postgres pack in native
-DuckDB (`@duckdb/node-api` `2.0.1-r.1`), server-side, with Parquet history. There is no DuckDB-WASM and no Python DuckDB
-process. If the package does not load, the run stops with `DuckDB engine failed to load: …` and does not switch engines.
-The Timescale build is the other runtime. A saved option named `sqlite` or `pglite` fails and names `duckdb`.
-`tests/engine-select.test.mjs` locks the selection. `tests/duckdb-engine.test.mjs` checks every rule against the parity
-engines. `tests/duckdb-parquet.test.mjs` checks that a second run reads the files. With the `timescale` option set,
-DuckDB still reads saved tuning (`fdd.rule_config`).
+DuckDB (`@duckdb/node-api` `2.0.1-r.1`), server-side, with Parquet history. The `fdd.*` helpers are DuckDB macros
+(`sql/fdd/duckdb/duckdb_helpers.sql`). If the package does not load, the run stops with
+`DuckDB engine failed to load: …` and does not switch engines. The Timescale build is the other runtime.
+A saved option named `sqlite` or `pglite` fails and names `duckdb`. There is no SQLite or PGlite package and no SQL
+WASM file in the app bundle. SPARQL uses the `oxigraph` npm package in the Node process (both editions).
+`tests/duckdb-parquet.test.mjs` checks that a second run reads the files.
 
 | App option | Default | Meaning |
 |---|---|---|

@@ -10,8 +10,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { createEngine } = require("../hooks/lib/engines.js");
 const PACKS = {
-  pglite: JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8")),
-  sqlite: JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8")),
+  duckdb: JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8")),
 };
 const START = Date.UTC(2026, 0, 1);
 
@@ -25,13 +24,13 @@ function input(runProof) {
 }
 
 test("every run-proof gated timeline filters equipment with no proof", () => {
-  for (const [rid, r] of Object.entries(PACKS.pglite.rules)) {
+  for (const [rid, r] of Object.entries(PACKS.duckdb.rules)) {
     if (!r.timeline_sql || !/\bno_run_proof\b/.test(r.sql)) continue;
     assert.match(r.timeline_sql, /NOT IN \(SELECT rpx\.equipment_id FROM rp rpx WHERE rpx\.no_run_proof = 1\)/, rid);
   }
 });
 
-for (const kind of ["pglite", "sqlite"]) {
+for (const kind of ["duckdb"]) {
   test(`${kind}: no proof -> SKIPPED summary and an empty timeline; with proof the timeline is there`, async () => {
     for (const [proof, expectRows] of [[null, false], [1, true]]) {
       const eng = await createEngine({ kind, pack: PACKS[kind] });

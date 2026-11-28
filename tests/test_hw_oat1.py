@@ -1,10 +1,9 @@
-"""#1782 HW-OAT-1 (hot-water summer lockout): pandas == SQL on SQLite, DuckDB and, when POSTGRES_TEST_URL is set,
+"""#1782 HW-OAT-1 (hot-water summer lockout): pandas == SQL on DuckDB and, when POSTGRES_TEST_URL is set,
 PostgreSQL, over tests/fixtures/hw_oat1_cases.json (threshold edges, proof choices, weather sidecar, not assessed)."""
 from __future__ import annotations
 
 import json
 import os
-import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = json.loads((ROOT / "tests/fixtures/hw_oat1_cases.json").read_text(encoding="utf-8"))
 CASES = FIXTURE["cases"]
 ROLE_MAP = {**json.loads((ROOT / "sql/fdd/role_map.json").read_text(encoding="utf-8")), "web_oa_t": "web-outside-air-temp"}
-PACKS = {k: json.loads((ROOT / f"nf-app/rules/pack-{k}.json").read_text(encoding="utf-8")) for k in ("sqlite", "postgres")}
+PACK = json.loads((ROOT / "nf-app/rules/pack-postgres.json").read_text(encoding="utf-8"))
 START = int(datetime(2026, 7, 1, tzinfo=timezone.utc).timestamp())
 STEP, N = 300, 49
 RULE = "HW-OAT-1"
@@ -80,21 +79,9 @@ def _query(con, rule):
     return out
 
 
-def _sqlite(rows):
-    pack = PACKS["sqlite"]
-    con = sqlite3.connect(":memory:")
-    try:
-        for t in ("history", "weather"):
-            _create(con, pack, t, "REAL", "TEXT", "REAL")
-        _insert(con, rows, "?")
-        return _query(con, pack["rules"][RULE])
-    finally:
-        con.close()
-
-
 def _duckdb(rows):
     duckdb = pytest.importorskip("duckdb")
-    pack = PACKS["postgres"]
+    pack = PACK
     con = duckdb.connect(":memory:")
     try:
         con.execute("SET TimeZone = 'UTC'")
@@ -111,7 +98,7 @@ def _postgres(rows):
     if not url:
         pytest.skip("POSTGRES_TEST_URL not set")
     psycopg = pytest.importorskip("psycopg")
-    pack = PACKS["postgres"]
+    pack = PACK
     with psycopg.connect(url) as con:   # temp tables only; rolled back on exit
         for t in ("history", "weather"):
             _create(con, pack, t, "TIMESTAMPTZ", "TEXT", "DOUBLE PRECISION", temp="TEMP ")
@@ -125,8 +112,7 @@ def _utc(ts):
     return datetime.fromtimestamp(ts, tz=timezone.utc)
 
 
-ENGINES = {"sqlite": lambda: _sql_rows(_sqlite, float), "duckdb": lambda: _sql_rows(_duckdb, _utc),
-           "postgres": lambda: _sql_rows(_postgres, _utc)}
+ENGINES = {"duckdb": lambda: _sql_rows(_duckdb, _utc), "postgres": lambda: _sql_rows(_postgres, _utc)}
 
 
 @pytest.fixture(scope="module", params=list(ENGINES))

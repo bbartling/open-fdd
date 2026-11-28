@@ -3,7 +3,7 @@
 | Script | What |
 |---|---|
 | `build_rule_catalog.py` | `sql/fdd` registry + role map + NF classes → `nf-app/static/fdd-catalog.json` (`--check` in CI) |
-| `build_sql_pack.py` | Render the 77 SQL rules (SI) → `nf-app/rules/pack-postgres.json`, translate → `pack-sqlite.json` (`--check` in CI) |
+| `build_sql_pack.py` | Render the SQL rules (SI) → `nf-app/rules/pack-postgres.json` (`--check` in CI) |
 | `gen_rule_docs.py` | Catalog → `docs/rules/index.md` (`--check` in the docs build). `gen_cookbook.py` writes the cookbooks and parity page; both read units from `docs_units.py` |
 | `measure_engines.mjs` | Memory/time of the FDD engines: `node scripts/nf/measure_engines.mjs sqlite 1 7` |
 | `hooks/nf_app_sync.py` | Deploy an app manifest to an NF console: `status`, `push`, `run`, `diff`, `pull` |

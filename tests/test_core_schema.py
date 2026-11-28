@@ -15,8 +15,8 @@ import build_core_schema as core  # noqa: E402
 from input_contract import input_sample_signature, load_source  # noqa: E402
 
 CORE_TABLES = ("fdd.point", "fdd.rule_config", "fdd.rule_result")
-needs_node = pytest.mark.skipif(shutil.which("node") is None or not (ROOT / "nf-app/node_modules/@electric-sql").is_dir(),
-                                reason="node and the nf-app dependencies (PGlite) are required")
+needs_node = pytest.mark.skipif(shutil.which("node") is None or not core.pglite_available(),
+                                reason="regenerating the live catalog needs @electric-sql/pglite; CI checks the sha256 pin")
 
 
 def norm(path: Path) -> bytes:
@@ -75,8 +75,8 @@ def test_catalog_pins_the_keys_downstream_relies_on():
 
 
 def test_build_script_check_passes():
-    if shutil.which("node") is None or not (ROOT / "nf-app/node_modules/@electric-sql").is_dir():
-        pytest.skip("node and the nf-app dependencies (PGlite) are required")
+    if shutil.which("node") is None:
+        pytest.skip("node is required")
     result = subprocess.run([sys.executable, str(ROOT / "scripts/nf/build_core_schema.py"), "--check"], cwd=ROOT,
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stderr or result.stdout

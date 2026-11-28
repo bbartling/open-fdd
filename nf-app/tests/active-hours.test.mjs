@@ -10,8 +10,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { createEngine } = require("../hooks/lib/engines.js");
 const PACKS = {
-  pglite: JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8")),
-  sqlite: JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8")),
+  duckdb: JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8")),
 };
 const START = Date.UTC(2026, 0, 1);
 
@@ -42,13 +41,13 @@ async function run(kind, ruleId, proofOn) {
 test("every run-proof gated rule outputs active_hours; ungated rules do not", () => {
   const catalog = JSON.parse(readFileSync(new URL("../../sql/fdd/tuning_catalog.json", import.meta.url), "utf8")).rules;
   for (const r of catalog) {
-    const cols = PACKS.pglite.rules[r.rule_id].output_columns;
+    const cols = PACKS.duckdb.rules[r.rule_id].output_columns;
     const gatedSql = /COALESCE\(run_proof, 0\) <= 0\.05/.test(readFileSync(new URL(`../../sql/fdd/postgres/rules/${r.sql_file}`, import.meta.url), "utf8"));
     assert.equal(cols.includes("active_hours"), gatedSql, r.rule_id);
   }
 });
 
-for (const kind of ["pglite", "sqlite"]) {
+for (const kind of ["duckdb"]) {
   test(`${kind}: covered_hours is data coverage, active_hours the proven-on part, fault_pct = fault / active`, async () => {
     const row = await run(kind, "TRIM-3", (m) => m < 180);
     assert.ok(Math.abs(row.covered_hours - 6) < 1e-9, `covered ${row.covered_hours}`);
@@ -68,8 +67,8 @@ for (const kind of ["pglite", "sqlite"]) {
 
 test("the FDD hook publishes an off-all-day gated unit as ok 0 %, not not-assessed", async () => {
   const hook = require("../hooks/fdd.js");
-  const row = await run("pglite", "TRIM-3", () => false);
-  const out = hook.resultValue(PACKS.pglite.rules["TRIM-3"], row);
+  const row = await run("duckdb", "TRIM-3", () => false);
+  const out = hook.resultValue(PACKS.duckdb.rules["TRIM-3"], row);
   assert.equal(out.status, "ok");
   assert.equal(out.value, 0);
   assert.equal(out.column, "fault_pct");

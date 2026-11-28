@@ -54,7 +54,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[oracle,test,rdf,duckdb]"
           cd nf-app && npm ci
-      - name: SI pandas == SQL (PGlite, SQLite, DuckDB) == SPARQL client
+      - name: SI pandas == SQL (Node DuckDB) == SPARQL client
         env:
           SIZE: ${{ matrix.size }}
           PROFILE: ${{ matrix.profile }}
@@ -62,7 +62,7 @@ jobs:
         run: |
           set -o pipefail
           echo "Reproduce: profile=$PROFILE seed=$SEED size=$SIZE"
-          python tests/parity/stress.py --engines pglite,sqlite,duckdb,duckdb-parquet --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE" --seed "$SEED" --sparql --out "$RUNNER_TEMP/stress.json"
+          python tests/parity/stress.py --engines duckdb,duckdb-parquet --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE" --seed "$SEED" --sparql --out "$RUNNER_TEMP/stress.json"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -104,13 +104,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[oracle,test,rdf,duckdb,postgres]"
           cd nf-app && npm ci
-      - name: SI pandas == SQL (PGlite, PostgreSQL, DuckDB)
+      - name: SI pandas == SQL (Node DuckDB, PostgreSQL)
         env:
           OPENFDD_PG_TEST_DISPOSABLE: "1"
           POSTGRES_TEST_URL: postgres://postgres:example@localhost:5432/postgres
           SIZE: ${{ matrix.size }}
           PROFILE: ${{ matrix.profile }}
-        run: python tests/parity/stress.py --engines pglite,postgres,duckdb --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE"
+        run: python tests/parity/stress.py --engines duckdb,postgres --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE"
 
   rdf-parity:
     name: RDF parity

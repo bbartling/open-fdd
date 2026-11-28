@@ -143,7 +143,7 @@ const PACK = {
 const fanPt = { uuid: "u-FANC", name: "FAN-C", layer: "default", pointType: "POINT",
   attrs: { siteRef: "site-a", equipRef: "AHU-1", markers: "point,his,discharge,fan,run,cmd", dis: "FAN-C", class: "discharge-run-cmd", unit: "%" } };
 const engineStub = async () => ({
-  kind: "sqlite", async load() { return 288; }, async query() { return [{ equipment_id: "AHU-1", fan_runtime_hours: 24, total_hours: 24 }]; }, async close() {},
+  kind: "duckdb", async load() { return 288; }, async query() { return [{ equipment_id: "AHU-1", fan_runtime_hours: 24, total_hours: 24 }]; }, async close() {},
 });
 /** Fake NF over a model layer (offset-paged, like NF) + the site's default-layer points. */
 function nfOver(model, points = [fanPt]) {

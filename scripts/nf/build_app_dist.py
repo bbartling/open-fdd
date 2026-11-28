@@ -34,7 +34,10 @@ FIXED_ZIP_TIME = (2026, 1, 1, 0, 0, 0)
 RECIPES = ("duckdb", "timescale")
 BADGES = {"duckdb": "DuckDB build", "timescale": "Timescale build"}
 PINS = {"duckdb": ("@duckdb/node-api", "2.0.1-r.1"), "timescale": ("pg", "8.23.1")}
-RECIPE_DEPS = {"duckdb": {"@duckdb/node-api": "2.0.1-r.1"}, "timescale": {"pg": "8.23.1"}}
+RECIPE_DEPS = {
+    "duckdb": {"@duckdb/node-api": "2.0.1-r.1", "oxigraph": "0.5.13"},
+    "timescale": {"oxigraph": "0.5.13", "pg": "8.23.1"},
+}
 HTML_BADGES = ("static/index.html", "static/chart.html", "static/tree.html")
 
 
@@ -227,7 +230,7 @@ def problems(edition: str, tree: Path, files: list[str], recipe: str | None = No
     else:
         deps = json.loads((tree / "package.json").read_text(encoding="utf-8")).get("dependencies") or {}
         if deps != RECIPE_DEPS["duckdb"]:
-            bad.append(f"Lite install dependencies {deps} are not @duckdb/node-api only")
+            bad.append(f"Lite install dependencies {sorted(deps)} are not DuckDB plus oxigraph")
         if any(name in deps for name in ("sql.js", "@electric-sql/pglite", "pg")):
             bad.append("Lite install pulls a retired or Timescale dependency")
         names = "\n".join(files)
@@ -235,6 +238,9 @@ def problems(edition: str, tree: Path, files: list[str], recipe: str | None = No
             bad.append("Lite tree has no FDD hook")
         if re.search(r"sql-wasm|pack-sqlite|duckdb-wasm|pglite", names, re.I):
             bad.append("Lite tree ships a SQLite, PGlite, or WASM engine file")
+    for path in files:
+        if "pack-sqlite" in path or "sql.js" in path or path.endswith(".wasm") or "vendor/oxigraph/" in path:
+            bad.append(f"app bundle still ships {path}")
     return bad
 
 

@@ -9,7 +9,6 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { createEngine } = require("../hooks/lib/engines.js");
 const pgPack = JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8"));
-const litePack = JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8"));
 const fixture = JSON.parse(readFileSync(new URL("../../tests/fixtures/sched247_cases.json", import.meta.url), "utf8"));
 const TOL = fixture.tolerance_hours;
 
@@ -45,7 +44,7 @@ function checkRow(kind, c, row) {
 }
 
 const results = {};
-for (const [kind, pack] of [["pglite", pgPack], ["sqlite", litePack]]) {
+for (const [kind, pack] of [["duckdb", pgPack]]) {
   test(`${kind}: SCHED-247 proof states, durations and completeness`, async () => {
     const eng = await createEngine({ kind, pack });
     try {
@@ -66,15 +65,7 @@ for (const [kind, pack] of [["pglite", pgPack], ["sqlite", litePack]]) {
   });
 }
 
-test("PGlite and SQLite return the same SCHED-247 rows", () => {
-  const key = (rows) => Object.fromEntries(rows.map((r) => [r.equipment_id, r]));
-  const a = key(results.pglite), b = key(results.sqlite);
-  assert.deepEqual(Object.keys(a).sort(), Object.keys(b).sort());
-  for (const id of Object.keys(a)) {
-    for (const col of Object.keys(a[id])) {
-      const x = a[id][col], y = b[id][col];
-      if (typeof x === "number") assert.ok(Math.abs(x - y) <= TOL, `${id}.${col}: ${x} vs ${y}`);
-      else assert.equal(x, y, `${id}.${col}`);
-    }
-  }
+test("DuckDB returns a SCHED-247 row for every fixture case", () => {
+  const ids = new Set((results.duckdb || []).map((r) => r.equipment_id));
+  for (const c of fixture.cases) assert.ok(ids.has(c.equipment_id), c.equipment_id);
 });

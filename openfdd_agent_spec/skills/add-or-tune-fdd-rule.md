@@ -18,7 +18,8 @@ description: Add or tune an FDD rule in sql/fdd and rebuild the catalog, SQL pac
    `python3 scripts/nf/build_rule_catalog.py` then `python3 scripts/nf/build_sql_pack.py` then
    `python3 scripts/nf/gen_rule_docs.py`. DuckDB helpers, when the SQL needs them, stay in
    `sql/fdd/duckdb/duckdb_helpers.sql` (`duckdb>=2.0.1`).
-5. Engine parity: `node --test nf-app/tests/engines.test.mjs` (SQLite must equal the Postgres pack).
+5. Engine parity: `node --test nf-app/tests/engines.test.mjs` (DuckDB runs the Postgres pack) and
+   `python -m pytest tests/parity -q` (pandas against Node DuckDB).
 6. pandas parity: if the rule has a pandas twin in `open_fdd/rules`, keep it equal except a row in
    `open_fdd/data/parity_known_differences.json`. Harness: `tests/parity/`, workflow `.github/workflows/parity.yml`.
 7. Full check: `node --test nf-app/tests/*.test.mjs`, then `python3 scripts/nf/build_rule_catalog.py --check`,

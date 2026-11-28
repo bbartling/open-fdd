@@ -1,5 +1,5 @@
-// #1649: the NF hook runs the SQL analytics in-process (sql.js SQLite core) and gets the same answers as the Python
-// runner on the same core (open_fdd.analytics.sql_*), whose SQL is proven equal to pandas on SQLite, DuckDB and PostgreSQL.
+// #1649: the NF hook runs the SQL analytics in-process on Node DuckDB and gets the same answers as the Python
+// runner on DuckDB (open_fdd.analytics.sql_*).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
@@ -49,24 +49,25 @@ const cases = {
 
 function pythonAnswers({ points, samples }) {
   const code = `
-import json, sqlite3, sys
+import json, sys
 sys.path.insert(0, ${JSON.stringify(root)})
+import duckdb
 from open_fdd.analytics.sql_anomaly import create_core, load_core
 from open_fdd.analytics.sql_runtime import run_runtime_sql
 from open_fdd.analytics.sql_mech_cooling import Plan, run_mech_bins_sql
 from open_fdd.analytics.sql_economizer import run_economizer_sql
 from open_fdd.analytics.sql_bas_web import run_bas_web_sql
 d = json.load(sys.stdin)
-conn = sqlite3.connect(":memory:")
-create_core(conn, "sqlite")
-load_core(conn, "sqlite", [dict(p, site_id="local") for p in d["points"]], [("local", k, t, v) for k, t, v in d["samples"]])
+conn = duckdb.connect()
+create_core(conn, "duckdb")
+load_core(conn, "duckdb", [dict(p, site_id="local") for p in d["points"]], [("local", k, t, v) for k, t, v in d["samples"]])
 c = d["cases"]
 out = {
-  "runtime": run_runtime_sql(conn, "sqlite", oats=c["runtime"]["oats"], weeks=c["runtime"]["weeks"], occupied=c["runtime"]["occupied"]),
-  "mech": run_mech_bins_sql(conn, "sqlite", Plan(c["mech"]["candidates"], c["mech"]["gates"], c["mech"]["oats"],
+  "runtime": run_runtime_sql(conn, "duckdb", oats=c["runtime"]["oats"], weeks=c["runtime"]["weeks"], occupied=c["runtime"]["occupied"]),
+  "mech": run_mech_bins_sql(conn, "duckdb", Plan(c["mech"]["candidates"], c["mech"]["gates"], c["mech"]["oats"],
           {("CH-1", 1, 0): ("chiller-status", "chiller-status", "direct")})),
-  "econ": run_economizer_sql(conn, "sqlite", c["econ"]),
-  "basweb": run_bas_web_sql(conn, "sqlite", c["basweb"]),
+  "econ": run_economizer_sql(conn, "duckdb", c["econ"]),
+  "basweb": run_bas_web_sql(conn, "duckdb", c["basweb"]),
 }
 print(json.dumps(out))
 `;
@@ -86,15 +87,15 @@ function sameRows(got, want, label) {
   });
 }
 
-test("sqlite core: every analytic answers exactly as the Python runner on the same samples", async () => {
+test("DuckDB core: every analytic answers exactly as the Python runner on the same samples", async () => {
   const data = core();
   const want = pythonAnswers(data);
-  const db = await SA.openCore("sqlite", data.points, data.samples);
+  const db = await SA.openCore("duckdb", data.points, data.samples);
   try {
-    sameRows(db.query(SA.renderRuntime("sqlite", cases.runtime)), want.runtime, "runtime");
-    sameRows(db.query(SA.renderMechBins("sqlite", cases.mech)), want.mech, "mech");
-    sameRows(db.query(SA.renderEconomizer("sqlite", cases.econ)), want.econ, "economizer");
-    sameRows(db.query(SA.renderBasWeb("sqlite", cases.basweb)).map((r) => ({ ...r, within_band: r.n_within / r.n })), want.basweb, "bas-web");
+    sameRows(await db.query(SA.renderRuntime("postgres", cases.runtime)), want.runtime, "runtime");
+    sameRows(await db.query(SA.renderMechBins("postgres", cases.mech)), want.mech, "mech");
+    sameRows(await db.query(SA.renderEconomizer("postgres", cases.econ)), want.econ, "economizer");
+    sameRows((await db.query(SA.renderBasWeb("postgres", cases.basweb))).map((r) => ({ ...r, within_band: r.n_within / r.n })), want.basweb, "bas-web");
     assert.ok(want.runtime.length >= 2 && want.mech.length >= 1 && want.econ.length === 1 && want.basweb.length === 1);
   } finally {
     db.close();

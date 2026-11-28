@@ -1,6 +1,7 @@
 """In-repo engine adapters (implement open_fdd.parity.EngineAdapter).
 
-``NodeEngineAdapter`` runs the SQL pack through ``sql_run.mjs`` on a Python-generated dataset.
+``NodeEngineAdapter("duckdb")`` runs the SQL pack through ``sql_run.mjs`` (Node ``@duckdb/node-api``, no WASM) on a
+Python-generated dataset.
 
 ``DuckDBAdapter`` runs the rendered PostgreSQL pack in DuckDB (UTC). It installs ``duckdb_helpers_sql``
 from ``pack-postgres.json`` (the macros in ``sql/fdd/duckdb/duckdb_helpers.sql``), the same text the native
@@ -101,7 +102,7 @@ class NodeEngineAdapter:
     """load(dataset) writes the loader JSON; run(rule_ids) spawns ``sql_run.mjs`` for this engine only."""
 
     def __init__(self, kind: str):
-        if kind not in ("pglite", "sqlite", "duckdb"):
+        if kind != "duckdb":
             raise ValueError(kind)
         self.kind = kind
         self.name = kind
@@ -448,9 +449,8 @@ class TimescaleAdapter:
 
 
 ADAPTERS = {
-    "pglite": lambda: NodeEngineAdapter("pglite"),
-    "sqlite": lambda: NodeEngineAdapter("sqlite"),
-    "duckdb": lambda: DuckDBAdapter(),
+    "duckdb": lambda: NodeEngineAdapter("duckdb"),
+    "duckdb-py": lambda: DuckDBAdapter(),
     "duckdb-parquet": lambda: DuckDBAdapter(parquet=True),
     "postgres": lambda: PostgresAdapter(),
     "timescale": lambda: TimescaleAdapter(ingest="si"),

@@ -9,8 +9,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { createEngine } = require("../hooks/lib/engines.js");
 const PACKS = {
-  pglite: JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8")),
-  sqlite: JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8")),
+  duckdb: JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8")),
 };
 const CASES = JSON.parse(readFileSync(new URL("../../tests/fixtures/coil_perf_cases.json", import.meta.url), "utf8")).cases;
 const START = Date.UTC(2026, 0, 1);
@@ -22,7 +21,7 @@ function input(row) {
   return { historyColumns: cols.map((name) => ({ name, type: "double" })), history, weather: [], sensorHistory: [] };
 }
 
-for (const kind of ["pglite", "sqlite"]) {
+for (const kind of ["duckdb"]) {
   for (const c of CASES) {
     test(`${kind} COIL-PERF ${c.id}`, async () => {
       const eng = await createEngine({ kind, pack: PACKS[kind] });

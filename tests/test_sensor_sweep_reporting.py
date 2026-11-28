@@ -30,13 +30,12 @@ def test_sensor_sweep_reports_missing_samples_separately_from_range_faults():
 
 def test_sensor_sweep_packs_expose_the_same_hours_and_sensor_identity_contract():
     root = Path(__file__).resolve().parents[1]
-    for dialect in ("postgres", "sqlite"):
-        pack = json.loads((root / "nf-app" / "rules" / f"pack-{dialect}.json").read_text(encoding="utf-8"))
-        for suffix in ("STALE", "FLATLINE", "RANGE", "SPIKE", "RATE"):
-            rule = pack["rules"][f"SV-{suffix}"]
-            assert rule["output_columns"] == [
-                "equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours",
-            ]
+    pack = json.loads((root / "nf-app" / "rules" / "pack-postgres.json").read_text(encoding="utf-8"))
+    for suffix in ("STALE", "FLATLINE", "RANGE", "SPIKE", "RATE"):
+        rule = pack["rules"][f"SV-{suffix}"]
+        assert rule["output_columns"] == [
+            "equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours",
+        ]
 
 
 def test_assessable_sensor_roles_are_shared_by_sql_pandas_and_hook():

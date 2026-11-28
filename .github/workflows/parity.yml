@@ -1,5 +1,5 @@
-# pandas == SQL parity, PR tier: the open_fdd pandas oracle must agree with the SQL FDD pack (sql/fdd) across
-# PGlite, SQLite, DuckDB and standalone PostgreSQL on synthetic SI data, and the three-way check (SI pandas == SQL ==
+# pandas == SQL parity, PR tier: the open_fdd pandas oracle must agree with the SQL FDD pack (sql/fdd) on
+# Node DuckDB and standalone PostgreSQL on synthetic SI data, and the three-way check (SI pandas == SQL ==
 # the SPARQL data client running the same pandas rule functions) must agree on the small 2x3 datasets (2 equipment,
 # 3 days, basic and edge profiles). Both jobs are required checks on master. The larger 4x3 / 8x7 tiers run nightly
 # and before each release in parity-stress.yml. Tiers: docs/rules/parity-harness.md.
@@ -40,7 +40,7 @@ jobs:
           python -m pip install -e ".[oracle,test,rdf,duckdb]"
           cd nf-app && npm ci
 
-      # pandas oracle vs the SQL pack (PGlite + SQLite + DuckDB), all in SI. Known divergences are pinned
+      # pandas oracle vs the SQL pack (Node DuckDB), all in SI. Known divergences are pinned
       # in open_fdd/data/parity_known_differences.json; the test fails if that set changes.
       - name: Python tests (pandas == SQL parity, engine matrix, NF agent tools, deploy tool)
         run: |
@@ -85,10 +85,10 @@ jobs:
           python -m pytest tests/test_nf_sparql_data.py tests/parity/test_sparql_parity.py tests/parity/test_sparql_motor_gate.py -q -rs 2>&1 | tee "$RUNNER_TEMP/sparql.log"
           if grep -Eq "SKIPPED|skipped" "$RUNNER_TEMP/sparql.log"; then echo "SPARQL parity tests skipped: failing the lane"; exit 1; fi
 
-      - name: Three-way SI stress, PR tier (2x3 basic, 2x3 edge; PGlite, SQLite, DuckDB)
+      - name: Three-way SI stress, PR tier (2x3 basic, 2x3 edge; Node DuckDB)
         run: |
-          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 2 --days 3 --profile basic --sparql --out "$RUNNER_TEMP/3way-2x3-basic.json"
-          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 2 --days 3 --profile edge --sparql --out "$RUNNER_TEMP/3way-2x3-edge.json"
+          python tests/parity/stress.py --engines duckdb --equips 2 --days 3 --profile basic --sparql --out "$RUNNER_TEMP/3way-2x3-basic.json"
+          python tests/parity/stress.py --engines duckdb --equips 2 --days 3 --profile edge --sparql --out "$RUNNER_TEMP/3way-2x3-edge.json"
 
   postgres:
     name: standalone PostgreSQL parity (no Timescale)
@@ -141,5 +141,5 @@ jobs:
           grep -Eq "^PASSED .*test_postgres_mech_bins_match_pandas" "$RUNNER_TEMP/pg-parity.log" || { echo "PostgreSQL mechanical-cooling bins parity did not run"; exit 1; }
           grep -Eq "^PASSED .*test_postgres_economizer_matches_pandas" "$RUNNER_TEMP/pg-parity.log" || { echo "PostgreSQL economizer parity did not run"; exit 1; }
           grep -Eq "^PASSED .*test_postgres_bas_web_matches_pandas" "$RUNNER_TEMP/pg-parity.log" || { echo "PostgreSQL BAS-vs-web parity did not run"; exit 1; }
-          python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 2 --days 3 --profile basic
-          python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 2 --days 3 --profile edge
+          python tests/parity/stress.py --engines duckdb,postgres --equips 2 --days 3 --profile basic
+          python tests/parity/stress.py --engines duckdb,postgres --equips 2 --days 3 --profile edge
