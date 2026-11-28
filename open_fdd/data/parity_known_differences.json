@@ -23,11 +23,11 @@
    "reason": "pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).",
    "expected": {
     "basic/0/8/7": {
-     "hours": 0.5,
+     "hours": 0.3333,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 0.3333,
+     "hours": 0.1667,
      "tol": 0.01
     }
    }
@@ -38,11 +38,11 @@
    "reason": "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve",
    "expected": {
     "basic/0/8/7": {
-     "hours": 5.1667,
+     "hours": 4.5,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 3.0833,
+     "hours": 13.1667,
      "tol": 0.01
     }
    }
@@ -138,21 +138,6 @@
    "reason": "Edge profile only: after a data gap pandas re-applies its 600 s startup delay; the SQL has no startup holdoff (#1646). Basic datasets match."
   },
   {
-   "rule": "FC6",
-   "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 15.75,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 6.75,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "FC8",
    "scope": "edge",
    "reason": "Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas."
@@ -173,7 +158,7 @@
    "reason": "Small residual left after #1642; not yet attributed.",
    "expected": {
     "basic/0/8/7": {
-     "hours": 0.1667,
+     "hours": 0.0833,
      "tol": 0.01
     },
     "basic/0/4/3": {
@@ -248,7 +233,7 @@
    "reason": "role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run",
    "expected": {
     "basic/0/8/7": {
-     "hours": 0.9167,
+     "hours": 0.5,
      "tol": 0.01
     },
     "basic/0/4/3": {

@@ -38,7 +38,6 @@ base AS (
       WHEN COALESCE(mode_stable, 1) = 0 THEN 0
       WHEN mixed_air_temperature IS NULL OR return_air_temperature IS NULL OR outdoor_air_intake_temperature IS NULL OR fan IS NULL THEN 0
       WHEN terminal_unit_discharge_air_total_volume_flow_rate IS NULL OR terminal_unit_discharge_air_total_volume_flow_rate <= 0.0 THEN 0
-      WHEN fan < 0.5 THEN 0
       WHEN ABS(return_air_temperature - outdoor_air_intake_temperature) < {{OAT_RAT_DELTA_MIN}} THEN 0
       WHEN ABS((mixed_air_temperature - return_air_temperature) / NULLIF(outdoor_air_intake_temperature - return_air_temperature, 0)
                - {{MIN_FLOW_DESIGN}} / NULLIF(terminal_unit_discharge_air_total_volume_flow_rate, 0)) * 100.0 > {{EPS_AIRFLOW}} THEN 1

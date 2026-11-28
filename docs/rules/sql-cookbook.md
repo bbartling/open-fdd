@@ -1176,7 +1176,7 @@ Estimated OA fraction mismatch
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#fc6)
+**Parity** [match](parity.html#fc6)
 
 
 ### FC7 {#fc7}

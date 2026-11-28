@@ -65,7 +65,7 @@ each input, parameter and output.
 | [**FC3**](sql-cookbook.html#fc3) | Mixed air above envelope | ahu | 10 min | [pandas](pandas-cookbook.html#fc3) | match |
 | [**FC4**](sql-cookbook.html#fc4) | PID hunting (operating-state oscillation) | ahu | 60 min | [pandas](pandas-cookbook.html#fc4) | match |
 | [**FC5**](sql-cookbook.html#fc5) | SAT cold when heating commanded (GL36 D) | ahu | 10 min | [pandas](pandas-cookbook.html#fc5) | match |
-| [**FC6**](sql-cookbook.html#fc6) | Estimated OA fraction mismatch | ahu | 10 min | [pandas](pandas-cookbook.html#fc6) | known divergence |
+| [**FC6**](sql-cookbook.html#fc6) | Estimated OA fraction mismatch | ahu | 10 min | [pandas](pandas-cookbook.html#fc6) | match |
 | [**FC7**](sql-cookbook.html#fc7) | SAT low while heating at full | ahu | 10 min | [pandas](pandas-cookbook.html#fc7) | match |
 | [**FC8**](sql-cookbook.html#fc8) | SAT vs MAT while economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc8) | match |
 | [**FC9**](sql-cookbook.html#fc9) | OAT high vs SAT SP while economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc9) | match |

@@ -242,7 +242,7 @@ def test_postgres_matches_sqlite():
     points, samples, oats = _core_from_frames(frames, role_map)
     starts, occ = _local_weeks_and_schedule()
     kw = {"oats": oats, "weeks": [(e, _ms(w)) for e in frames for w in starts],
-          "occupancy_status": [(e, _ms(x), _ms(y)) for e in frames for x, y in occ]}
+          "occupied": [(e, _ms(x), _ms(y)) for e in frames for x, y in occ]}
     lite = _run(points, samples, **kw)
     base = os.environ["POSTGRES_TEST_URL"]
     dbname = f"openfdd_runtime_{secrets.token_hex(6)}"

@@ -17,8 +17,8 @@ SQL engine when a server is configured. A pass is evidence for that dataset, not
 |---|---:|
 | SQL rules | **83** |
 | With a pandas twin | **77** |
-| Match on the synthetic suite | **61** |
-| Known divergence | **16** |
+| Match on the synthetic suite | **62** |
+| Known divergence | **15** |
 | SQL only (no twin) | **6** |
 
 **Units.** Parity is checked in SI. Imperial input is converted to SI at ingest, so SQL on imperial input equals SQL on SI input by
@@ -72,7 +72,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="fc3"></a>[FC3](sql-cookbook.html#fc3) | match | match; differs only on edge data: Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows). |
 | <a id="fc4"></a>[FC4](sql-cookbook.html#fc4) | match |  |
 | <a id="fc5"></a>[FC5](sql-cookbook.html#fc5) | match | match; differs only on edge data: Edge profile only: after a data gap pandas re-applies its 600 s startup delay; the SQL has no startup holdoff (#1646). Basic datasets match. |
-| <a id="fc6"></a>[FC6](sql-cookbook.html#fc6) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
+| <a id="fc6"></a>[FC6](sql-cookbook.html#fc6) | match |  |
 | <a id="fc7"></a>[FC7](sql-cookbook.html#fc7) | match |  |
 | <a id="fc8"></a>[FC8](sql-cookbook.html#fc8) | match | match; differs only on edge data: Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas. |
 | <a id="fc9"></a>[FC9](sql-cookbook.html#fc9) | match | match; differs only on edge data: Same cause as FC8: the series begins with the fan already running; pandas holds off 600 s from the first sample, SQL does not (verified by trimming the start). |
@@ -131,8 +131,8 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | Rule | Scope | 4 equip x 3 d | 8 equip x 7 d (CI stress size) |
 |---|---|---|---|
 | [AHU-SATDEV](#ahu-satdev) | all | 0.5 h &plusmn; 0.01 | 0.8333 h &plusmn; 0.01 |
-| [CHW-1](#chw-1) | all | 0.3333 h &plusmn; 0.01 | 0.5 h &plusmn; 0.01 |
-| [CHW-NOLOAD-1](#chw-noload-1) | all | 3.0833 h &plusmn; 0.01 | 5.1667 h &plusmn; 0.01 |
+| [CHW-1](#chw-1) | all | 0.1667 h &plusmn; 0.01 | 0.3333 h &plusmn; 0.01 |
+| [CHW-NOLOAD-1](#chw-noload-1) | all | 13.1667 h &plusmn; 0.01 | 4.5 h &plusmn; 0.01 |
 | [CW-APR-1](#cw-apr-1) | all | 0.5 h &plusmn; 0.01 | 2.9167 h &plusmn; 0.01 |
 | [CW-FAN-1](#cw-fan-1) | all | 0.3333 h &plusmn; 0.01 | 2.5 h &plusmn; 0.01 |
 | [ECON-3](#econ-3) | edge | - | - |
@@ -141,16 +141,15 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | [FC14](#fc14) | all | 62.5 h &plusmn; 0.01 | 292.917 h &plusmn; 0.01 |
 | [FC3](#fc3) | edge | - | - |
 | [FC5](#fc5) | edge | - | - |
-| [FC6](#fc6) | all | 6.75 h &plusmn; 0.01 | 15.75 h &plusmn; 0.01 |
 | [FC8](#fc8) | edge | - | - |
 | [FC9](#fc9) | edge | - | - |
 | [FCU-VALVE-PASS-CLG](#fcu-valve-pass-clg) | edge | - | - |
-| [HP-1](#hp-1) | all | 0.0833 h &plusmn; 0.01 | 0.1667 h &plusmn; 0.01 |
+| [HP-1](#hp-1) | all | 0.0833 h &plusmn; 0.01 | 0.0833 h &plusmn; 0.01 |
 | [OA-1](#oa-1) | all | 0.1667 h &plusmn; 0.01 | 0.25 h &plusmn; 0.01 |
 | [OAT-METEO](#oat-meteo) | all | 77 h &plusmn; 0.01 | 359.333 h &plusmn; 0.01 |
 | [SV-RATE](#sv-rate) | all | 44 h &plusmn; 0.01 | 199.25 h &plusmn; 0.01 |
 | [TRIM-1](#trim-1) | all | 18.6667 h &plusmn; 0.01 | 107.917 h &plusmn; 0.01 |
-| [TRIM-3](#trim-3) | stress-only | 0 h &plusmn; 0.01 | 0.9167 h &plusmn; 0.01 |
+| [TRIM-3](#trim-3) | stress-only | 0 h &plusmn; 0.01 | 0.5 h &plusmn; 0.01 |
 | [TRIM-4](#trim-4) | all | 0.1667 h &plusmn; 0.01 | 0.9167 h &plusmn; 0.01 |
 | [VAV-1](#vav-1) | edge | - | - |
 | [VAV-7](#vav-7) | edge | - | - |
