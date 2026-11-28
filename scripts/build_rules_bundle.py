@@ -24,7 +24,7 @@ Bundle layout (every text file LF, UTF-8):
                                re-render with other parameters: python templates/sql/fdd/render_rule.py FC1 --params '{}'
 
 Input names and units come from the canonical role vocabulary ``roles/openfdd-roles.json`` (223P-derived role ids,
-matched on ``legacy_keys``); the build fails when a contract role has no roles-file entry. The zip has sorted entries,
+matched on the role name or ``legacy_keys``); the build fails when a contract role has no roles-file entry. The zip has sorted entries,
 fixed timestamps and fixed attributes, so the same sources give the same sha256 with the same zlib build.
 """
 from __future__ import annotations
