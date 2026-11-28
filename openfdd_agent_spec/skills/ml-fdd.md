@@ -35,7 +35,7 @@ Guide and results: `docs/ml/lbnl-ahu-benchmark.md`. Tool list: `docs/pypi-agent-
    while operating proof is on. Read `activity.json` / `summary.json` `activity` before calling a zero-flag result
    clean: `no_run_proof`, `no_active_rows` or a small `assessed_rows` means unassessed, not healthy.
 6. **Dependencies**: floors only, in `pyproject.toml` (pandas `>=3.1.1`, DuckDB `duckdb>=2.0.1`). Python 3.11+;
-   keep the 3.11–3.15 matrix green. Add a `python_version` marker, never an `==` pin.
+   keep the 3.11–3.14 matrix green. Add a `python_version` marker, never an `==` pin.
 7. Tests: `pytest tests/test_ml_fdd.py tests/test_sql_anomaly_zscore.py`. Results tables hold measured numbers only.
 8. **Which methods apply**: run `open-fdd-ml methods FOLDER [--json]` before `detect`. It names the roles each
    method needs and why a method cannot run on that folder. On a furnace, RTU or heat pump (no MAT), gray-box uses
