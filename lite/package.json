@@ -1,6 +1,6 @@
 {
   "name": "open-fdd-lite",
-  "version": "5.0.21",
+  "version": "5.0.22",
   "private": true,
   "description": "Open-FDD Lite: server-side Node DuckDB for the hourly FDD hook, and the oxigraph package for the sparql hook. No sql.js and no PGlite.",
   "license": "MIT",
