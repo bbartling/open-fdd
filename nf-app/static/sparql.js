@@ -1,11 +1,10 @@
-// SPARQL over the site's Haystack model (Turtle from modelToTurtle), run by Oxigraph (WASM).
+// GENERATED COPY of shared/static/sparql.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
+// SPARQL over the site's Haystack model (Turtle from modelToTurtle).
 //
 // Browser: classic script. On load it appends a "SPARQL" panel to #tab-model (no index.html
-// markup). Oxigraph is loaded lazily, only when the panel is first used, from
-// vendor/oxigraph/web.js + web_bg.wasm (needs 'wasm-unsafe-eval' in the CSP script-src).
-// The store is rebuilt whenever the app's Turtle (global `rdf`, set by app.js each time the
-// model reloads) changes. Queries run in a Worker (this same file, see "worker side") that is
-// terminated after a timeout; without Worker support they run on the main thread, uninterruptible.
+// markup). Run posts the query to the sparql hook with fetch and renders the JSON answer.
+// Oxigraph runs in the NF Node process (the oxigraph npm package), not in the page.
+// Example queries still take their prefixes from the page's Turtle (global `rdf`).
 // Read-only: only SELECT / ASK / CONSTRUCT / DESCRIBE, no SERVICE (sparqlCheckQuery).
 //
 // Node: `require("./sparql.js")` gives the pure helpers the hook and the tests use
@@ -13,8 +12,6 @@
 "use strict";
 
 const SPARQL_ROW_CAP = 5000;
-const SPARQL_SCRIPT_SRC = typeof document !== "undefined" && document.currentScript ? /** @type {HTMLScriptElement} */ (document.currentScript).src : "";
-
 // ---- pure helpers (browser + hook + tests) -------------------------------------------------
 /** "PREFIX x: <iri>" lines, copied from the @prefix lines of the generated Turtle. */
 function sparqlPrefixes(turtle) {
@@ -161,7 +158,7 @@ const sparqlJsonTermText = (t) => (t == null ? null : t.type === "bnode" ? "_:" 
  * Limits: the query text is capped (SPARQL_QUERY_CAP) and so are the returned rows (`cap`). Oxigraph
  * evaluates synchronously and materialises the whole result, so `cap` limits what is returned, not the
  * work done, and a running evaluation cannot be interrupted from inside the same thread: put LIMIT in
- * the query, or run it in a Worker that can be terminated (the browser panel does).
+ * the query. The page asks the sparql hook, whose invokeTimeout bounds the run.
  */
 function sparqlExec(store, query, cap = SPARQL_ROW_CAP) {
   const { form } = sparqlCheckQuery(query);
@@ -245,43 +242,62 @@ function sparqlToCsv(r) {
   return line(["turtle"]) + "\r\n" + line([r.turtle]) + "\r\n";
 }
 
+// ---- browser panel ------------------------------------------------------------------------
+// The panel does not load an engine. It POSTs the query to the sparql hook (both editions, same route)
+// and reads the JSON answer from the run log. The hook turns that into the SPARQL protocol call
+// (application/sparql-query in, application/sparql-results+json out).
+function sparqlAppId() {
+  const m = typeof location !== "undefined" && location.pathname.match(/\/apps\/static\/([^/]+)\//);
+  return (m && m[1]) || "open-fdd";
+}
+
+/**
+ * Start the sparql hook and return its JSON answer. `fetchImpl` defaults to the page fetch.
+ * The body is the existing StartHook string map (`query`, `format`); NF rejects any other shape.
+ * @param {string} query
+ * @param {typeof fetch} [fetchImpl]
+ */
+async function sparqlFetch(query, fetchImpl) {
+  const go = fetchImpl || fetch;
+  const headers = { "Content-Type": "application/json", "Accept": "application/sparql-results+json" };
+  if (typeof getToken === "function") {
+    const token = await getToken();
+    if (token) headers.Authorization = "Bearer " + token;
+  }
+  const base = `/api/v1/apps/${sparqlAppId()}/hooks/sparql`;
+  const started = await go(base, { method: "POST", credentials: "same-origin", headers, body: JSON.stringify({ query, format: "json" }) });
+  if (!started.ok) throw new Error(`${base} → HTTP ${started.status}`);
+  const { pid } = await started.json();
+  const deadline = Date.now() + 60000;
+  const auth = headers.Authorization ? { Authorization: headers.Authorization } : {};
+  while (Date.now() < deadline) {
+    await new Promise((ok) => setTimeout(ok, 400));
+    const runsRes = await go(`${base}/runs?page_size=10&include_results=true&include_logs=true`, { credentials: "same-origin", headers: auth });
+    if (!runsRes.ok) throw new Error(`${base}/runs → HTTP ${runsRes.status}`);
+    const runs = ((await runsRes.json()) || {}).runs || [];
+    const run = runs.find((r) => r.pid === pid);
+    if (!run) continue;
+    const state = String(run.state || "").toUpperCase();
+    if (/RUNNING|PENDING|ENQUEUED|SCHEDULED/.test(state)) continue;
+    const events = Object.values(run.results || {}).flatMap((x) => (x && x.events) || []);
+    const logs = (run.logs || []).map((e) => e && e.message);
+    const texts = [...events.map((e) => e && e.message), ...logs].filter((m) => typeof m === "string" && m.trim().startsWith("{"));
+    const last = texts.reverse()[0];
+    if (!last) throw new Error(`sparql hook ended ${state} without an answer`);
+    return JSON.parse(last);
+  }
+  throw new Error("sparql hook still running; try again");
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     SPARQL_ROW_CAP, SPARQL_QUERY_CAP, SPARQL_MAX_TRIPLES, sparqlPrefixes, sparqlExamples, sparqlExec, sparqlToCsv, sparqlCsvField,
-    sparqlTermText, sparqlCheckQuery, sparqlLoadStore, sparqlWorkerClient,
+    sparqlTermText, sparqlCheckQuery, sparqlLoadStore, sparqlWorkerClient, sparqlFetch, sparqlAppId,
   };
 }
 
-// ---- worker side ---------------------------------------------------------------------------
-// The browser panel starts this same file as `new Worker("sparql.js")` (classic worker, same origin,
-// so it passes worker-src 'self') to run queries where they can be terminated on timeout.
-// Protocol: {id, query, cap, turtle?} in; {id, ok:true, result} | {id, ok:false, error, unavailable?} out.
-// `unavailable` = Oxigraph could not be loaded in the worker (e.g. no wasm there): the page falls back.
-(function sparqlWorkerMain() {
-  const G = /** @type {any} */ (globalThis);
-  if (typeof document !== "undefined" || typeof G.WorkerGlobalScope === "undefined" || !(G instanceof G.WorkerGlobalScope)) return;
-  let store = null, loading = null;
-  const boot = () => loading || (loading = (async () => {
-    const base = new URL("vendor/oxigraph/", G.location.href);
-    const mod = await import(new URL("web.js", base).href);
-    await mod.default({ module_or_path: new URL("web_bg.wasm", base) });
-    return mod;
-  })());
-  G.onmessage = async (ev) => {
-    const { id, query, cap, turtle } = ev.data || {};
-    let mod;
-    try { mod = await boot(); } catch (e) { loading = null; G.postMessage({ id, ok: false, unavailable: true, error: String((e && e.message) || e) }); return; }
-    try {
-      if (typeof turtle === "string") { store = null; store = sparqlLoadStore(mod, turtle); }
-      if (!store) throw new Error("no model loaded in the worker");
-      G.postMessage({ id, ok: true, result: sparqlExec(store, query, cap) });
-    } catch (e) { G.postMessage({ id, ok: false, error: String((e && e.message) || e) }); }
-  };
-})();
-
-// ---- browser panel ------------------------------------------------------------------------
 if (typeof document !== "undefined") (function mountSparqlPanel() {
-  let ox = null, oxLoading = null, store = null, storeTtl = null, last = null;
+  let last = null;
 
   const el = (tag, props = {}, ...kids) => {
     const n = document.createElement(tag);
@@ -302,30 +318,6 @@ if (typeof document !== "undefined") (function mountSparqlPanel() {
     return null;
   };
 
-  async function loadOxigraph() {
-    if (ox) return ox;
-    if (!oxLoading) {
-      oxLoading = (async () => {
-        const base = new URL("vendor/oxigraph/", SPARQL_SCRIPT_SRC || location.href);
-        const mod = await import(new URL("web.js", base).href);
-        await mod.default({ module_or_path: new URL("web_bg.wasm", base) });
-        ox = mod;
-        return mod;
-      })().catch((e) => { oxLoading = null; throw e; });
-    }
-    return oxLoading;
-  }
-
-  async function getStore() {
-    const ttl = turtleNow();
-    if (!ttl) throw new Error("The model is not loaded yet.");
-    const mod = await loadOxigraph();
-    if (store && storeTtl === ttl) return store;
-    const s = sparqlLoadStore(mod, ttl);
-    store = s; storeTtl = ttl;
-    return s;
-  }
-
   const ta = el("textarea", { rows: 12, spellcheck: false, style: { width: "100%", fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: "12px", boxSizing: "border-box" } });
   const pick = el("select", { title: "Example queries" });
   const run = el("button", { className: "btn primary", textContent: "Run" });
@@ -335,8 +327,8 @@ if (typeof document !== "undefined") (function mountSparqlPanel() {
   const out = el("div", { style: { overflow: "auto", maxHeight: "420px", marginTop: "8px" } });
   const panel = el("section", { className: "panel", id: "sparqlPanel" },
     el("h2", {}, "SPARQL ",
-      el("span", { className: "hint" }, "query the Haystack model as RDF (Oxigraph in your browser; loaded on first Run). "
-        + "Same engine as the sparql hook: POST /api/v1/apps/open-fdd/hooks/sparql")),
+      el("span", { className: "hint" }, "query the Haystack model as RDF. Run sends the query to the sparql hook "
+        + "(Oxigraph in the NF Node process) and shows the JSON results.")),
     el("div", { className: "actions", style: { marginBottom: "8px", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, pick, run, csv, stat),
     ta, err, out);
 
@@ -363,36 +355,18 @@ if (typeof document !== "undefined") (function mountSparqlPanel() {
     out.append(el("table", { className: "bac" }, el("thead", {}, head), el("tbody", {}, ...body)));
   }
 
-  // Queries run in a Worker with a timeout (terminated on expiry). If no Worker can be started the
-  // query runs on the main thread, where a runaway evaluation cannot be interrupted.
-  const QUERY_TIMEOUT_MS = 20000;
-  let client = null, workerBroken = typeof Worker === "undefined" || !SPARQL_SCRIPT_SRC;
-  async function execQuery(query) {
-    const ttl = turtleNow();
-    if (!ttl) throw new Error("The model is not loaded yet.");
-    sparqlCheckQuery(query);                       // refuse updates / SERVICE before any work
-    if (!workerBroken) {
-      try {
-        client = client || sparqlWorkerClient(() => new Worker(SPARQL_SCRIPT_SRC), QUERY_TIMEOUT_MS);
-        return { r: await client.run(ttl, query, SPARQL_ROW_CAP), where: "worker" };
-      } catch (e) {
-        if (!e.workerUnavailable) throw e;
-        workerBroken = true; client = null;
-      }
-    }
-    return { r: sparqlExec(await getStore(), query), where: "main thread, no timeout" };
-  }
-
   async function runQuery() {
     showError(""); csv.disabled = true; run.disabled = true;
     stat.textContent = "running…";
     try {
+      sparqlCheckQuery(ta.value);
       const t0 = performance.now();
-      const { r, where } = await execQuery(ta.value);
+      const ans = await sparqlFetch(ta.value);
+      if (!ans || ans.ok === false) throw new Error((ans && ans.error) || "sparql hook returned no answer");
       const ms = Math.round(performance.now() - t0);
-      last = r; render(r);
-      const n = r.kind === "ask" ? "ASK" : `${r.total ?? "?"} ${r.kind === "select" ? "rows" : "triples"}`;
-      stat.textContent = `${ms} ms · ${n}${r.truncated ? ` (showing first ${SPARQL_ROW_CAP})` : ""} · ${where}`;
+      last = ans; render(ans);
+      const n = ans.kind === "ask" ? "ASK" : `${ans.total ?? "?"} ${ans.kind === "select" ? "rows" : "triples"}`;
+      stat.textContent = `${ms} ms · ${n}${ans.truncated ? ` (showing first ${SPARQL_ROW_CAP})` : ""} · server`;
       csv.disabled = false;
     } catch (e) {
       out.replaceChildren(); stat.textContent = "";

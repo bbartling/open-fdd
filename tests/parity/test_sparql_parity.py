@@ -53,7 +53,7 @@ def test_index_resolution_normalization_preserves_exact_values(unit):
 def case(request):
     seed, equips, days, profile = request.param
     ds = generate(seed, equips, days, profile)
-    ad = ADAPTERS["pglite"]()
+    ad = ADAPTERS["duckdb"]()
     ad.load(ds)
     try:
         sql = ad.run()

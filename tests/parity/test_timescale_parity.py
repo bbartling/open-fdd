@@ -44,7 +44,7 @@ def test_baseline_file_is_the_documented_verdict():
 
 
 def test_baseline_verdict_on_pglite(ds):
-    adapter = NodeEngineAdapter("pglite")
+    adapter = NodeEngineAdapter("duckdb")
     adapter.load(ds)
     try:
         rows = adapter.run()
@@ -111,7 +111,7 @@ def test_native_unit_scale_and_offset_reproduce_the_si_dataset(ds):
 @pytest.mark.skipif(not timescale_configured(), reason="PGURL + OPENFDD_TS_TEST_DISPOSABLE=1 (a disposable TimescaleDB) required")
 def test_timescale_through_the_core_tables_reproduces_the_verdict(ds):
     """Direct SI parity: Timescale loads the exact same SI fixture as PGlite and agrees row-for-row."""
-    pglite = NodeEngineAdapter("pglite")
+    pglite = NodeEngineAdapter("duckdb")
     pglite.load(ds)
     try:
         pg_rows = pglite.run()
@@ -131,7 +131,7 @@ def test_timescale_through_the_core_tables_reproduces_the_verdict(ds):
     assert raw["factor"]["factor_mismatches"] == []
     assert raw["stored"]["after"] == raw["stored"]["before"] > 0, "re-running writes no new rows"
     assert raw["index_ok"] is True, f"the loader query can use NF's (point_id, time) index: {raw.get('index_plan')}"
-    bad = engines_disagree({"pglite": pg_rows, "timescale": ts_rows}, "timescale", ref_engine="pglite")
+    bad = engines_disagree({"duckdb": pg_rows, "timescale": ts_rows}, "timescale", ref_engine="duckdb")
     assert bad == [], bad
     verdict = compare(ts_rows, reference(ds), Policy.default(ARGS["profile"], stress=True))
     assert summary(verdict) == PINNED["verdict"], verdict.summary()
@@ -140,7 +140,7 @@ def test_timescale_through_the_core_tables_reproduces_the_verdict(ds):
 @pytest.mark.skipif(not timescale_configured(), reason="PGURL + OPENFDD_TS_TEST_DISPOSABLE=1 (a disposable TimescaleDB) required")
 def test_timescale_native_unit_ingestion_conversion_reproduces_the_si_dataset(ds):
     """Ingestion conversion test: native imperial samples in public.data convert cleanly via fdd.input_sample."""
-    pglite = NodeEngineAdapter("pglite")
+    pglite = NodeEngineAdapter("duckdb")
     pglite.load(ds)
     try:
         pg_rows = pglite.run()
@@ -157,15 +157,15 @@ def test_timescale_native_unit_ingestion_conversion_reproduces_the_si_dataset(ds
     assert raw["ingest"] == "native"
     assert raw["history_mismatches"] == [], "history == SI dataset cell for cell (1e-9 relative)"
     assert raw["factor"]["factor_mismatches"] == []
-    same = NodeEngineAdapter("pglite")
+    same = NodeEngineAdapter("duckdb")
     same.load(adapter.loaded_dataset(ds))
     try:
         pg_same = same.run()
     finally:
         same.close()
-    bad = engines_disagree({"pglite": pg_same, "timescale": ts_rows}, "timescale", ref_engine="pglite")
+    bad = engines_disagree({"duckdb": pg_same, "timescale": ts_rows}, "timescale", ref_engine="duckdb")
     assert bad == [], bad
-    tie_only = engines_disagree({"pglite": pg_rows, "timescale": pg_same}, "timescale", ref_engine="pglite")
+    tie_only = engines_disagree({"duckdb": pg_rows, "timescale": pg_same}, "timescale", ref_engine="duckdb")
     assert all(not r.startswith(("UTIL-", "OAT-METEO")) for r in tie_only), tie_only
     verdict = compare(ts_rows, reference(ds), Policy.default(ARGS["profile"], stress=True))
     assert summary(verdict) == PINNED["verdict"], verdict.summary()

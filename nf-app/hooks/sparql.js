@@ -1,3 +1,4 @@
+// GENERATED COPY of shared/hooks/sparql.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
 // SPARQL over the NF Haystack model: on-request hook (the API twin of the SPARQL panel in the UI).
 //
 //   POST /api/v1/apps/open-fdd/hooks/sparql   {"args": {"query": "SELECT ...", "format": "json"}}
@@ -18,7 +19,11 @@
 // not necessarily the CPU work. Keep queries selective (LIMIT).
 //
 // The Turtle is built by static/model.js (modelToTurtle) from the model NF holds right now, exactly
-// as the UI builds it, then loaded into Oxigraph (Node build, vendored in static/vendor/oxigraph).
+// as the UI builds it, then loaded into Oxigraph (the oxigraph npm package, in this Node process).
+// sparqlEndpoint is the SPARQL 1.1 protocol call: POST body with Content-Type application/sparql-query,
+// answer application/sparql-results+json (SELECT/ASK) or text/turtle (CONSTRUCT/DESCRIBE).
+// NF StartHook only accepts a string map, so the page posts {query, format} on this same route and
+// handle() runs that text through sparqlEndpoint. Lite and Full share the route.
 // Nothing site-specific here: sites, equips, points and tags all come from NF.
 const fs = require('fs');
 const path = require('path');
@@ -36,7 +41,8 @@ const FORMATS = ['json', 'csv', 'turtle'];
 const sparqlLib = () => require('../static/sparql.js');
 // The module names are cast to `string` so tsc does not follow them into the vendored build (never type-checked).
 const oxigraph = () => {
-  try { return require(/** @type {string} */ ('oxigraph')); } catch (e) { return require(/** @type {string} */ ('../static/vendor/oxigraph/node.js')); }
+  try { return require(/** @type {string} */ ('oxigraph')); }
+  catch (e) { throw new Error(`oxigraph is not installed (${e && e.message}). Install the app dependencies.`); }
 };
 
 /** Effective triple limit: the env ceiling, lowered (never raised) by the caller's value. */
@@ -65,6 +71,51 @@ function runSparql(turtle, query, format = 'json', opts = {}) {
   if (format === 'csv') return { format, kind: r.kind, total: r.total ?? null, truncated: !!r.truncated, body: lib.sparqlToCsv(r) };
   const { triples, ...rest } = r;
   return { format, ...rest };
+}
+
+/** Exec result -> SPARQL Query Results JSON (SELECT and ASK). Graph queries stay Turtle. */
+function sparqlResultsJson(r) {
+  if (r.kind === 'ask') return { head: {}, boolean: r.value === true };
+  if (r.kind !== 'select') return null;
+  const bindings = r.rows.map((row) => {
+    const b = {};
+    r.vars.forEach((v, i) => {
+      const text = row[i];
+      if (text == null || text === '') return;
+      b[v] = String(text).startsWith('_:') ? { type: 'bnode', value: String(text).slice(2) } : { type: 'literal', value: String(text) };
+    });
+    return b;
+  });
+  return { head: { vars: r.vars }, results: { bindings } };
+}
+
+/**
+ * SPARQL protocol POST. `req.contentType` must be application/sparql-query; `req.body` is the query.
+ * SELECT/ASK answer application/sparql-results+json. CONSTRUCT/DESCRIBE answer text/turtle.
+ * @param {{method?: string, contentType?: string, headers?: Record<string, string>, body?: string}} req
+ * @param {string} turtle
+ * @param {{ox?: any, maxTriples?: number, cap?: number}} [opts]
+ */
+function sparqlEndpoint(req, turtle, opts = {}) {
+  const method = String(req.method || 'POST').toUpperCase();
+  const rawType = req.contentType || (req.headers && (req.headers['content-type'] || req.headers['Content-Type'])) || '';
+  const contentType = String(rawType).split(';')[0].trim().toLowerCase();
+  if (method !== 'POST') {
+    return { status: 405, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'POST required' }) };
+  }
+  if (contentType !== 'application/sparql-query') {
+    return { status: 415, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'Content-Type must be application/sparql-query' }) };
+  }
+  try {
+    const r = runSparql(turtle, String(req.body || ''), 'json', opts);
+    if (r.kind === 'graph') {
+      const turtleOut = /** @type {{turtle?: string}} */ (r).turtle || '';
+      return { status: 200, contentType: 'text/turtle', body: turtleOut, result: r };
+    }
+    return { status: 200, contentType: 'application/sparql-results+json', body: JSON.stringify(sparqlResultsJson(r)), result: r };
+  } catch (e) {
+    return { status: 400, contentType: 'application/json', body: JSON.stringify({ ok: false, error: errText(e) }) };
+  }
 }
 
 // ---- NF model (same loader as hooks/fdd.js) -------------------------------------------
@@ -111,8 +162,14 @@ async function handle({ sdk, args = {}, now = () => Date.now() }) {
     // schema:url history links (without it only ref:hasTimeseriesId is exported).
     const base = String(args.base || shared.rdfBaseOf());
     const { turtle } = shared.modelToTurtle(model, base, { nfBase: args.nfBase || '' });
-    const r = runSparql(turtle, args.query, args.format, { maxTriples: args.maxTriples });
-    result = { ok: true, ms: now() - t0, base, ...r };
+    const endpoint = sparqlEndpoint(
+      { method: 'POST', contentType: 'application/sparql-query', body: args.query },
+      turtle, { maxTriples: args.maxTriples });
+    if (endpoint.status !== 200) throw new Error(JSON.parse(endpoint.body).error || 'sparql query failed');
+    const wanted = String(args.format || 'json').toLowerCase();
+    const r = wanted === 'json' ? endpoint.result : runSparql(turtle, args.query, wanted, { maxTriples: args.maxTriples });
+    const results = endpoint.contentType === 'application/sparql-results+json' ? JSON.parse(endpoint.body) : null;
+    result = { ok: true, ms: now() - t0, base, ...r, results };
     if (typeof result.body === 'string' && result.body.length > MAX_RESULT_CHARS) {
       result.body = result.body.slice(0, MAX_RESULT_CHARS);
       result.truncated = true;
@@ -133,5 +190,5 @@ async function handle({ sdk, args = {}, now = () => Date.now() }) {
 // The hook is the function; the helpers hang off it for the tests (assigned in one go so tsc sees the shape).
 module.exports = Object.assign(
   async (ctx) => handle({ sdk: ctx.sdk, args: argsOf(ctx) }),
-  { runSparql, handle, argsOf, loadShared, maxTriples },
+  { runSparql, handle, argsOf, loadShared, maxTriples, sparqlEndpoint, sparqlResultsJson },
 );

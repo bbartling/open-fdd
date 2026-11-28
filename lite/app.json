@@ -23,6 +23,8 @@
     "/hooks/lib/start-hook-args.js": "hooks/lib/start-hook-args.js",
     "/hooks/open_meteo_weather.js": "hooks/open_meteo_weather.js",
     "/hooks/rdf.js": "hooks/rdf.js",
+    "/hooks/sparql.js": "hooks/sparql.js",
+    "/package.json": "package.json",
     "/static/app-core.js": "static/app-core.js",
     "/static/app.js": "static/app.js",
     "/static/base.css": "static/base.css",
@@ -37,6 +39,7 @@
     "/static/roles/roles.sha256": "static/roles/roles.sha256",
     "/static/nf.js": "static/nf.js",
     "/static/paging.js": "static/paging.js",
+    "/static/sparql.js": "static/sparql.js",
     "/static/style.css": "static/style.css",
     "/static/theme-init.js": "static/theme-init.js",
     "/static/theme.js": "static/theme.js",
@@ -134,6 +137,16 @@
       "id": "rdf",
       "name": "rdf",
       "entryPoint": "/hooks/rdf.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "60s"
+    },
+    {
+      "id": "sparql",
+      "name": "sparql",
+      "entryPoint": "/hooks/sparql.js",
       "points": {
         "noPoints": true
       },

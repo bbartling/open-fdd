@@ -10,8 +10,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { createEngine } = require("../hooks/lib/engines.js");
 const PACKS = {
-  pglite: JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8")),
-  sqlite: JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8")),
+  duckdb: JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8")),
 };
 const START = Date.UTC(2026, 0, 1);
 
@@ -41,7 +40,7 @@ async function faultHours(kind, ruleId, opts) {
   }
 }
 
-for (const kind of ["pglite", "sqlite"]) {
+for (const kind of ["duckdb"]) {
   for (const ruleId of ["TRIM-3", "TRIM-4"]) {
     test(`${kind} ${ruleId}: a bound run_proof ON unlocks the rule when no legacy plant point is bound`, async () => {
       assert.ok(await faultHours(kind, ruleId, { runProof: 1 }) > 5);

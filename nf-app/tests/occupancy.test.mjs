@@ -72,7 +72,7 @@ test("weekly bucketing in the site zone: DST weeks keep the calendar's hours; a 
   let cur = 0, lo = Infinity, hi = -Infinity;
   const weekOf = (ms) => { if (ms >= lo && ms < hi) return cur; cur = S.localWeekStartMs(ms, tz); lo = cur; hi = S.localWeekStartMs(cur + 8 * 86400e3, tz); return cur; };
   const SA = createRequire(import.meta.url)("../hooks/lib/sql-analytics.js");
-  const weeks = (await SA.runtimeFromGrid("sqlite", { t, cols: { m: v } }, [{ key: 0, motor: "m", oat: null, weekOf, occ: (ms) => S.occupied(s, ms, tz) }])).get(0);
+  const weeks = (await SA.runtimeFromGrid("duckdb", { t, cols: { m: v } }, [{ key: 0, motor: "m", oat: null, weekOf, occ: (ms) => S.occupied(s, ms, tz) }])).get(0);
   const ks = [...weeks.keys()].sort((a, b) => a - b);
   assert.equal(new Date(ks[0]).toISOString(), "2026-11-02T06:00:00.000Z", "Monday 00:00 CST");
   assert.equal(weeks.get(ks[0]).partial, true);

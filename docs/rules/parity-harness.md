@@ -67,7 +67,7 @@ Each tier fails on unexpected disagreement under the pinned known-difference pol
 
 | Tier | Data | When | Workflow / job |
 | --- | --- | --- | --- |
-| PR | unit-level parity tests (PGlite, SQLite, DuckDB, Parquet through DuckDB) | every PR | `parity.yml` / `pandas oracle vs SQL pack` (required) |
+| PR | unit-level parity tests (Node DuckDB, Parquet through DuckDB) | every PR | `parity.yml` / `pandas oracle vs SQL pack` (required) |
 | PR | 2x3 `basic` and `edge`, three-way | every PR | `parity.yml` / `pandas == SQL == SPARQL-client` (required) |
 | PR | 2x3, standalone PostgreSQL | every PR | `parity.yml` / `standalone PostgreSQL parity (no Timescale)` |
 | Large | 4x3 and 8x7, `basic` and `edge`, three-way (Parquet too) and standalone PostgreSQL | nightly on master; before each release | `parity-stress.yml` |
@@ -112,7 +112,7 @@ class SqliteAdapter:
 assert conformance_errors(SqliteAdapter(), generate(0, 2, 1), ["FC1"]) == []
 ```
 
-The in-repo adapters (`tests/parity/adapters.py`) run the pack on PGlite and sql.js through `nf-app/hooks/lib/engines.js`.
+The in-repo adapters (`tests/parity/adapters.py`) run the pack on Node DuckDB through `nf-app/hooks/lib/engines.js`.
 
 ## Adapter contract for apps that store data in the core tables
 
@@ -131,7 +131,7 @@ the same dataset and the same pinned verdict:
    `tests/parity/baseline.json` (`compared=77 matched=61 known-divergent=16 unexpected=0` for 8 equipment x 7 days, 64/13 for 4 x 3; see the file); a second run writes zero new rows (the upsert key is the primary key).
 
 The in-repo reference is `TimescaleAdapter` (`tests/parity/adapters.py`, runner `nf-app/timescale/test/parity_run.mjs`);
-`python tests/parity/stress.py --engines pglite,sqlite,timescale` runs it against a disposable TimescaleDB
+`python tests/parity/stress.py --engines duckdb,timescale` runs it against a disposable TimescaleDB
 (`PGURL`, `OPENFDD_TS_TEST_DISPOSABLE=1`).
 
 ## How a downstream app uses it

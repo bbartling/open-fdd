@@ -29,7 +29,7 @@ Lite has Overview, Charts, BACnet Server, and Model & RDF. Full adds FDD and Exp
 | FDD | Full only. Fault / pass / skipped / insufficient chips, one open rule (SI thresholds, inputs, tune drawer), and a More section (fault heat map, FDD charts, rule-input table). | Open rule: time-series lines, red shade for a confirmed fault, grey shade for equipment off, 0/1 fault lane. Heat map of fault hours. |
 | BACnet Server | Local BACnet objects, present value versus the Haystack point, property cards. | None. |
 | Export | Full only. One CSV of one equipment's I/O and FDD columns. | None. See [Charts and export](charts.html#export). |
-| Model & RDF | Haystack tree, model checks, Turtle and model JSON download. Full appends a SPARQL panel (SELECT, ASK, CONSTRUCT, DESCRIBE; Oxigraph in the browser). | The tree is an ECharts graph. |
+| Model & RDF | Haystack tree, model checks, Turtle and model JSON download, and a SPARQL panel (SELECT, ASK, CONSTRUCT, DESCRIBE). The panel posts the query to the `sparql` hook; Oxigraph runs in the NF Node process. | The tree is an ECharts graph. |
 
 ## Chart catalog
 

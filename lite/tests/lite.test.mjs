@@ -116,8 +116,8 @@ test("manifest: the app id is the slug of the name (NF derives the id from the n
   assert.equal(id, appSlug(name));
 });
 
-test("manifest: hourly DuckDB FDD hook, and the install dependency is Node DuckDB only", () => {
-  assert.deepEqual(manifest.hooks.map((h) => h.id), ["open-meteo-weather", "fdd", "rdf"]);
+test("manifest: hourly DuckDB FDD hook and the shared oxigraph SPARQL hook", () => {
+  assert.deepEqual(manifest.hooks.map((h) => h.id), ["open-meteo-weather", "fdd", "rdf", "sparql"]);
   const fdd = manifest.hooks.find((h) => h.id === "fdd");
   assert.equal(fdd.mode, "MODE_SCHEDULED");
   assert.equal(fdd.config.engine, "duckdb");
@@ -126,10 +126,11 @@ test("manifest: hourly DuckDB FDD hook, and the install dependency is Node DuckD
   assert.ok(manifest.files["/hooks/fdd.js"]);
   assert.ok(manifest.files["/rules/pack-postgres.json"]);
   assert.equal(manifest.hooks.find((h) => h.id === "rdf").mode, "MODE_ON_REQUEST");
-  assert.ok(!/oxigraph|sql\.js|pglite/i.test(read("hooks/rdf.js")), "the Lite rdf hook carries no query engine");
+  assert.equal(manifest.hooks.find((h) => h.id === "sparql").entryPoint, "/hooks/sparql.js");
+  assert.ok(!/require\(["']oxigraph["']\)|sql\.js|pglite/i.test(read("hooks/rdf.js")), "the Lite rdf hook carries no query engine");
   assert.ok(!/require\((?!['"](fs|path|vm|crypto|\.\/lib\/(paging|start-hook-args)\.js)['"]\))/.test(read("hooks/rdf.js")), "rdf hook: node built-ins and ./lib/{paging,start-hook-args}.js only");
   const pkg = JSON.parse(read("package.json"));
-  assert.deepEqual(pkg.dependencies, { "@duckdb/node-api": "2.0.1-r.1" });
+  assert.deepEqual(pkg.dependencies, { "@duckdb/node-api": "2.0.1-r.1", "oxigraph": "0.5.13" });
   assert.equal(pkg.devDependencies, undefined);
   const shipped = JSON.stringify(manifest.files);
   assert.ok(!/sql\.js|pglite|sql-wasm|pack-sqlite|duckdb-wasm/i.test(shipped));

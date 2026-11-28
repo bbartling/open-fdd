@@ -7,7 +7,7 @@ description: Run the Open-FDD security checks (ZAP against the mock NF, npm audi
 CI workflow: `.github/workflows/security.yml` (every push and PR, weekly).
 
 1. **CSP**: no inline scripts or styles; every library vendored, pinned, never younger than two weeks. The meta tag
-   in `nf-app/static/index.html` is `default-src 'self'` plus `wasm-unsafe-eval`, and `script-src`/`connect-src` also
+   in `nf-app/static/index.html` is `default-src 'self'` (no `wasm-unsafe-eval`), and `script-src`/`connect-src` also
    allow `https:` for exactly one reason: the portal login loads `clerk-js` from the host in the portal's
    publishable key (unknown until runtime). Keep it at an exact pinned version (`CLERK_JS_VERSION` in both
    `nf.js` files, at least two weeks old), add no other remote script, and never write "self-only" or "no CDN at

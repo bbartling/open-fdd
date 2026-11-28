@@ -20,7 +20,7 @@ function load() {
   const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa,
     localStorage: { getItem: () => ctx.units },             // ofddUnits.displaySystem()
     // #1649: the views run the SQL analytics; in a page they reach them through the analytics hook, here in-process
-    ofddSqlAnalytics: { runtime: (g, specs) => SA.runtimeFromGrid("sqlite", g, specs), mech: (g, specs) => SA.mechFromGrid("sqlite", g, specs), econ: (g) => SA.econFromGrid("sqlite", g), bas: (g) => SA.basFromGrid("sqlite", g) } });
+    ofddSqlAnalytics: { runtime: (g, specs) => SA.runtimeFromGrid("duckdb", g, specs), mech: (g, specs) => SA.mechFromGrid("duckdb", g, specs), econ: (g) => SA.econFromGrid("duckdb", g), bas: (g) => SA.basFromGrid("duckdb", g) } });
   ctx.units = "imperial";
   ctx.pickWindow = () => 3600;                // one value per hour
   ctx.FAULT_LANE = { lineStyle: { color: "red" }, areaStyle: { color: "red" } };
@@ -107,9 +107,9 @@ test("ISO weeks: Monday start (UTC), week labels, year boundary", () => {
 
 // #1649: run hours, cooling bins and the economizer are SQL (sql/analytics/*.sql, pandas parity in tests/test_sql_*.py);
 // these pin the definitions the charts rely on, through the same SQL the views run.
-const SQL = { runtime: (g, specs) => SA.runtimeFromGrid("sqlite", g, specs), mech: (g, specs) => SA.mechFromGrid("sqlite", g, specs) };
+const SQL = { runtime: (g, specs) => SA.runtimeFromGrid("duckdb", g, specs), mech: (g, specs) => SA.mechFromGrid("duckdb", g, specs) };
 const MON = Date.UTC(2026, 9, 26), WEEK = 7 * 86400e3;
-const runtime1 = async (t, v, o = {}) => (await SA.runtimeFromGrid("sqlite", { t, cols: { m: v, o: o.oat || null } },
+const runtime1 = async (t, v, o = {}) => (await SA.runtimeFromGrid("duckdb", { t, cols: { m: v, o: o.oat || null } },
   [{ key: 0, motor: "m", oat: o.oat ? "o" : null, weekOf: (ms) => MON + Math.floor((ms - MON) / WEEK) * WEEK }])).get(0);
 
 test("weekly runtime (SQL): 0.05 on-limit, percent inputs, gap cap, week split, OAT while on", async () => {
@@ -149,12 +149,12 @@ test("economizer (SQL): fan gate, identifiable delta (5.5556 delta degC = 10 del
   const { rcxOverviewMath: m } = setup().ctx;
   near(m.ECON_DT_MIN_C, 50 / 9, 1e-12);
   near(SA.ECON_DIAG_DT_MIN_C, m.ECON_DT_MIN_C, 1e-12);          // the caption constant is the SQL's
-  const edge = await SA.econFromGrid("sqlite", { t: [1, 2, 3], cols: { rat: [21, 21, 21], mat: [18, 18, 18], fan: [1, 1, 1], oa_t: [21 - 5.5, 21 - 5.6, 21 + 5.6] } });
+  const edge = await SA.econFromGrid("duckdb", { t: [1, 2, 3], cols: { rat: [21, 21, 21], mat: [18, 18, 18], fan: [1, 1, 1], oa_t: [21 - 5.5, 21 - 5.6, 21 + 5.6] } });
   assert.deepEqual(edge.rows.map((r) => r.ident), [false, true, true]);
   const g = { t: [1, 2, 3, 4, 5], cols: {
     oa_t: [10, 10, 10, 10, 10], rat: [30, 30, 30, 30, 30], mat: [20, 25, 20, 30, 20],
     fan: [1, 1, 0, 1, 1], sat: [13, 13, 13, 13, 13], damper: [50, 50, 50, 50, null] } };
-  const { rows, summary } = await SA.econFromGrid("sqlite", g);
+  const { rows, summary } = await SA.econFromGrid("duckdb", g);
   assert.deepEqual(rows.map((r) => r.t), [1, 2, 4, 5]);          // fan off (t=3) dropped
   assert.deepEqual([rows[0].dOR, rows[0].dMR, rows[0].oaFrac, rows[0].matPred, rows[0].matResid], [-20, -10, 50, 20, 0]);
   assert.equal(rows[1].matResid, 5);
@@ -162,7 +162,7 @@ test("economizer (SQL): fan gate, identifiable delta (5.5556 delta degC = 10 del
   assert.deepEqual([rows[3].matResid, rows[3].damperPct], [null, null]);   // no damper reading
   assert.deepEqual([summary.n, summary.nIdent, summary.medianResid, summary.maeResid], [4, 4, 5, 5]);
   // not identifiable below the minimum delta: no OA fraction
-  const lo = await SA.econFromGrid("sqlite", { ...g, cols: { ...g.cols, oa_t: [27, 27, 27, 27, 27] } });
+  const lo = await SA.econFromGrid("duckdb", { ...g, cols: { ...g.cols, oa_t: [27, 27, 27, 27, 27] } });
   assert.ok(lo.rows.length && lo.rows.every((r) => !r.ident && r.oaFrac === null));
 });
 
@@ -172,7 +172,7 @@ test("BAS vs web (SQL): web joined as-of within its cadence, delta, band stats; 
   const bas = [50, 51, 52, 53, 54, 55, 56, 57];
   const web = [50, null, null, 50, null, null, 50, null];       // 3 h cadence
   assert.equal(SA.webMaxAgeMs(t, bas, web), 4.5 * HOUR);       // max(1.5 x 3 h web, 2 x 1 h BAS), as pandas
-  const r = await SA.basFromGrid("sqlite", { t, cols: { bas, web } });
+  const r = await SA.basFromGrid("duckdb", { t, cols: { bas, web } });
   assert.deepEqual(r.rows.map((x) => x.d), [0, 1, 2, 3, 4, 5, 6, 7]);
   assert.equal(r.band, 2);                                      // delta degC (= 3.6 delta degF)
   assert.equal(r.stats.n, 8);
@@ -180,7 +180,7 @@ test("BAS vs web (SQL): web joined as-of within its cadence, delta, band stats; 
   assert.equal(r.stats.maxAbs, 7);
   assert.equal(r.stats.withinBand, 3 / 8);                      // |d| <= 2 degC: 0, 1, 2
   // stale web (older than the bound) is not joined: one reading, BAS hourly -> limit 2 h, three samples pair
-  const stale = await SA.basFromGrid("sqlite", { t, cols: { bas, web: [10, null, null, null, null, null, null, null] } });
+  const stale = await SA.basFromGrid("duckdb", { t, cols: { bas, web: [10, null, null, null, null, null, null, null] } });
   assert.deepEqual(stale.rows.map((x) => x.t), t.slice(0, 3));
   // histogram: contiguous bins, ends clamped
   const h = m.deltaHist([0.2, 0.4, 1.6, -0.7, 100], 1);

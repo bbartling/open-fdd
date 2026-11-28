@@ -174,6 +174,6 @@ A caller that feeds the SQL directly (a warehouse view, the pandas oracle, the p
 
 ## Verification
 
-Every template is executed on PGlite (real PostgreSQL) and on the translated SQLite pack, and each rule that has a pandas twin is compared with it over a deterministic SI dataset: see `tests/parity/stress.py` (`--equips N --days N`; it fails on any unlisted divergence) and `docs/rules/parity.md`. These are synthetic screening checks, not field-data accuracy tests. Qualify fault cases and tuning responsiveness before deployment.
+Every template is executed on Node DuckDB, and each rule that has a pandas twin is compared with it over a deterministic SI dataset. Timescale is compared the same way when a server is configured. See `tests/parity/stress.py` (`--equips N --days N`; it fails on any unlisted divergence) and `docs/rules/parity.md`. These are synthetic screening checks, not field-data accuracy tests. Qualify fault cases and tuning responsiveness before deployment.
 
 Sources: [Open-FDD rule catalog](https://bbartling.github.io/open-fdd/fdd-rules.html), [PostgreSQL numeric types and NaN](https://www.postgresql.org/docs/current/datatype-numeric.html), [window functions](https://www.postgresql.org/docs/current/functions-window.html), [date/time functions](https://www.postgresql.org/docs/current/functions-datetime.html). Source license is included.

@@ -13,7 +13,6 @@ Bundle layout (every text file LF, UTF-8):
                                every other entry
     rules/postgres/<ID>.sql    rule SQL rendered at the shipped defaults (nf-app/rules/pack-postgres.json); PostgreSQL,
                                TimescaleDB and DuckDB run these files unchanged
-    rules/sqlite/<ID>.sql      the SQLite translation (nf-app/rules/pack-sqlite.json)
     helpers/postgres.sql       fdd.* helper functions (sql/fdd/postgres/postgres_helpers.sql)
     helpers/duckdb.sql         the same helpers as DuckDB macros (sql/fdd/duckdb/duckdb_helpers.sql, #1645)
     schema/core.sql            fdd.point, fdd.rule_result, fdd.rule_config (sql/fdd/schema/core.sql, unchanged)
@@ -44,7 +43,6 @@ sys.path.insert(0, str(ROOT / "scripts" / "nf"))
 import docs_units  # noqa: E402  (stdlib-only shared parity facts)
 
 PACK_PG = ROOT / "nf-app" / "rules" / "pack-postgres.json"
-PACK_SQLITE = ROOT / "nf-app" / "rules" / "pack-sqlite.json"
 CATALOG = ROOT / "nf-app" / "static" / "fdd-catalog.json"
 CONTRACT = ROOT / "sql" / "fdd" / "input_contract.json"
 CONTRACT_SQL = ROOT / "sql" / "fdd" / "input_contract.sql"
@@ -154,8 +152,7 @@ DIALECTS = {
     "duckdb": "Run helpers/duckdb.sql (macros; plpgsql does not parse) and SET TimeZone = 'UTC', then rules/postgres/<ID>.sql "
               "unchanged. Needs only built-in extensions (icu, json); runs offline with autoinstall/autoload off. "
               "Schema: schema/core.duckdb.sql.",
-    "sqlite": "Use rules/sqlite/<ID>.sql. The host registers the scalar UDFs listed in sqlite_udfs (reference: "
-              "nf-app/hooks/lib/engines.js). Timestamps are numeric; follow the per-rule notes.",
+    "sqlite": "Removed in 5.0.22. Run rules/postgres/<ID>.sql on DuckDB or Timescale.",
 }
 
 
@@ -164,7 +161,7 @@ def _sql_file(sql: str) -> str:
 
 
 def build_manifest(version: str) -> tuple[dict, dict[str, str]]:
-    pg, lite = _json(PACK_PG), _json(PACK_SQLITE)
+    pg = _json(PACK_PG)
     contract, roles_doc = _json(CONTRACT), _json(ROLES)
     catalog = {r["id"]: r for r in _json(CATALOG)["rules"]}
     known, other, no_twin = docs_units.read_parity()
@@ -194,15 +191,7 @@ def build_manifest(version: str) -> tuple[dict, dict[str, str]]:
                                     "unit_display": i["unit_display"], "value_type": i["value_type"], "required": need == "required"})
         pg_path = f"rules/postgres/{rid}.sql"
         files[pg_path] = _sql_file(prule["sql"])
-        sqlite_rule = lite["rules"].get(rid)
-        if sqlite_rule:
-            sqlite_path = f"rules/sqlite/{rid}.sql"
-            files[sqlite_path] = _sql_file(sqlite_rule["sql"])
-            sqlite_note = {"file": sqlite_path, "udfs": "fdd_" in sqlite_rule["sql"]}
-            if rid in lite.get("notes", {}):
-                sqlite_note["notes"] = lite["notes"][rid]
-        else:
-            sqlite_note = {"file": None, "notes": [lite.get("skipped", {}).get(rid, "not translated")]}
+        sqlite_note = {"file": None, "notes": ["SQLite was removed in 5.0.22. Run the PostgreSQL file on DuckDB or Timescale."]}
         uses_helpers = "fdd." in prule["sql"]
         parity = {"status": docs_units.parity_status(rid, known, no_twin)}
         if rid in known:
@@ -260,7 +249,7 @@ def build_manifest(version: str) -> tuple[dict, dict[str, str]]:
                                "not 15.",
                         "rules_with_other_default": other_confirm},
         "dialects": DIALECTS,
-        "sqlite_udfs": lite["helper_functions"],
+        "sqlite_udfs": [],
         "schema": {"core": "schema/core.sql", "core_duckdb": "schema/core.duckdb.sql",
                    "input_sample": "schema/input_sample.sql", "inputs": "schema/inputs.sql",
                    "helpers": {"postgresql": "helpers/postgres.sql", "timescaledb": "helpers/postgres.sql",

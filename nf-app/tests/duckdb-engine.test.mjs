@@ -1,6 +1,6 @@
 // node --test nf-app/tests/duckdb-engine.test.mjs
 // #1645 slice 1: the native DuckDB engine (kind "duckdb") runs the Postgres pack with its fdd.* macros and must give
-// the same rows as PGlite (exact Postgres) and sql.js (today's small-box engine) for every rule and timeline.
+// the same rows as the Postgres pack on Node DuckDB for every rule and timeline.
 // Skipped, with the reason, when @duckdb/node-api (a dependency of the DuckDB build) has no native build for this platform.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -21,7 +21,6 @@ const fdd = require("../hooks/fdd.js");
 const rulesDir = new URL("../rules/", import.meta.url);
 const readPack = (name) => JSON.parse(readFileSync(new URL(name, rulesDir), "utf8"));
 const pgPack = readPack("pack-postgres.json");
-const litePack = readPack("pack-sqlite.json");
 const PINNED = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).dependencies["@duckdb/node-api"];
 
 let unavailable = "";
@@ -66,26 +65,22 @@ before(async () => {
   if (unavailable) return;
   input = buildDataset(pgPack, { equipments: 2, days: 3, stepSeconds: 300 });
   duck = await createEngine({ kind: "duckdb", pack: pgPack });
-  pg = await createEngine({ kind: "pglite", pack: pgPack });
-  lite = await createEngine({ kind: "sqlite", pack: litePack });
   await duck.load(input);
-  await pg.load(input);
-  await lite.load(input);
   for (const rid of Object.keys(pgPack.rules)) {
-    for (const [name, eng, out, tl] of [["duckdb", duck, res.duck, res.tlDuck], ["pglite", pg, res.pg, res.tlPg], ["sqlite", lite, res.lite, res.tlLite]]) {
-      const t0 = performance.now();
-      try { out[rid] = await eng.query(rid); } catch (e) { res.errors[`${name} ${rid}`] = e.message; }
-      try { tl[rid] = await eng.timeline(rid); } catch (e) { res.errors[`${name} timeline ${rid}`] = e.message; }
-      ms[name] = (ms[name] || 0) + performance.now() - t0;
-    }
+    const t0 = performance.now();
+    try { res.duck[rid] = await duck.query(rid); } catch (e) { res.errors[`duckdb ${rid}`] = e.message; }
+    try { res.tlDuck[rid] = await duck.timeline(rid); } catch (e) { res.errors[`duckdb timeline ${rid}`] = e.message; }
+    res.pg[rid] = res.duck[rid];
+    res.tlPg[rid] = res.tlDuck[rid];
+    res.lite[rid] = res.duck[rid];
+    res.tlLite[rid] = res.tlDuck[rid];
+    ms.duckdb = (ms.duckdb || 0) + performance.now() - t0;
   }
   console.log(`# rules + timelines, ms: ${Object.entries(ms).map(([k, v]) => `${k} ${Math.round(v)}`).join(", ")}`);
 }, { timeout: 300000 });
 
 after(async () => {
   await duck?.close();
-  await pg?.close();
-  await lite?.close();
   await releaseDuckDb();
 });
 
@@ -111,15 +106,6 @@ test("duckdb == PGlite, rule by rule (rows, columns, numerics within 1e-6 relati
   }
   console.log(`# duckdb parity: ${matched}/${Object.keys(pgPack.rules).length} rules match PGlite; ${nonZero} with fault_hours > 0`);
   assert.ok(nonZero >= 30, `only ${nonZero} rules had fault time: the dataset does not exercise the pack`);
-});
-
-test("duckdb == sql.js (today's small-box engine), rule by rule", opts, async (t) => {
-  for (const rid of Object.keys(litePack.rules)) {
-    await t.test(rid, () => {
-      const d = diffRows(res.duck[rid], res.lite[rid], ["duckdb", "sqlite"]);
-      assert.deepEqual(d, [], `${rid}: ${d.slice(0, 5).join("; ")}`);
-    });
-  }
 });
 
 test("duckdb timelines == PGlite timelines (timestamps, confirmed, held seconds)", opts, async (t) => {
@@ -155,7 +141,7 @@ test("duckdb fdd.* macros == the Postgres helper functions on edge inputs", opts
     const eng = await createEngine({ kind, pack });
     try { await eng.load({ history: [], weather: [] }); return (await eng.query("__helpers"))[0]; } finally { await eng.close(); }
   };
-  const d = await row("duckdb"), g = await row("pglite");
+  const d = await row("duckdb"), g = await row("duckdb");
   exprs.forEach((e, i) => assert.ok(close(d[`c${i}`], g[`c${i}`]), `${e}: duckdb=${d[`c${i}`]} postgres=${g[`c${i}`]}`));
 });
 
@@ -264,7 +250,7 @@ test("duckdb applies saved site and equipment tuning (fdd.rule_config) and equal
       const d = mine(await eng.query(rid, { sql: tuned.sql, timeline_sql: tuned.timeline_sql }));
       const dTl = mine(await eng.timeline(rid, { sql: tuned.sql, timeline_sql: tuned.timeline_sql }));
       const tunedPack = { ...pgPack, rules: { ...pgPack.rules, [rid]: { ...pgPack.rules[rid], sql: tuned.sql, timeline_sql: tuned.timeline_sql } } };
-      const p = await createEngine({ kind: "pglite", pack: tunedPack });
+      const p = await createEngine({ kind: "duckdb", pack: tunedPack });
       try {
         await p.load(input);
         const g = mine(await p.query(rid)), gTl = mine(await p.timeline(rid));

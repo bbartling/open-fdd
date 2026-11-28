@@ -6,7 +6,8 @@ The one source is sql/fdd/schema/core.sql (tables fdd.point, fdd.rule_result, fd
   * copies it byte for byte to nf-app/timescale/core.sql (installed by the NF app) and open_fdd/data/core.sql
     (shipped in the wheel, so a downstream test compares its vendored copy against the installed package), and
   * writes sql/fdd/schema/core.catalog.json: the normalized catalog (columns, types, defaults, constraints, indexes)
-    that Postgres reports after executing the file (run in PGlite, needs the nf-app npm dependencies), plus its sha256.
+    that Postgres reports after executing the file, plus its sha256. CI checks that sha256 against core.sql.
+    Regenerating the live catalog needs a Postgres-compatible engine; the app does not ship PGlite.
 
     python scripts/nf/build_core_schema.py           # write
     python scripts/nf/build_core_schema.py --check   # exit 1 when a copy or the catalog is stale (CI)
@@ -41,11 +42,17 @@ def sha256_of(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def pglite_available() -> bool:
+    """True only when a developer has PGlite installed. The NF app does not depend on it."""
+    return (ROOT / "nf-app/node_modules/@electric-sql/pglite").is_dir()
+
+
 def pg_catalog(sql_path: Path) -> dict:
-    """Normalized catalog Postgres (PGlite) reports after executing sql_path."""
+    """Normalized catalog Postgres (PGlite) reports after executing sql_path. Regenerate path only."""
     node = shutil.which("node")
-    if not node:
-        raise RuntimeError("node is required (PGlite from the nf-app dependencies)")
+    if not node or not pglite_available():
+        raise RuntimeError("regenerating the catalog needs node and @electric-sql/pglite installed locally; "
+                           "CI checks core.catalog.json by the sha256 of core.sql")
     proc = subprocess.run([node, str(HELPER), str(sql_path)], capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
     if proc.returncode != 0:
         raise RuntimeError(f"core_catalog.mjs failed:\n{proc.stdout}\n{proc.stderr}")
@@ -75,10 +82,18 @@ def main(argv: list[str] | None = None) -> int:
         if not args.check:
             dst.write_bytes(data)
             print(f"wrote {dst.relative_to(ROOT).as_posix()}")
-    catalog = render_catalog().encode("utf-8")
-    if not CATALOG.is_file() or lf(CATALOG.read_bytes()) != catalog:
-        stale.append(CATALOG.relative_to(ROOT).as_posix())
-        if not args.check:
+    if args.check or not pglite_available():
+        stored = json.loads(lf(CATALOG.read_bytes())) if CATALOG.is_file() else {}
+        if stored.get("core_sql_sha256") != sha256_of(data) or set(stored.get("tables") or {}) != {"fdd.point", "fdd.rule_config", "fdd.rule_result"}:
+            stale.append(CATALOG.relative_to(ROOT).as_posix())
+        elif pglite_available():
+            catalog = render_catalog().encode("utf-8")
+            if lf(CATALOG.read_bytes()) != catalog:
+                stale.append(CATALOG.relative_to(ROOT).as_posix())
+    else:
+        catalog = render_catalog().encode("utf-8")
+        if not CATALOG.is_file() or lf(CATALOG.read_bytes()) != catalog:
+            stale.append(CATALOG.relative_to(ROOT).as_posix())
             CATALOG.write_bytes(catalog)
             print(f"wrote {CATALOG.relative_to(ROOT).as_posix()}")
     if args.check:

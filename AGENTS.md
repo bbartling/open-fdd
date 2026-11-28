@@ -15,8 +15,8 @@ rule ids those files name.
 | Path | What |
 |---|---|
 | `nf-app/` | The full app: `app.json`, `static/` UI, `hooks/` (`fdd`, `weather`, `sparql`), `rules/` (SQL packs), `rcx-parity.json`, `dev/mock-nf.mjs`, `tests/` |
-| `lite/` | Open-FDD Lite for 1 GB boxes. Hourly FDD on Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`); the install dependency is that package only |
-| `sql/fdd/` | The FDD math (83 SQL rules in `nf-app/static/fdd-catalog.json`, registry, role map). Packs in `nf-app/rules/` are generated from it. The shipped runtimes are Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`) and Timescale. pandas must match SQL except `open_fdd/data/parity_known_differences.json`. `duckdb>=2.0.1` is a test and parity dependency only |
+| `lite/` | Open-FDD Lite for 1 GB boxes. Hourly FDD on Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`) and the `sparql` hook (`oxigraph` `0.5.13`) |
+| `sql/fdd/` | The FDD math (83 SQL rules in `nf-app/static/fdd-catalog.json`, registry, role map). Packs in `nf-app/rules/` are generated from it. The shipped runtimes are Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`, Parquet history) and Timescale. pandas must match SQL except `open_fdd/data/parity_known_differences.json`. `duckdb>=2.0.1` is a test and parity dependency only |
 | `sql/analytics/` | Read-only analytics SQL. Pandas twins: `open_fdd/analytics/sql_*.py` |
 | `roles/` | Point-role contract `roles/openfdd-roles.json` (`1.1.0-draft.1`). 223P names are the core; Haystack is the binding overlay. QUDT local names (`DEG_C`, `PA`, …) are the wire units |
 | `openapi/`, `contract/` | UI API contract `openapi/open-fdd-ui-api.yaml` (`1.0.0`) and the Node 22 mock |
@@ -61,10 +61,12 @@ PyPI tooling uses pandas for faults. `duckdb>=2.0.1` stays only as a test and pa
    at runtime, the page CSP keeps `script-src 'self' https:` (and `connect-src 'self' https:`). Do not describe the
    app as "self-only" or "no CDN at runtime", and do not add any other remote script. Bump the Clerk pin only to a
    release at least two weeks old, in both `nf-app/static/nf.js` and `lite/static/nf.js`.
-5. **One FDD math.** Change rules in `sql/fdd`, then rebuild the catalog and packs. Node DuckDB and Timescale run
-   the Postgres pack. pandas must match SQL (`tests/parity/`, `.github/workflows/parity.yml`). Sensor sweeps
-   (`SV-RANGE`, `SV-SPIKE`, `SV-FLATLINE`, `SV-STALE`, `SV-RATE`) return one row per sensor. `sqlite` and `pglite`
-   are not runtime engines. A saved option with either name fails. If `@duckdb/node-api` does not load, the run stops.
+5. **One FDD math.** Change rules in `sql/fdd`, then rebuild the catalog and packs (83 SQL rules). Node DuckDB
+   (`@duckdb/node-api` 2.0.1-r.1, Parquet history) and Timescale run the Postgres pack. `auto` picks DuckDB unless
+   Timescale is configured. A saved option named `sqlite` or `pglite` fails and names `duckdb`. Parity compares pandas
+   with Node DuckDB and, when a server is configured, Timescale. If `@duckdb/node-api` does not load, the run stops.
+   The badge in the plugin header is `DuckDB build` or `Timescale build`. Sensor sweeps
+   (`SV-RANGE`, `SV-SPIKE`, `SV-FLATLINE`, `SV-STALE`, `SV-RATE`) return one row per sensor.
 6. **Small PR slices** (one concern each, easy for a small model to review). Update the docs page that describes
    what you changed; `docs/rules/*.md` is generated. See Docs style below.
 

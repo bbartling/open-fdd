@@ -14,9 +14,9 @@ tagging ([Haystack tagging](haystack-tagging.html)). Lite runs the rules on Duck
 | NF app id | `open-fdd-lite` | `open-fdd` |
 | Host | 1 GB boxes, Raspberry Pi class | 2 GB or more; 4 GB or more is comfortable |
 | FDD engine | DuckDB, hourly (`@duckdb/node-api` 2.0.1-r.1) | DuckDB build (Node `@duckdb/node-api` 2.0.1-r.1, Parquet on disk) or Timescale build |
-| What you get | dashboard, charts, points, view of NF's BACnet server, RDF export, weather hook | everything in Lite plus the FDD tab, the Overview RCx dashboard and occupancy calendar, fault points, SPARQL |
+| What you get | dashboard, charts, points, view of NF's BACnet server, RDF export, weather hook, SPARQL | everything in Lite plus the FDD tab, the Overview RCx dashboard and occupancy calendar, fault points |
 | History it can see | NF's own history: **about 7 days** kept in NF's Redis time series (resampled by NF) | the same window from NF, Parquet on disk (default retention 90 days), or long-range history from TimescaleDB |
-| Hook dependencies | `@duckdb/node-api` only | DuckDB build: `@duckdb/node-api`; Timescale build: `pg` |
+| Hook dependencies | `@duckdb/node-api` and `oxigraph` | DuckDB build: those two; Timescale build: `oxigraph` and `pg` |
 
 ## Choose Lite when
 

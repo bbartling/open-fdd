@@ -9,8 +9,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { createEngine } = require("../hooks/lib/engines.js");
 const PACKS = {
-  pglite: JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8")),
-  sqlite: JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8")),
+  duckdb: JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8")),
 };
 const START = Date.UTC(2026, 0, 1);
 
@@ -46,7 +45,7 @@ async function fc4(kind, proofWhen) {
   }
 }
 
-for (const kind of ["pglite", "sqlite"]) {
+for (const kind of ["duckdb"]) {
   test(`${kind}: proven hunting is a fault`, async () => {
     assert.ok(await fc4(kind, () => true) > 2);
   });

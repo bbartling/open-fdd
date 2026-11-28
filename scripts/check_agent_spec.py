@@ -155,7 +155,7 @@ def fact_errors(root: Path, text: str) -> list[str]:
     pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
     if duck_py not in pyproject:
         errors.append(f"pyproject.toml no longer contains {duck_py}; update the spec and this check together")
-    duck_npm = pkg.get("optionalDependencies", {}).get("@duckdb/node-api", "")
+    duck_npm = (pkg.get("dependencies") or {}).get("@duckdb/node-api") or (pkg.get("optionalDependencies") or {}).get("@duckdb/node-api", "")
     agents = (root / "AGENTS.md").read_text(encoding="utf-8")
     contract = (root / "openfdd_agent_spec/DATA_CONTRACT.md").read_text(encoding="utf-8")
     architecture = (root / "openfdd_agent_spec/ARCHITECTURE.md").read_text(encoding="utf-8")

@@ -53,7 +53,7 @@ The same SI rules as the [SQL cookbook](sql-cookbook.html#units-convention):
 
 ## Rules by equipment
 
-**Air handling units** (35): [AHU-DUCTHI](#ahu-ducthi) · [AHU-SATDEV](#ahu-satdev) · [AHU-SIMUL](#ahu-simul) · [CMD-1](#cmd-1) · [COIL-PERF](#coil-perf) · [DMP-1](#dmp-1) · [ECON-1](#econ-1) · [ECON-2](#econ-2) · [ECON-3](#econ-3) · [ECON-4](#econ-4) · [ECON-5](#econ-5) · [ECON-6](#econ-6) · [ECON-7](#econ-7) · [FC1](#fc1) · [FC10](#fc10) · [FC11](#fc11) · [FC12](#fc12) · [FC13-SAT-HIGH](#fc13-sat-high) · [FC14](#fc14) · [FC15](#fc15) · [FC2](#fc2) · [FC3](#fc3) · [FC4](#fc4) · [FC5](#fc5) · [FC6](#fc6) · [FC7](#fc7) · [FC8](#fc8) · [FC9](#fc9) · [MECH-OAT-1](#mech-oat-1) · [OA-1](#oa-1) · [RESET-1](#reset-1) · [SCHED-1](#sched-1) · [SCHED-247](#sched-247) · [TRIM-1](#trim-1) · [VLV-1](#vlv-1)
+**Air handling units** (38): [AHU-DUCTHI](#ahu-ducthi) · [AHU-SATDEV](#ahu-satdev) · [AHU-SIMUL](#ahu-simul) · [CMD-1](#cmd-1) · [COIL-PERF](#coil-perf) · [DMP-1](#dmp-1) · [ECON-1](#econ-1) · [ECON-2](#econ-2) · [ECON-3](#econ-3) · [ECON-4](#econ-4) · [ECON-5](#econ-5) · [ECON-6](#econ-6) · [ECON-7](#econ-7) · [FC1](#fc1) · [FC10](#fc10) · [FC11](#fc11) · [FC12](#fc12) · [FC13-SAT-HIGH](#fc13-sat-high) · [FC14](#fc14) · [FC15](#fc15) · [FC2](#fc2) · [FC3](#fc3) · [FC4](#fc4) · [FC5](#fc5) · [FC6](#fc6) · [FC7](#fc7) · [FC8](#fc8) · [FC9](#fc9) · [MECH-OAT-1](#mech-oat-1) · [OA-1](#oa-1) · [RESET-1](#reset-1) · [SCHED-1](#sched-1) · [SCHED-247](#sched-247) · [TRIM-1](#trim-1) · [VLV-1](#vlv-1) · [XS-CLIP](#xs-clip) · [XS-COPY](#xs-copy) · [XS-MIX](#xs-mix)
 
 **VAV terminals** (9): [VAV-1](#vav-1) · [VAV-2](#vav-2) · [VAV-3](#vav-3) · [VAV-4](#vav-4) · [VAV-5](#vav-5) · [VAV-6](#vav-6) · [VAV-7](#vav-7) · [VAV-AHU-LEAVE](#vav-ahu-leave) · [VAV-REHEAT](#vav-reheat)
 
@@ -67,7 +67,7 @@ The same SI rules as the [SQL cookbook](sql-cookbook.html#units-convention):
 
 **Meters and utilities** (2): [UTIL-INTERVAL](#util-interval) · [UTIL-MONTHLY](#util-monthly)
 
-**Sensor validation and control loops** (9): [PID-HUNT-1](#pid-hunt-1) · [SV-FLATLINE](#sv-flatline) · [SV-RANGE](#sv-range) · [SV-RATE](#sv-rate) · [SV-SPIKE](#sv-spike) · [SV-STALE](#sv-stale) · [XS-CLIP](#xs-clip) · [XS-COPY](#xs-copy) · [XS-MIX](#xs-mix)
+**Sensor validation and control loops** (6): [PID-HUNT-1](#pid-hunt-1) · [SV-FLATLINE](#sv-flatline) · [SV-RANGE](#sv-range) · [SV-RATE](#sv-rate) · [SV-SPIKE](#sv-spike) · [SV-STALE](#sv-stale)
 
 **Weather** (2): [OAT-METEO](#oat-meteo) · [WX-1](#wx-1)
 
@@ -1415,6 +1415,119 @@ Cooling valve ≤ 5% AND (SAT &lt; sat_sp − sat_err OR SAT &lt; MAT − mat_le
 **Parity** [match](parity.html#vlv-1)
 
 
+### XS-CLIP {#xs-clip}
+
+**Clipped sensor** · `ahu`, `vav`, `zone_other` · [`xs_clip`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L75) · [SQL](sql-cookbook.html#xs-clip)
+
+Round maximum held for at least clip_share percent of samples.
+
+**Inputs**
+
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `zone_air_co2` | `zone_co2` | `zone-co2` | `PPM` | Concentration | ppm | none | - | optional |
+| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | optional |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+
+**Parameters**
+
+| Parameter | Label | Default | Min | Max | SI unit |
+|---|---|---:|---:|---:|---|
+| `clip_share` | Share of samples at the limit | 5 | 1 | 50 | % |
+| `co2_round` | CO₂ full-scale step | 100 | 50 | 1000 | ppm |
+| `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
+| `flow_round` | Airflow full-scale step | 50 | 5 | 500 | L/s |
+| `static_round` | Duct static full-scale step | 25 | 5 | 250 | Pa |
+
+**Outputs**
+
+| Output | Unit | Meaning |
+|---|---|---|
+| `equipment_id` | - | equipment the row describes |
+| `fault_hours` | h | confirmed fault time |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
+| `assessment` | - | assessed, or why the equipment was not assessed (for example no_proof) |
+
+**Parity** [match](parity.html#xs-clip)
+
+
+### XS-COPY {#xs-copy}
+
+**Copied signal** · `ahu`, `vav`, `zone_other` · [`xs_copy`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L57) · [SQL](sql-cookbook.html#xs-copy)
+
+Pair within copy_tol while moving.
+
+**Inputs**
+
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | optional |
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
+| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
+| `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+
+**Parameters**
+
+| Parameter | Label | Default | Min | Max | SI unit |
+|---|---|---:|---:|---:|---|
+| `change_min` | Minimum change over the run | 1 | 0.277778 | 5.55556 | Δ°C |
+| `confirm_min` | Fault confirm delay | 120 | 0 | 720 | min |
+| `copy_tol` | Copy tolerance | 0.02 | 0 | 0.5 | Δ°C |
+
+**Outputs**
+
+| Output | Unit | Meaning |
+|---|---|---|
+| `equipment_id` | - | equipment the row describes |
+| `fault_hours` | h | confirmed fault time |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
+| `assessment` | - | assessed, or why the equipment was not assessed (for example no_proof) |
+
+**Parity** [match](parity.html#xs-copy)
+
+
+### XS-MIX {#xs-mix}
+
+**Mixing envelope breach** · `ahu` · [`xs_mix`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L46) · [SQL](sql-cookbook.html#xs-mix)
+
+MAT outside OAT/RAT ± band, fan on.
+
+**Inputs**
+
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+
+**Parameters**
+
+| Parameter | Label | Default | Min | Max | SI unit |
+|---|---|---:|---:|---:|---|
+| `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
+| `mix_band` | Mixing envelope band | 1.11111 | 0.277778 | 5.55556 | Δ°C |
+
+**Outputs**
+
+| Output | Unit | Meaning |
+|---|---|---|
+| `equipment_id` | - | equipment the row describes |
+| `fault_hours` | h | confirmed fault time |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
+| `assessment` | - | assessed, or why the equipment was not assessed (for example no_proof) |
+
+**Parity** [match](parity.html#xs-mix)
+
+
 ## VAV terminals {#group-vav}
 
 
@@ -2730,119 +2843,6 @@ A sensor sent no valid sample for longer than the stale threshold (gap or missin
 | `covered_hours` | h | time with data the rule could read (data coverage) |
 
 **Parity** [match](parity.html#sv-stale)
-
-
-### XS-CLIP {#xs-clip}
-
-**Clipped sensor** · `ahu`, `vav`, `zone_other` · [`xs_clip`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L75) · [SQL](sql-cookbook.html#xs-clip)
-
-Round maximum held for at least clip_share percent of samples.
-
-**Inputs**
-
-| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---|---|---:|---|
-| `zone_air_co2` | `zone_co2` | `zone-co2` | `PPM` | Concentration | ppm | none | - | optional |
-| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | optional |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-
-**Parameters**
-
-| Parameter | Label | Default | Min | Max | SI unit |
-|---|---|---:|---:|---:|---|
-| `clip_share` | Share of samples at the limit | 5 | 1 | 50 | % |
-| `co2_round` | CO₂ full-scale step | 100 | 50 | 1000 | ppm |
-| `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
-| `flow_round` | Airflow full-scale step | 50 | 5 | 500 | L/s |
-| `static_round` | Duct static full-scale step | 25 | 5 | 250 | Pa |
-
-**Outputs**
-
-| Output | Unit | Meaning |
-|---|---|---|
-| `equipment_id` | - | equipment the row describes |
-| `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time with data the rule could read (data coverage) |
-| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
-| `assessment` | - | assessed, or why the equipment was not assessed (for example no_proof) |
-
-**Parity** [match](parity.html#xs-clip)
-
-
-### XS-COPY {#xs-copy}
-
-**Copied signal** · `ahu`, `vav`, `zone_other` · [`xs_copy`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L57) · [SQL](sql-cookbook.html#xs-copy)
-
-Pair within copy_tol while moving.
-
-**Inputs**
-
-| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---|---|---:|---|
-| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | optional |
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
-| `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-
-**Parameters**
-
-| Parameter | Label | Default | Min | Max | SI unit |
-|---|---|---:|---:|---:|---|
-| `change_min` | Minimum change over the run | 1 | 0.277778 | 5.55556 | Δ°C |
-| `confirm_min` | Fault confirm delay | 120 | 0 | 720 | min |
-| `copy_tol` | Copy tolerance | 0.02 | 0 | 0.5 | Δ°C |
-
-**Outputs**
-
-| Output | Unit | Meaning |
-|---|---|---|
-| `equipment_id` | - | equipment the row describes |
-| `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time with data the rule could read (data coverage) |
-| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
-| `assessment` | - | assessed, or why the equipment was not assessed (for example no_proof) |
-
-**Parity** [match](parity.html#xs-copy)
-
-
-### XS-MIX {#xs-mix}
-
-**Mixing envelope breach** · `ahu` · [`xs_mix`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L46) · [SQL](sql-cookbook.html#xs-mix)
-
-MAT outside OAT/RAT ± band, fan on.
-
-**Inputs**
-
-| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---|---|---:|---|
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-
-**Parameters**
-
-| Parameter | Label | Default | Min | Max | SI unit |
-|---|---|---:|---:|---:|---|
-| `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
-| `mix_band` | Mixing envelope band | 1.11111 | 0.277778 | 5.55556 | Δ°C |
-
-**Outputs**
-
-| Output | Unit | Meaning |
-|---|---|---|
-| `equipment_id` | - | equipment the row describes |
-| `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time with data the rule could read (data coverage) |
-| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
-| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
-| `assessment` | - | assessed, or why the equipment was not assessed (for example no_proof) |
-
-**Parity** [match](parity.html#xs-mix)
 
 
 ## Weather {#group-weather}

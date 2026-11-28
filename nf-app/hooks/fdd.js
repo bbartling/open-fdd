@@ -64,7 +64,7 @@
 // see lib/settings.js; a string value such as "24" or a JSON string for timescale is converted):
 //   engine        "auto" | "duckdb" | "timescale"
 //                 auto: Timescale when this is the Timescale build or the timescale option is set, otherwise DuckDB.
-//                 sqlite and pglite were removed: naming either fails the run. There is no fallback and no WASM engine.
+//                 sqlite and pglite were removed: naming either fails the run and names duckdb. There is no fallback and no WASM engine.
 //                 On the DuckDB build, if @duckdb/node-api does not load, the run logs the error and does not run rules.
 //                 With the option timescale set, duckdb reads the saved tuning (fdd.rule_config) from it like the timescale engine.
 //   duckdbMemoryLimit  DuckDB memory cap, e.g. "256MB" (default) or "1GB"; duckdbThreads  DuckDB threads (default 2). Engine duckdb only

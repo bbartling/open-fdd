@@ -16,7 +16,6 @@ from open_fdd.parity import Policy, compare, generate, reference
 from stress import BASELINE, engines_disagree
 
 ROOT = Path(__file__).resolve().parents[2]
-PACK_SQLITE = ROOT / "nf-app" / "rules" / "pack-sqlite.json"
 _BASE = json.loads(BASELINE.read_text(encoding="utf-8"))["datasets"]
 PINNED_4X3 = next(d for d in _BASE if (d["equips"], d["days"], d["profile"]) == (4, 3, "basic"))
 
@@ -33,7 +32,7 @@ def ds_edge_4x3():
 
 @pytest.fixture(scope="module")
 def pglite_basic_4x3(ds_basic_4x3):
-    ad = NodeEngineAdapter("pglite")
+    ad = NodeEngineAdapter("duckdb")
     ad.load(ds_basic_4x3)
     try:
         return ad.run()
@@ -43,7 +42,7 @@ def pglite_basic_4x3(ds_basic_4x3):
 
 @pytest.fixture(scope="module")
 def pglite_edge_4x3(ds_edge_4x3):
-    ad = NodeEngineAdapter("pglite")
+    ad = NodeEngineAdapter("duckdb")
     ad.load(ds_edge_4x3)
     try:
         return ad.run()
@@ -60,7 +59,7 @@ def test_duckdb_4x3_basic_parity_matches_pglite_and_pandas(ds_basic_4x3, pglite_
     finally:
         duck.close()
     assert duck.stats["errors"] == {}
-    bad = engines_disagree({"pglite": pglite_basic_4x3, "duckdb": duck_rows}, "duckdb", ref_engine="pglite")
+    bad = engines_disagree({"duckdb": pglite_basic_4x3, "duckdb-py": duck_rows}, "duckdb-py", ref_engine="duckdb")
     assert bad == [], bad
     verdict = compare(duck_rows, reference(ds_basic_4x3), Policy.default("basic", stress=True))
     assert {k: verdict.to_dict()[k] for k in PINNED_4X3["verdict"]} == PINNED_4X3["verdict"], verdict.summary()
@@ -76,7 +75,7 @@ def test_duckdb_4x3_edge_parity_matches_pglite_and_pandas(ds_edge_4x3, pglite_ed
     finally:
         duck.close()
     assert duck.stats["errors"] == {}
-    bad = engines_disagree({"pglite": pglite_edge_4x3, "duckdb": duck_rows}, "duckdb", ref_engine="pglite")
+    bad = engines_disagree({"duckdb": pglite_edge_4x3, "duckdb-py": duck_rows}, "duckdb-py", ref_engine="duckdb")
     assert bad == [], bad
     verdict = compare(duck_rows, reference(ds_edge_4x3), Policy.default("edge", stress=True, dataset="edge/0/4/3"))
     assert verdict.ok, verdict.summary()
@@ -95,7 +94,7 @@ def test_parquet_through_duckdb_matches_pglite(profile, ds_basic_4x3, ds_edge_4x
     finally:
         duck.close()
     assert duck.stats["errors"] == {}
-    bad = engines_disagree({"pglite": ref, "duckdb-parquet": rows}, "duckdb-parquet", ref_engine="pglite")
+    bad = engines_disagree({"duckdb": ref, "duckdb-parquet": rows}, "duckdb-parquet", ref_engine="duckdb")
     assert bad == [], bad
 
 
@@ -109,7 +108,7 @@ def test_postgres_4x3_basic_and_edge_parity(ds_basic_4x3, ds_edge_4x3, pglite_ba
         finally:
             pg.close()
         assert pg.stats["errors"] == {}, pg.stats["errors"]
-        bad = engines_disagree({"pglite": pg_rows, "postgres": rows}, "postgres", ref_engine="pglite")
+        bad = engines_disagree({"duckdb": pg_rows, "postgres": rows}, "postgres", ref_engine="duckdb")
         assert bad == [], f"{profile}: {bad}"
         verdict = compare(
             rows,
@@ -306,58 +305,6 @@ def _register_sqlite_udfs(db: sqlite3.Connection) -> None:
     ))
 
 
-def test_python_sqlite3_udf_registration_smoke(pglite_basic_4x3):
-    """Downstream Python users running pack-sqlite.json in stdlib sqlite3 match PGlite row-for-row."""
-    pack = json.loads(PACK_SQLITE.read_text(encoding="utf-8"))
-    ds = generate(0, 4, 3, "basic")
-    db = sqlite3.connect(":memory:")
-    _register_sqlite_udfs(db)
-    try:
-        cols = [dict(c) for c in pack["contract"]["history"]]
-        have = {c["name"] for c in cols}
-        for c in ds.history_columns:
-            if c["name"] not in have:
-                cols.append({"name": c["name"], "type": "text" if c["type"] == "text" else "double"})
-                have.add(c["name"])
-        sq_type = {"double": "REAL", "text": "TEXT", "timestamp": "REAL"}
-        input_map = {
-            "history": (cols, ds.history),
-            "weather": (pack["contract"]["weather"], ds.weather),
-            "sensor_history": (pack["contract"]["sensor_history"], ds.sensor_history),
-            "utility_interval": (pack["contract"]["utility_interval"], ds.utility_interval),
-            "utility_monthly": (pack["contract"]["utility_monthly"], ds.utility_monthly),
-            "sweep_series": (pack["contract"]["sweep_series"], []),   # optional (#1673): empty = observed series
-        }
-        for table, (spec, rows) in input_map.items():
-            ddl = ", ".join(f'"{c["name"]}" {sq_type[c["type"]]}' for c in spec)
-            db.execute(f"CREATE TABLE {table} ({ddl})")
-            if rows:
-                names = ", ".join(f'"{c["name"]}"' for c in spec)
-                q = ", ".join(["?"] * len(spec))
-                tuples = [
-                    tuple(
-                        (float(row["ts"]) / 1000.0 if row.get("ts") is not None else None)
-                        if c["type"] == "timestamp"
-                        else row.get(c["name"])
-                        for c in spec
-                    )
-                    for row in rows
-                ]
-                db.executemany(f"INSERT INTO {table} ({names}) VALUES ({q})", tuples)
-
-        subset = ("FC1", "FC4", "SV-RANGE", "SV-SPIKE", "SV-FLATLINE", "SV-STALE", "SV-RATE", "UTIL-MONTHLY")
-        got = {}
-        for rid in subset:
-            cur = db.execute(pack["rules"][rid]["sql"])
-            col_names = [d[0] for d in cur.description]
-            got[rid] = [dict(zip(col_names, r)) for r in cur.fetchall()]
-    finally:
-        db.close()
-
-    pg_subset = {rid: pglite_basic_4x3[rid] for rid in subset}
-    assert engines_disagree({"pglite": pg_subset, "sqlite_py": got}, "sqlite_py", ref_engine="pglite") == []
-
-
 def test_negative_parity_gates_fail_loudly(pglite_basic_4x3):
     """Mutating a threshold/result, dropping a sensor row, injecting NaN, or duplicating a key must fail the gate."""
     ds = generate(0, 4, 3, "basic")
@@ -369,21 +316,21 @@ def test_negative_parity_gates_fail_loudly(pglite_basic_4x3):
     assessed = lambda rows: next(r for r in rows if r["fault_hours"] is not None)  # noqa: E731
     mutated = copy.deepcopy(pglite_basic_4x3)
     assessed(mutated["FC1"])["fault_hours"] = float(assessed(mutated["FC1"])["fault_hours"]) + 5.0
-    assert engines_disagree({"pglite": pglite_basic_4x3, "bad": mutated}, "bad")
+    assert engines_disagree({"duckdb": pglite_basic_4x3, "bad": mutated}, "bad")
     v_bad = compare(mutated, ref, policy)
     assert not v_bad.ok and "FC1" in v_bad.unexpected_rules
 
     # 2. Missing sensor row fails engines_disagree
     dropped = copy.deepcopy(pglite_basic_4x3)
     dropped["SV-RANGE"] = dropped["SV-RANGE"][1:]
-    assert engines_disagree({"pglite": pglite_basic_4x3, "bad": dropped}, "bad")
+    assert engines_disagree({"duckdb": pglite_basic_4x3, "bad": dropped}, "bad")
 
     # 3. Nonfinite value fails engines_disagree
     nan_rows = copy.deepcopy(pglite_basic_4x3)
     assessed(nan_rows["FC1"])["fault_hours"] = float("nan")
-    assert engines_disagree({"pglite": pglite_basic_4x3, "bad": nan_rows}, "bad")
+    assert engines_disagree({"duckdb": pglite_basic_4x3, "bad": nan_rows}, "bad")
 
     # 4. Duplicate key fails engines_disagree
     dup_rows = copy.deepcopy(pglite_basic_4x3)
     dup_rows["FC1"].append(dict(assessed(dup_rows["FC1"])))
-    assert engines_disagree({"pglite": pglite_basic_4x3, "bad": dup_rows}, "bad")
+    assert engines_disagree({"duckdb": pglite_basic_4x3, "bad": dup_rows}, "bad")

@@ -1,4 +1,4 @@
-// Full hook path (hooks/sparql.js runSparql, vendored Oxigraph) for tests/test_sparql_engines.py.
+// Full hook path (hooks/sparql.js runSparql, the oxigraph npm package) for tests/test_sparql_engines.py.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 

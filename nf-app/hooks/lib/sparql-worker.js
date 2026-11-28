@@ -6,7 +6,8 @@
 const { parentPort, workerData } = require('worker_threads');
 
 function oxigraph() {
-  try { return require(/** @type {string} */ ('oxigraph')); } catch (e) { return require(/** @type {string} */ ('../../static/vendor/oxigraph/node.js')); }
+  try { return require(/** @type {string} */ ('oxigraph')); }
+  catch (e) { throw new Error(`oxigraph is not installed (${e && e.message}). Install the app dependencies.`); }
 }
 
 function splitPrologue(query) {

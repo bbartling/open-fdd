@@ -24,12 +24,12 @@ LIMITS_FILE = ROOT / "open_fdd" / "data" / "sensor_sweep_limits.json"
 
 def _run(tmp_path, name, limits=None):
     rule_sql = {"SV-RANGE": render_rule.render("SV-RANGE", role_limits=limits)} if limits is not None else None
-    return h.run_sql(2, 3, tmp_path / f"{name}.json", engines="pglite", rules="SV-RANGE", plant_sensors=True, rule_sql=rule_sql)
+    return h.run_sql(2, 3, tmp_path / f"{name}.json", engines="duckdb", rules="SV-RANGE", plant_sensors=True, rule_sql=rule_sql)
 
 
 def _per_role(data, equip, limits=None):
     """(sql, pandas) fault hours by SQL role name for one equipment."""
-    sql = h.sql_rows(data, "pglite", "SV-RANGE")[equip]["sensor_fault_hours"]
+    sql = h.sql_rows(data, "duckdb", "SV-RANGE")[equip]["sensor_fault_hours"]
     df = h.equip_frame(data, equip)
     if limits is not None:
         df.attrs["sweep_limits"] = limits

@@ -6,9 +6,9 @@
 //
 // Answer: {ok, base, snapshot, total_chars, offset, next_offset | null, points, turtle}. Offsets count UTF-16 characters;
 // `limit` is UTF-8 bytes. Pass the first answer's `snapshot` on later pages: a changed model answers model_changed. The slice is of the same Turtle the Model & RDF tab builds (static/model.js modelToTurtle); page with
-// next_offset until it is null. Lite has no SPARQL engine (1 GB boxes): a client runs the SPARQL itself on this
-// Turtle (open_fdd.nf.sparql_data) and reads history through NF's /api/v1/point/data. Full also has the
-// `sparql` and `sparql-data` hooks. Read-only: it only reads NF's point records. Nothing site-specific here.
+// next_offset until it is null. Both editions answer SPARQL on the sparql hook (the oxigraph package in the Node
+// process). Full also has the sparql-data hook. A client may still query this Turtle itself (open_fdd.nf.sparql_data,
+// rdflib) and read history through NF's /api/v1/point/data. Read-only: it only reads NF's point records. Nothing site-specific here.
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');

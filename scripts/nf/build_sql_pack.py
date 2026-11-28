@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Build the NF-app SQL rule packs from the Open-FDD SQL pack (sql/fdd).
 
-Writes, for the hook's two SQL engines:
+Writes the pack the NF app ships:
 
-  nf-app/rules/pack-postgres.json   rendered Postgres SQL (PGlite runs it as is)
-  nf-app/rules/pack-sqlite.json     the same rules translated to SQLite (sql.js)
+  nf-app/rules/pack-postgres.json   rendered Postgres SQL (Node DuckDB and Timescale)
 
 Both files have the shape
 
@@ -606,7 +605,8 @@ def build():
     if column_fixes:
         print(f"note: tuning_catalog.json output_columns incomplete for {len(column_fixes)} rules "
               f"(using the SELECT list): {', '.join(sorted(column_fixes))}", file=sys.stderr)
-    return {"pack-postgres.json": pg_pack, "pack-sqlite.json": lite_pack}
+    # The SQLite translation is only a build-time column probe. The app does not ship pack-sqlite.json.
+    return {"pack-postgres.json": pg_pack}
 
 
 def dump(obj):
@@ -630,13 +630,9 @@ def main():
             OUT_DIR.mkdir(parents=True, exist_ok=True)
             path.write_bytes(text.encode("utf-8"))
             print(f"wrote {path.relative_to(ROOT)} ({len(text) // 1024} KB, {len(obj['rules'])} rules)")
-    lite = packs["pack-sqlite.json"]
-    print(f"sqlite: {len(lite['rules'])} translated, {len(lite['skipped'])} skipped")
     for nm, pk in packs.items():
         n = sum(1 for r in pk["rules"].values() if r["timeline_sql"])
         print(f"{nm}: timeline_sql on {n} of {len(pk['rules'])} rules")
-    for rid, why in lite["skipped"].items():
-        print(f"  skipped {rid}: {why}")
     if args.check and stale:
         print("STALE: " + ", ".join(stale) + " (run: python scripts/nf/build_sql_pack.py)", file=sys.stderr)
         return 1

@@ -23,7 +23,8 @@ a copy is missing, hand-edited or stale. Edit shared/..., run this script, commi
 Edition-specific files stay in their own tree: app.js (Lite: starts the shell; Full: registers the FDD / RCx / Export
 tabs, units toggle and Run FDD through the ofddTabs / ofddWire registries of app-core.js), index.html / chart.html /
 tree.html (script lists differ: Full loads the ES-module ECharts, Lite the UMD build), style.css (edition rules on top
-of base.css), and everything only Full has (fdd*.js, rcx*.js, energy.js, export.js, sparql.js, units.js, ...).
+of base.css), and everything only Full has (fdd*.js, rcx*.js, energy.js, export.js, units.js, ...). The SPARQL
+panel and hook are shared (`shared/static/sparql.js`, `shared/hooks/sparql.js`).
 
     python scripts/nf/sync_shared.py            # write the copies
     python scripts/nf/sync_shared.py --check    # exit 1 when a copy is missing or differs from its source
@@ -44,6 +45,8 @@ SHARED: dict[str, list[str]] = {
     "shared/hooks/site-timezone.js": ["nf-app/hooks/lib/site-timezone.js"],
     "shared/hooks/start-hook-args.js": [f"{app}/hooks/lib/start-hook-args.js" for app in BOTH],
     "shared/hooks/rdf.js": [f"{app}/hooks/rdf.js" for app in BOTH],
+    "shared/hooks/sparql.js": [f"{app}/hooks/sparql.js" for app in BOTH],
+    "shared/static/sparql.js": [f"{app}/static/sparql.js" for app in BOTH],
     "shared/role-limits.js": ["nf-app/hooks/lib/role-limits.js", "nf-app/static/role-limits.js"],
     "shared/rule-tuning.js": ["nf-app/hooks/lib/rule-tuning.js", "nf-app/static/rule-tuning.js"],
     "shared/hooks/open_meteo_weather.js": ["nf-app/hooks/weather.js", "lite/hooks/open_meteo_weather.js"],

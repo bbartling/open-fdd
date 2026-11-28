@@ -90,7 +90,7 @@ test("hook: the skip reason and the log carry the refusal", async () => {
     },
   };
   const engine = () => async () => ({
-    kind: "sqlite",
+    kind: "duckdb",
     async load(input) { return input.history.length; },
     async query() { return [{ equipment_id: "AHU-1", fault_hours: null, covered_hours: 0, fault_pct: null }]; },
     async close() {},
