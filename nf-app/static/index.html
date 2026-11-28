@@ -58,7 +58,7 @@
 <header>
   <div>
     <h1>⚡ Open-FDD</h1>
-    <span class="pill app-engine" id="engineBuild" data-ofdd-engine="duckdb">DuckDB build</span>
+    <span class="pill app-engine" id="engineBuild" data-ofdd-engine="duckdb">DuckDB backend</span>
     <div class="sub" id="sub">Loading the Haystack model…</div>
   </div>
   <div class="spacer"></div>
@@ -70,12 +70,12 @@
 </header>
 <nav class="tabs" id="tabs">
   <button data-tab="overview" class="on">Overview</button>
-  <button data-tab="analytics">Analytics</button>
   <button data-tab="charts">Charts</button>
-  <button data-tab="fdd">FDD <span class="count" id="nRules"></span></button>
-  <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
+  <button data-tab="analytics">Analytics</button>
+  <button data-tab="fdd">Fault detection <span class="count" id="nRules"></span></button>
+  <button data-tab="bacnet">Backend server <span class="count" id="nBacnet"></span></button>
   <button data-tab="export">Export</button>
-  <button data-tab="model">Model &amp; RDF</button>
+  <button data-tab="model">Model/RDF</button>
 </nav>
 
 <main>
@@ -122,7 +122,7 @@
         </table></div>
       </section>
       <section class="panel">
-        <h2>Point data <span class="count" id="nPoints"></span>
+        <h2>Point data
           <input type="search" id="pointFilter" placeholder="markers, e.g. temp sensor (all must match)">
           <label class="hint"><input type="checkbox" id="showUntagged"> show untagged objects</label>
           <span class="hint" id="pointHint"></span>
@@ -141,17 +141,6 @@
     </div>
   </section>
 
-  <!-- Analytics: scatter, air-handler timeseries, VAV plots and energy. Fetched only after this tab is opened. -->
-  <section class="tab" id="tab-analytics">
-    <section class="panel">
-      <h2>Analytics <span class="hint">scatter, air-handler timeseries, VAV plots and energy · loaded when you open this tab</span></h2>
-      <p class="hint" id="anMode"></p>
-      <div id="anRangeControl"></div><p id="anRangeStatus" class="hint" role="status"></p>
-    </section>
-    <div class="kpis" id="anKpis"></div>
-    <div id="anBody"></div>
-  </section>
-
   <!-- Charts: pick one; only that chart's points are fetched (resampled by NF) -->
   <section class="tab" id="tab-charts">
     <section class="panel">
@@ -168,6 +157,17 @@
       <p id="chartRangeStatus" class="hint" role="status"></p>
       <div class="chart tall" id="chartHost"></div>
     </section>
+  </section>
+
+  <!-- Analytics: scatter, air-handler timeseries, VAV plots and energy. Fetched only after this tab is opened. -->
+  <section class="tab" id="tab-analytics">
+    <section class="panel">
+      <h2>Analytics <span class="hint">scatter, air-handler timeseries, VAV plots and energy · loaded when you open this tab</span></h2>
+      <p class="hint" id="anMode"></p>
+      <div id="anRangeControl"></div><p id="anRangeStatus" class="hint" role="status"></p>
+    </section>
+    <div class="kpis" id="anKpis"></div>
+    <div id="anBody"></div>
   </section>
 
   <!-- FDD: the selected equipment's rules, faults first. Summary chips filter the list; one rule opens at a time with its
@@ -200,7 +200,7 @@
       <section class="tuners-panel" id="fddTunersPanel"></section>
     </aside>
     <details class="panel fdd-more" id="fddMore">
-      <summary>More: fault-history heat map, FDD charts, every rule and its inputs</summary>
+      <summary>More: fault-history heat map, fault charts, every rule and its inputs</summary>
       <div class="stats" id="fddStats"></div>
       <section class="panel" id="fddResultsPanel" hidden>
         <h2>Faults <span class="hint" id="fddResultsHint">written by the open-fdd hook · sensor sweeps show per-sensor results</span>
@@ -216,7 +216,7 @@
         </table></div>
       </section>
       <section class="panel">
-        <h2>FDD charts <span class="hint">signals on top, bool fault lane at the bottom</span></h2>
+        <h2>Fault charts <span class="hint">signals on top, bool fault lane at the bottom</span></h2>
         <div id="fddChartsRangeControl"></div><p id="fddChartsRangeStatus" class="hint" role="status"></p>
       </section>
       <div id="fddBody"></div>

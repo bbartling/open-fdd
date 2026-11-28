@@ -332,6 +332,15 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
     installApp.hooks = installApp.hooks.filter((h) => h.id !== id);
     return json(res, 200, { success: true });
   }
+  if (p === "/api/v1/apps/open-fdd/hooks/schema" && req.method === "POST") {
+    const opt = (installApp.options || []).find((o) => o.name === "engine");
+    const asked = String((opt && opt.value && (opt.value.string || opt.value)) || "duckdb").toLowerCase();
+    const id = asked === "timescale" ? "timescale" : "duckdb";
+    return json(res, 200, {
+      ok: true, skipped: id !== "timescale", engine: id,
+      engine_label: id === "timescale" ? "Timescale backend" : "DuckDB backend", engine_error: null,
+    });
+  }
   if (p === "/api/v1/apps/open-fdd/dependencies" && req.method === "PATCH") return json(res, 200, { success: true });
   if (p === "/api/v1/apps/open-fdd/restart" && req.method === "PATCH") return json(res, 200, { success: true });
   if (p === "/" || p === "/api/v1/apps/static/open-fdd") { res.writeHead(302, { Location: APP_PREFIX }); return res.end(); }

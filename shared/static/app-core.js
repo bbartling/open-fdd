@@ -187,7 +187,6 @@ async function applyScope() {
   const tagged = taggedOnSite();
   const site = model.sites.find((s) => idOf(s) === scope.site);
   $("sub").textContent = `${site?.name ?? scope.site} · ${siteEquipIds().length} equips · ${tagged.length} tagged points · ${location.host}`;
-  $("nPoints").textContent = tagged.length;
   renderSummary();
   renderCards();
   renderChips();
@@ -419,6 +418,7 @@ function pointRows() {
   const inScope = (p) => !has(p, "point") || isWeatherPoint(p) || (!!eq && p.equipRef === eq);
   return model.points
     .filter((p) => p.siteRef === scope.site && (showUntagged || has(p, "point")))
+    .filter((p) => !isDiagnosticPoint(p))
     .filter(inScope)
     .filter((p) => tokens.every((t) => p.tags.some((m) => m.toLowerCase() === t) || p.dis.toLowerCase().includes(t)))
     .sort((a, b) => (Number(has(b, "point")) - Number(has(a, "point"))) || pointGroup(a).localeCompare(pointGroup(b))
@@ -597,16 +597,17 @@ function entityNode(rec, kind, children, label) {
 }
 
 function buildTree() {
-  const site = model.sites.find((s) => idOf(s) === scope.site);
-  const onSite = model.points.filter((p) => p.siteRef === scope.site);
-  const equipNodes = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site).map((equip) => {
-    const eid = idOf(equip);
-    const eqPts = onSite.filter((p) => p.equipRef === eid && !isWeatherPoint(p));
-    const devs = model.devices.filter((d) => (d.attrs || {}).equipRef === eid);
-    const devNodes = devs.map((d) => {
-      const did = idOf(d);
-      const kids = eqPts.filter((p) => p.deviceRef === did).map(pointNode);
-      const internals = onSite.filter((p) => p.deviceRef === did && !p.equipRef);
+  const siteId = refId(scope.site);
+  const site = model.sites.find((s) => refId(idOf(s)) === siteId);
+  const onSite = model.points.filter((p) => refId(p.siteRef) === siteId && !isDiagnosticPoint(p));
+  const equipNodes = model.equips.filter((e) => refId((e.attrs || {}).siteRef) === siteId).map((equip) => {
+    const keys = new Set(equipKeys(equip));
+    const eqPts = onSite.filter((p) => keys.has(refId(p.equipRef)) && !isWeatherPoint(p));
+    const devs = devicesForEquip(equip, model.devices, onSite);
+    const devNodes = devs.map(({ rec: d }) => {
+      const did = refId(idOf(d));
+      const kids = eqPts.filter((p) => refId(p.deviceRef) === did).map(pointNode);
+      const internals = onSite.filter((p) => refId(p.deviceRef) === did && !refId(p.equipRef));
       if (internals.length) {
         kids.push({
           name: `untagged objects (${internals.length})`, kind: "other", collapsed: true,
@@ -618,7 +619,8 @@ function buildTree() {
       }
       return entityNode(d, "device", kids, did);
     });
-    const loose = eqPts.filter((p) => !devs.some((d) => p.deviceRef === idOf(d))).map(pointNode);
+    const devIds = new Set(devs.map(({ rec }) => refId(idOf(rec))));
+    const loose = eqPts.filter((p) => !devIds.has(refId(p.deviceRef))).map(pointNode);
     return entityNode(equip, "equip", [...devNodes, ...loose]);
   });
   const stations = [...new Set(onSite.map((p) => p.weatherStationRef).filter(Boolean))].map((ws) =>
@@ -648,13 +650,15 @@ function showDetail(node) {
 }
 
 function renderModelChecks() {
-  const onSite = model.points.filter((p) => p.siteRef === scope.site);
+  const onSite = model.points.filter((p) => refId(p.siteRef) === refId(scope.site) && !isDiagnosticPoint(p));
   const tagged = onSite.filter((p) => has(p, "point"));
   const equipIds = new Set(model.equips.map(idOf));
   const deviceIds = new Set(model.devices.map(idOf));
   const stale = tagged.filter((p) => has(p, "his") && (!p.latest?.ts || Date.now() - parseTs(p.latest.ts) > 30 * 60e3));
+  // fault / fdd / timeline markers belong to diagnostic points. They stay in the Turtle and out of this check.
+  const visualOdd = rdf.nonStandard.filter((t) => t !== "fault" && t !== "fdd" && !/timeline/i.test(t));
   const checks = [
-    [rdf.nonStandard.length === 0, "tags outside the Haystack libs", rdf.nonStandard],
+    [visualOdd.length === 0, "tags outside the Haystack libs", visualOdd],
     [tagged.every((p) => p.cls || has(p, "weather") || has(p, "spare")), "tagged points without a class",
       tagged.filter((p) => !p.cls && !has(p, "weather") && !has(p, "spare")).map((p) => p.dis)],
     [tagged.every((p) => p.kind !== "Number" || p.units), "Number points without a unit",
@@ -688,27 +692,40 @@ function renderModel() {
     return item;
   }));
   renderModelChecks();
-  const root = buildTree();
+  paintHaystackTree(buildTree(), 0);
+}
+
+function paintHaystackTree(root, tries) {
+  const el = $("tree");
+  if (!el) return;
+  if (el.clientWidth < 8 && tries < 30) {
+    requestAnimationFrame(() => paintHaystackTree(root, tries + 1));
+    return;
+  }
   const leaves = (n, depth) => (!n.children?.length || n.collapsed || depth >= 4 ? 1
     : n.children.reduce((s, c) => s + leaves(c, depth + 1), 0));
-  $("tree").style.height = `${Math.max(520, leaves(root, 0) * 24 + 60)}px`;
-  const chart = mk("tree");
-  chart.resize();
-  ofddRender(chart, {
-    tooltip: { trigger: "item",
-      formatter: (x) => esc(x.data.point?.dis || x.data.rec?.attrs?.dis || x.name) },
-    series: [{
-      type: "tree", data: [root], top: 30, bottom: 20, left: 90, right: 300,
-      orient: "LR", initialTreeDepth: 4, roam: true, expandAndCollapse: true, animationDuration: 400,
-      symbol: "circle", lineStyle: { color: cssVar("--line"), width: 1.4, curveness: 0.5 },
-      label: { position: "top", distance: 6, align: "center", color: cssVar("--text"), fontSize: 12 },
-      leaves: { label: { position: "right", verticalAlign: "middle", align: "left", distance: 6 } },
-      emphasis: { focus: "descendant" },
-    }],
-  }, "haystack-tree");
-  chart.off("click");
-  chart.on("click", (x) => showDetail(x.data));
-  showDetail(root);
+  el.style.height = `${Math.max(520, leaves(root, 0) * 24 + 60)}px`;
+  try {
+    const chart = mk("tree");
+    chart.resize();
+    ofddRender(chart, {
+      tooltip: { trigger: "item",
+        formatter: (x) => esc(x.data.point?.dis || x.data.rec?.attrs?.dis || x.name) },
+      series: [{
+        type: "tree", data: [root], top: 30, bottom: 20, left: 90, right: 300,
+        orient: "LR", initialTreeDepth: 4, roam: true, expandAndCollapse: true, animationDuration: 400,
+        symbol: "circle", lineStyle: { color: cssVar("--line"), width: 1.4, curveness: 0.5 },
+        label: { position: "top", distance: 6, align: "center", color: cssVar("--text"), fontSize: 12 },
+        leaves: { label: { position: "right", verticalAlign: "middle", align: "left", distance: 6 } },
+        emphasis: { focus: "descendant" },
+      }],
+    }, "haystack-tree");
+    chart.off("click");
+    chart.on("click", (x) => showDetail(x.data));
+    showDetail(root);
+  } catch (e) {
+    el.textContent = e && e.message ? e.message : String(e);
+  }
 }
 
 function download(name, text, type) {
@@ -917,7 +934,7 @@ async function main() {
   setInterval(() => ($("clock").textContent = new Date().toLocaleString()), 1000);
   wireControls();
   loadChartPref();
-  await initAuth();
+  await whenAuthReady();
   await loadSiteTimeZoneSources();
   model = await loadModel();
   scope.site = idOf(model.sites[0]);

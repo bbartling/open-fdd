@@ -2,14 +2,14 @@
 /**
  * Which runtime build this install is. `static/engine-build.json` is the source copy (the DuckDB build).
  * `scripts/nf/build_app_dist.py` rewrites it, and the plugin HTML, for the Timescale recipe.
- * The visible badge is the label only ("DuckDB build" or "Timescale build"). `libraryVersion` is for the
- * status API and is not shown in the badge.
+ * The visible badge is the resolved backend ("DuckDB backend" or "Timescale backend"), not the
+ * install recipe. `libraryVersion` is for the status API and is not shown in the badge.
  */
 const fs = require("fs");
 const path = require("path");
 
 const BUILD_FILE = path.join(__dirname, "..", "..", "static", "engine-build.json");
-const LABELS = Object.freeze({ duckdb: "DuckDB build", timescale: "Timescale build" });
+const LABELS = Object.freeze({ duckdb: "DuckDB backend", timescale: "Timescale backend" });
 
 function readBuild() {
   try {
@@ -32,7 +32,30 @@ function record() {
 /** The sentence the UI, the log and the status API show. No engine is substituted. */
 function duckdbLoadError(reason) {
   const why = String(reason || "module did not load").replace(/\s+/g, " ").trim();
-  return `DuckDB engine failed to load: ${why}. Reinstall the DuckDB build or switch to the Timescale build.`;
+  return `DuckDB engine failed to load: ${why}. Reinstall the DuckDB backend or switch to the Timescale backend.`;
+}
+
+/**
+ * The engine this config will run. Matches pickEngine's auto rule: Timescale when the name is
+ * timescale, or when auto and this install is the Timescale recipe or the timescale option is set.
+ * An explicit duckdb stays DuckDB. sqlite and pglite are not resolved here (the caller rejects them).
+ * @param {any} [config]
+ * @param {string} [buildId]
+ * @returns {"duckdb"|"timescale"}
+ */
+function resolvedEngineId(config, buildId) {
+  const raw = config && typeof config === "object" ? config : {};
+  const name = String(raw.engine == null || String(raw.engine).trim() === "" ? "auto" : raw.engine).trim().toLowerCase();
+  const build = buildId || record().id;
+  let timescaleOn = false;
+  try {
+    const settings = require("./settings.js");
+    timescaleOn = !!settings.parseTimescale(raw.timescale);
+  } catch (e) {
+    timescaleOn = !!raw.timescale;
+  }
+  if (name === "timescale" || (name === "auto" && (build === "timescale" || timescaleOn))) return "timescale";
+  return "duckdb";
 }
 
 function retiredEngineError(name) {
@@ -59,15 +82,21 @@ function describeLoad(hasDuckdb) {
   return probe ? { ok: true, reason: "" } : { ok: false, reason: "module did not load" };
 }
 
-/** Status-API fields. On the DuckDB build a package that does not load sets `engine_error` and nothing else runs. */
-function statusFields(load) {
+/**
+ * Status-API fields. `engine` and `engine_label` are the resolved backend (what the header shows).
+ * `engine_build` stays the install recipe. A DuckDB package that does not load sets `engine_error`.
+ */
+function statusFields(load, config) {
   const rec = record();
+  const id = resolvedEngineId(config, rec.id);
   let engine_error = null;
-  if (rec.id === "duckdb") {
+  if (rec.id === "duckdb" || id === "duckdb") {
     const probe = describeLoad(load);
     if (!probe.ok) engine_error = duckdbLoadError(probe.reason);
   }
   return {
+    engine: id,
+    engine_label: LABELS[id],
     engine_build: rec.label,
     engine_library: rec.library,
     engine_library_version: rec.libraryVersion,
@@ -76,5 +105,6 @@ function statusFields(load) {
 }
 
 module.exports = {
-  LABELS, BUILD_FILE, readBuild, record, duckdbLoadError, retiredEngineError, duckdbLoadable, describeLoad, statusFields,
+  LABELS, BUILD_FILE, readBuild, record, duckdbLoadError, retiredEngineError, duckdbLoadable, describeLoad,
+  resolvedEngineId, statusFields,
 };

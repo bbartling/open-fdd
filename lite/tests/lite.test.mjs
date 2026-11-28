@@ -167,7 +167,13 @@ test("renamed everywhere: no Bench Viz / bench-viz left in the shipped code, pag
   const shipped = (f) => (f === "app.json" ? JSON.stringify({ ...manifest, replaces: undefined }) : read(f));
   for (const f of files) assert.ok(!/bench[ -_]?viz/i.test(shipped(f)), `${f} still says Bench Viz`);
   assert.deepEqual(manifest.replaces, ["bench-viz", "open-meteo-weather"]);
-  for (const f of ["index.html", "chart.html", "tree.html"]) assert.match(read(`static/${f}`), /<title>Open-FDD Lite/);
+  for (const f of ["index.html", "chart.html", "tree.html"]) {
+    const html = read(`static/${f}`);
+    assert.match(html, /<title>Open-FDD/);
+    assert.doesNotMatch(html, /<title>Open-FDD Lite/);
+    assert.match(html, /DuckDB backend/);
+    assert.doesNotMatch(html, /DuckDB build|>Lite<|>Full</);
+  }
   assert.match(read("hooks/open_meteo_weather.js"), /openfdd-nf-weather-hook/);
 });
 

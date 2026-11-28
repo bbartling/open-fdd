@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="en" data-product="Open-FDD Lite">
+<html lang="en" data-product="Open-FDD">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open-FDD Lite chart</title>
+<title>Open-FDD chart</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https:; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <!-- CSP: script-src allows https: ONLY for the portal path, where nf.js loads the pinned clerk-js from the
      Clerk host named in the portal's publishable key (host unknown until runtime). Everything else is 'self';
      no inline style attributes, inline scripts or eval. -->
 <!--
-  One Open-FDD Lite chart per window: chart.html?c=<id>&site=<siteRef>[&equip=<equipRef>][&h=<hours>][&point=<uuid>]
+  One Open-FDD chart per window: chart.html?c=<id>&site=<siteRef>[&equip=<equipRef>][&h=<hours>][&point=<uuid>]
   Loads the Haystack model, then fetches ONLY this chart's points, resampled by NF
   (charts.js). Redraws every 5 min while the window is visible.
 -->
@@ -18,6 +18,7 @@
 <script src="paging.js"></script>
 <script src="nf.js"></script>
 <script src="model.js"></script>
+<script src="version.js"></script>
 <script src="theme.js"></script>
 <script src="charts.js"></script>
 <link rel="stylesheet" href="base.css">
@@ -27,6 +28,7 @@
 <header>
   <div>
     <h1 id="title">⚡ Chart</h1>
+    <span class="pill app-engine" id="engineBuild" data-ofdd-engine="duckdb">DuckDB backend</span>
     <div class="sub" id="sub">Loading the Haystack model…</div>
   </div>
   <div class="spacer"></div>

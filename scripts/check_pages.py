@@ -30,7 +30,7 @@ BASEURL = "/open-fdd"
 SITE_URL = "https://bbartling.github.io"
 GH = "https://github.com/bbartling/open-fdd"
 
-SECTIONS = ["Rules", "Data model", "Lite vs Full", "Normal Framework", "Legacy"]
+SECTIONS = ["Rules", "Data model", "DuckDB vs Timescale", "Normal Framework", "Legacy"]
 HIDDEN_OK = {"index.md", "404.md"}  # the only pages allowed to stay out of the nav
 INTERNAL_DIRS = ("prompts", "plans", "scratch", "internal", "private", "migration", "operations", "architecture")
 FORBIDDEN_NAV = tuple(d + "/" for d in INTERNAL_DIRS)

@@ -22,15 +22,15 @@ const engineBuild = require('./lib/engine-build.js');
  */
 async function handle({ sdk, config: rawConfig = {}, client: given, loadDuckdb }) {
   const log = (/** @type {string} */ m) => (sdk && sdk.logEvent ? sdk.logEvent(m) : console.log(m));
+  const config = settings.normalizeConfig(rawConfig);
   const done = (/** @type {any} */ result) => {
-    const fields = engineBuild.statusFields(loadDuckdb);
+    const fields = engineBuild.statusFields(loadDuckdb, config);
     const out = { ...result, ...fields };
     if (fields.engine_error && !out.error) out.error = fields.engine_error;
     if (fields.engine_error) out.ok = false;
     log(JSON.stringify(out));
     return out;
   };
-  const config = settings.normalizeConfig(rawConfig);
   const engine = String(config.engine || 'auto').toLowerCase();
   if (engine === 'sqlite' || engine === 'pglite') {
     return done({ ok: false, required: ts.SCHEMA_VERSION, error: engineBuild.retiredEngineError(engine) });

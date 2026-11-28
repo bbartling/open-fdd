@@ -15,6 +15,85 @@ const idOf = (r) => (r.attrs || {}).id || r.name;
 const markersOf = (r) => ((r.attrs || {}).markers || "").split(",").filter(Boolean);
 const ENTITY_TYPES = ["SITE", "EQUIPMENT", "DEVICE"];
 
+/** Haystack ref text, without a leading @. */
+function refId(v) {
+  return String(v == null ? "" : v).trim().replace(/^@/, "");
+}
+
+function pointAttrs(p) {
+  if (!p) return {};
+  if (p.rec && p.rec.attrs) return p.rec.attrs;
+  return p.attrs || {};
+}
+
+function pointMarkers(p) {
+  if (p && Array.isArray(p.tags)) return p.tags;
+  return markersOf(p || {});
+}
+
+/**
+ * Fault, FDD-result and fault-timeline points. They stay in the model and in Turtle.
+ * Overview lists and the visual model (tree, unclassified checks) omit them.
+ */
+function isDiagnosticPoint(p) {
+  if (!p) return false;
+  const tags = pointMarkers(p);
+  if (tags.some((t) => t === "fault" || t === "fdd" || t === "fault_timeline" || t === "timeline" || /timeline/i.test(String(t)))) return true;
+  const a = pointAttrs(p);
+  if (a.ruleRef || a.fddOutput || a.fddKind || a.fddTimelineOf) return true;
+  const type = String(a.type || "");
+  return type === "fdd-result" || type === "fdd-fault-timeline";
+}
+
+/** Ids a device equipRef or a point equipRef may use for this equipment record. */
+function equipKeys(equip) {
+  const a = (equip && equip.attrs) || {};
+  return [a.id, equip && equip.name, equip && equip.uuid, a.uuid].map(refId).filter(Boolean);
+}
+
+function pointRef(p, key) {
+  if (!p) return "";
+  if (p[key]) return refId(p[key]);
+  return refId(pointAttrs(p)[key]);
+}
+
+/**
+ * DEVICE records under this equipment, plus a synthetic node for a deviceRef that has no record.
+ * A device matches when its equipRef is this equipment's id, name or uuid, or a point on the
+ * equipment names it. Orphan devices (equipRef that does not match, or only a point deviceRef)
+ * still appear.
+ * @returns {{rec: object, synthetic: boolean}[]}
+ */
+function devicesForEquip(equip, devices, points) {
+  const keys = new Set(equipKeys(equip));
+  const onEquip = (points || []).filter((p) => keys.has(pointRef(p, "equipRef")));
+  const wanted = new Set();
+  const out = [];
+  for (const d of devices || []) {
+    const did = refId(idOf(d));
+    const byEquip = keys.has(refId((d.attrs || {}).equipRef));
+    const byPoint = !!did && onEquip.some((p) => pointRef(p, "deviceRef") === did);
+    if (!byEquip && !byPoint) continue;
+    if (did) wanted.add(did);
+    out.push({ rec: d, synthetic: false });
+  }
+  for (const p of onEquip) {
+    const did = pointRef(p, "deviceRef");
+    if (!did || wanted.has(did)) continue;
+    wanted.add(did);
+    out.push({ rec: { name: did, pointType: "DEVICE", attrs: { id: did, dis: did, markers: "device" } }, synthetic: true });
+  }
+  return out;
+}
+
+/** DEVICE records, including a device marker that NF did not store as pointType DEVICE. */
+function isDeviceRecord(r) {
+  const t = String((r && r.pointType) || "").toUpperCase();
+  if (t === "DEVICE") return true;
+  const tags = markersOf(r || {});
+  return tags.includes("device") && !tags.includes("point") && t !== "SITE" && t !== "EQUIPMENT" && t !== "POINT";
+}
+
 /** @param {NfRecord} r @returns {OfddPoint} */
 function toPoint(r) {
   const a = r.attrs || {};
@@ -34,11 +113,12 @@ async function loadModel() {
   const recs = await queryAll({ layer: "model" });
   const of = (t) => recs.filter((r) => r.pointType === t);
   /** @type {OfddModel} */
-  const model = { sites: of("SITE"), equips: of("EQUIPMENT"), devices: of("DEVICE"), points: [] };
+  const model = { sites: of("SITE"), equips: of("EQUIPMENT"), devices: recs.filter(isDeviceRecord), points: [] };
   if (!model.sites.length) {
     throw new Error("no Haystack site in this NF's model layer; tag the site, equipment and points first");
   }
-  if (typeof noteModelSiteCount === "function") noteModelSiteCount(model.sites.length);
+  const noteSites = /** @type {any} */ (globalThis).noteModelSiteCount;
+  if (typeof noteSites === "function") noteSites(model.sites.length);
   model.points = await loadPoints(model);
   return model;
 }

@@ -5,7 +5,7 @@ app. The 4.x spec (Rust central stack) lives at tag `v4.0.11-central`.
 
 | File | Read it for |
 |---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | How the app is built: UI, hooks, editions, data flow |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | How the app is built: UI, hooks, backends, data flow |
 | [DATA_CONTRACT.md](DATA_CONTRACT.md) | SI units, result-point tags, how points bind to rule roles |
 | [skills/](skills) | Task recipes, each with steps and the tests to run |
 
@@ -14,6 +14,10 @@ Skills: [add-rcx-chart](skills/add-rcx-chart.md), [add-or-tune-fdd-rule](skills/
 [security-checks](skills/security-checks.md), [typescript](skills/typescript.md),
 [bacnet-validate](skills/bacnet-validate.md), [nf-gotchas](skills/nf-gotchas.md), [pypi-nf-agent](skills/pypi-nf-agent.md),
 [install-upgrade-troubleshoot](skills/install-upgrade-troubleshoot.md), [ml-fdd](skills/ml-fdd.md), [audit-ontology-coverage](skills/audit-ontology-coverage.md).
+
+## Deployment backends
+
+Open-FDD is one product with two storage backends. DuckDB is recommended for single-building deployments (edge, Raspberry Pi, embedded). Timescale is recommended for multi-site, campus or portfolio deployments. Do not reintroduce Lite or Full as product names. The install id `open-fdd-lite` and the `lite/` tree stay so existing installs keep working.
 
 ## How agents use it
 

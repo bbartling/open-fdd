@@ -11,7 +11,7 @@ It does not need a separate login or historian. Choose Full for FDD and larger h
 
 ## Choose Full or Lite
 
-See [Lite vs Full](editions.html). App ids: Full `open-fdd` (`nf-app/app.json`), Lite `open-fdd-lite` (`lite/app.json`).
+See [DuckDB vs Timescale](editions.html). App ids: Timescale-capable `open-fdd` (`nf-app/app.json`), DuckDB `open-fdd-lite` (`lite/app.json`).
 
 Do not install both editions on a constrained box. Build, test, and run installer commands from a PC. NF runs the
 installed app and hooks.

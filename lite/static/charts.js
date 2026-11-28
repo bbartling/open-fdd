@@ -51,7 +51,11 @@ const WEATHER_SCOPE = "__weather__";
 const WEATHER_LABEL = "Weather";
 /** A weather-service point (marker `weather` or a `weatherStationRef`): never one of an equip's own sensors. */
 /** An FDD hook result point (markers fdd / fault, or a ruleRef): an output, never a signal; same test the FDD tab uses. */
-const isFddResult = (p) => has(p, "fdd") || has(p, "fault") || !!((p.rec && p.rec.attrs) || {}).ruleRef;
+const isFddResult = (p) => {
+  const diagnostic = /** @type {any} */ (globalThis).isDiagnosticPoint;
+  if (typeof diagnostic === "function") return diagnostic(p);
+  return has(p, "fdd") || has(p, "fault") || !!((p.rec && p.rec.attrs) || {}).ruleRef;
+};
 const isWeatherPoint = (p) => has(p, "weather") || !!p.weatherStationRef;
 
 /**

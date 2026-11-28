@@ -45,8 +45,8 @@ def test_tree_matches_the_push_manifest(tmp_path):
 
 def test_each_engine_recipe_stamps_its_badge(tmp_path):
     for recipe, label, dep in (
-        ("duckdb", "DuckDB build", "@duckdb/node-api"),
-        ("timescale", "Timescale build", "pg"),
+        ("duckdb", "DuckDB backend", "@duckdb/node-api"),
+        ("timescale", "Timescale backend", "pg"),
     ):
         tree, files = dist.build("full", tmp_path, recipe)
         assert not dist.problems("full", tree, files, recipe)
