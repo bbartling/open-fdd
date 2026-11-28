@@ -79,8 +79,8 @@ Results are ordinary NF points. See the [API reference](fdd-data-access.html) fo
 ## Security
 
 - Do not expose an unauthenticated NF console to the internet. Use the site LAN, a VPN or NF's portal with TLS, and never disable certificate checks.
-- Keep credentials outside the repository. The optional Caddy front door protects the console and write routes
-  ([`deploy/nf-caddy`](https://github.com/bbartling/open-fdd/tree/master/deploy/nf-caddy)).
+- Keep credentials outside the repository. The optional Caddy front door leaves the Open-FDD dashboard and the read-only GETs it uses open on the LAN, and puts the NF console, app options and every write behind a login
+  ([`deploy/nf-caddy`](https://github.com/bbartling/open-fdd/tree/master/deploy/nf-caddy)). Cancelling that login does not open the console.
 - Open-FDD writes only its own result points and weather variables.
 - The UI uses a strict Content Security Policy and local libraries. SPARQL rejects updates and remote `SERVICE`; CSV export escapes formula cells.
 - Report vulnerabilities through GitHub private reporting: [SECURITY.md](https://github.com/bbartling/open-fdd/blob/master/SECURITY.md).

@@ -35,8 +35,8 @@ LAN browser / scripts --https:443--> Caddy --http--> NF Envoy 127.0.0.1:<port>
 ## Steps, in a safe order
 
 1. Back up NF's compose file and `.env` (`cp -p docker-compose.yml docker-compose.yml.bak-<timestamp>`).
-2. Prepare Caddy as in the `deploy/nf-caddy` README (`LAN_IP`, `NF_UPSTREAM`, `NF_PORT`, `APP_ID`, an `auth.caddy`
-   hash, optional certificate). If Caddy listens on a port NF does not use (HTTPS on 443), start it now and test it
+2. Prepare Caddy as in the `deploy/nf-caddy` README (`LAN_IP`, optional `TS_IP`, `NF_UPSTREAM`, `NF_PORT`, `APP_ID`, an `auth.caddy`
+   hash, optional certificate). Leave `TS_IP` empty to bind only `LAN_IP`. Do not edit the Caddyfile per site. If Caddy listens on a port NF does not use (HTTPS on 443), start it now and test it
    before closing NF. If Caddy takes NF's own LAN port (plain HTTP on 8090), it cannot start until NF stops
    listening there, so do step 3 first and start Caddy right after.
 3. Add `ENVOY_BIND_ADDRESS=127.0.0.1` to NF's environment and recreate NF (`docker compose up -d nf`). Expect a
@@ -50,19 +50,28 @@ folder.
 
 A page that needs another read-only endpoint: add its path to `@readGet` (GET) or `@readPost` (POST that only
 reads) in `routes.caddy`, restart Caddy (`docker compose restart caddy`; the admin API is off so there is no live
-reload). **Never open a write method.** Everything not listed falls through to basic auth.
+reload). **Never open a write method.** A write hook (`fdd`, `history`, `weather`, `tuning`, `sparql`) stays in the
+final basic-auth block. Everything not listed falls through to basic auth. Do not answer those paths with 200 just
+to silence a browser login dialog: a 401 on a sub-resource is what pops it, and the fix is to stop challenging the
+read the page actually needs, not to open the console.
 
 ## Verify
 
 Replace `<nf-host>` and the credentials; add `--cacert <cert>` when using the self-signed HTTPS variant.
 
 ```bash
-H=http://<nf-host>:8090      # or https://<nf-host>
-curl -s -o /dev/null -w '%{http_code}\n' $H/api/v1/apps/static/open-fdd/     # 200 (open)
-curl -s -o /dev/null -w '%{http_code}\n' $H/                                 # 401 (console is locked)
-curl -s -o /dev/null -w '%{http_code}\n' -u admin:<password> $H/api/v1/apps  # 200 (with login)
-curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://<nf-host>:8090/         # refused if NF no longer listens on the LAN
+H=http://<nf-host>:8090      # plain HTTP: the port that serves routes. On HTTPS use https://<nf-host>
+curl -s -D - -o /dev/null $H/api/v1/apps/static/open-fdd/ | grep -i -E 'HTTP/|WWW-Authenticate'   # 200, no challenge
+curl -s -D - -o /dev/null $H/api/v1/sites | grep -i -E 'HTTP/|WWW-Authenticate'                   # 200, no challenge
+curl -s -D - -o /dev/null $H/index.html | grep -i -E 'HTTP/|WWW-Authenticate'                    # 401 Basic realm="restricted"
+curl -s -o /dev/null -w '%{http_code}\n' -X POST $H/api/v1/bacnet/local                            # 401 (write stays locked)
+curl -s -D - -o /dev/null $H/api/v1/apps | grep -i -E 'HTTP/|WWW-Authenticate'                    # 403, no challenge
+curl -s -o /dev/null -w '%{http_code}\n' -u admin:<password> $H/api/v1/apps                       # 200 (with login)
+curl -s -o /dev/null -w '%{http_code}\n' https://<nf-host>/                                       # 302 to the dashboard (HTTPS profile)
+curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://<nf-host>:8090/                              # refused if NF no longer listens on the LAN
 ```
+
+Cancelling the 401 on `/index.html` returns the front door's refusal, not the console. On the HTTPS profile, bare `/` redirects to the dashboard the same way plain-HTTP `:80` does. The same `routes.caddy` is what Lite uses; set `APP_ID=open-fdd-lite` so that redirect opens the Lite dashboard.
 
 - Run an app hook once (NF console, or `manage_hooks run` with the hook uuid in the NF MCP): it should succeed,
   because hooks use loopback.
@@ -84,15 +93,15 @@ rejected me", "Login recovery" and "Open pages and NF auth".
   `Import-Certificate -FilePath nf-ca.crt -CertStoreLocation Cert:\CurrentUser\Root`. Do it yourself; it is a
   trust decision.
 - **Deploys** (`nf_app_sync.py`) run on the NF host against loopback, or through the Caddy URL with the basic-auth
-  user, because `/api/v1/apps*` is locked.
+  user. `GET /api/v1/apps` answers 403 with no login challenge until that credential is sent; a wrong credential is 401.
 
 ## Details worth knowing
 
 - The self-signed certificate needs the Subject Alternative Names clients use (IP and host names), and the
   `CA:TRUE` and `keyCertSign` extensions in the README command so Windows accepts it as a trusted root.
 - The open routes also cover `/favicon.ico`; without it every page load logs a 401.
-- Caddy's `bind {$LAN_IP}` keeps it off loopback, so NF's own port stays free for the tunnel and hooks. If the
-  host's IP changes, update `LAN_IP` and restart.
+- Caddy binds `{$LAN_IP}` and, when set, `{$TS_IP}`. An empty `TS_IP` binds only `LAN_IP`. Either way it stays off
+  loopback, so NF's own port stays free for the tunnel and hooks. If an address changes, update `.env` and restart.
 - The live-values route is open and uses `flush_interval -1`; Envoy ends a quiet stream with a 504 after about
   15 seconds, which Caddy turns into 204 so browsers log no red errors.
 - If the password is lost, write a new bcrypt hash into `auth.caddy` and restart Caddy; NF itself has no login

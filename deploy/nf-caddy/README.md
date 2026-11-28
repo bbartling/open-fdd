@@ -9,18 +9,22 @@ sit behind a login; plain HTTP for a trusted LAN, self-signed HTTPS for producti
 - NF's Envoy listens on **loopback only**: in NF's compose set `ENVOY_BIND_ADDRESS=127.0.0.1`
   (NF port is `8090` on small installs, `8080` on others; set `NF_UPSTREAM` and `NF_PORT` to match).
   The portal tunnel, app hooks and the NF MCP keep using loopback.
-- Caddy (`caddy:2.11.9-alpine`, host network, `mem_limit: 64m`) binds `LAN_IP` only.
+- Caddy (`caddy:2.11.9-alpine`, host network, `mem_limit: 64m`) binds `LAN_IP` and, if set, `TS_IP` (a second address such as a Tailscale IP). Leave `TS_IP` empty or omit it to bind only `LAN_IP`. Site-specific addresses and the app id belong in `.env`; do not edit the Caddyfile per site.
 
 | Request | Access |
 |---|---|
-| `GET /api/v1/apps/static/*` (the Open-FDD pages, files only) and `/favicon.ico` | open |
-| `GET /api/v1/point/data`, `/api/v1/platform/info`, `/api/v1/bacnet/{configuration,local,ports,readproperty}` | open |
+| `GET`/`HEAD /api/v1/apps/static/*` (Full `open-fdd` and Lite `open-fdd-lite`, files only), `/favicon.ico`, `/favicon.png`, `/favicon.svg`, `/apple-touch-icon.png`, `/apple-touch-icon-precomposed.png` | open |
+| `GET`/`HEAD /api/v1/point/data`, `/api/v1/platform/info`, `/api/v1/bacnet/{configuration,local,ports,readproperty}` | open |
+| `GET`/`HEAD /api/v1/sites`, `/api/v1/sites/*`, `/api/v1/schedules`, `/api/v1/schedules/*` | open |
 | `POST /api/v1/point/query`, `/api/v1/auth/token` (reads; the token call still needs a client id/secret) | open |
+| `POST /api/v1/apps/{open-fdd,open-fdd-lite}/hooks/{schema,analytics}` and `GET` of those hooks' `/runs` | open (those two hooks only; they do not write) |
 | `GET /api/v1/point/updates/data` (live push stream) | open, `flush_interval -1`, Envoy's quiet-stream 504 becomes 204 (see "Live stream") |
-| everything else: NF console, `/api/v1/apps*` (app/hook config), config, every write | **basic auth** |
-| `:80` `/` | 302 to `/api/v1/apps/static/<APP_ID>/` (`APP_ID` placeholder, default `open-fdd`; `open-fdd-lite` on a Lite box, see "The `/` redirect and app ids") |
+| `GET`/`HEAD /api/v1/apps` (the app list; options can hold a database URL) and `POST .../hooks/tuning` | **no login challenge.** Anonymous is 403 and the browser stays quiet. A presented password is checked (200 or 401) |
+| everything else: NF console `/`, single-app config, `fdd` / `history` / `weather` / `sparql` hooks, schedule and site writes, BACnet writes, `/pgweb` | **basic auth** (401 + `WWW-Authenticate`). Cancelling does not load the page |
+| `:80` `/` (plain-HTTP profile) or `:443` `/` (HTTPS profile) | 302 to `/api/v1/apps/static/<APP_ID>/` (`APP_ID` placeholder, default `open-fdd`; `open-fdd-lite` on a Lite box, see "The `/` redirect and app ids"). The redirect itself does not ask for a login. The console stays at `/index.html`. |
 
-Rules live in `routes.caddy`, shared by `Caddyfile` (HTTP) and `Caddyfile.tls` (HTTPS).
+Rules live in `routes.caddy`, shared by `Caddyfile` (plain HTTP, Full and Lite) and `Caddyfile.tls` (HTTPS).
+Lite only changes `APP_ID`. `python3 deploy/nf-caddy/test_routes.py` checks the matrix (Caddy 2.11.9).
 
 ## Security posture (read this before exposing it)
 
@@ -29,15 +33,20 @@ Rules live in `routes.caddy`, shared by `Caddyfile` (HTTP) and `Caddyfile.tls` (
   read it and everything else. **HTTPS (`Caddyfile.tls`) is the production profile**: use it for
   anything beyond a bench, and never publish the HTTP port to the internet or a shared network.
 - **The open read routes are an explicit public-read choice.** Anyone who can reach the LAN port can,
-  without a login, read: the Open-FDD pages (`GET /api/v1/apps/static/*`, `/favicon.ico`), point
-  history and values (`GET /api/v1/point/data`, `POST /api/v1/point/query`, the live stream
-  `GET /api/v1/point/updates/data`), `GET /api/v1/platform/info`, and the BACnet server's
-  `GET /api/v1/bacnet/{configuration,local,ports,readproperty}`. They cannot change anything, but
-  the data (equipment, point names, trends, BACnet configuration) is readable by the whole network.
-  `POST /api/v1/auth/token` is open too, but still needs a valid client id/secret.
+  without a login, read: the Open-FDD pages (`GET /api/v1/apps/static/*` for `open-fdd` and
+  `open-fdd-lite`, plus the icon paths in the table), point history and values
+  (`GET /api/v1/point/data`, `POST /api/v1/point/query`, the live stream
+  `GET /api/v1/point/updates/data`), `GET /api/v1/platform/info`, the BACnet server's
+  `GET /api/v1/bacnet/{configuration,local,ports,readproperty}`, site records
+  (`GET /api/v1/sites`), and occupancy schedules (`GET /api/v1/schedules`). They can also start the
+  read-only `schema` and `analytics` hooks and read those hooks' runs. They cannot change anything:
+  `fdd`, `history`, `weather`, `sparql` and `tuning` stay locked, and so do schedule, site and BACnet
+  writes. The data (equipment, point names, trends, schedules, BACnet configuration) is readable by
+  the whole network. `POST /api/v1/auth/token` is open too, but still needs a valid client id/secret.
+  `GET /api/v1/apps` stays closed because the app list includes options.
 - **To lock them**, move the routes into the auth block: in `routes.caddy` delete the
-  `handle @appStatic`, `handle @readGet`, `handle @readPost` and `handle @liveStream` blocks (and
-  keep the final `handle { basic_auth ... }`), so every request needs the login. The pages then
+  `handle @appStatic`, `handle @readGet`, `handle @readPost`, `handle @hookRuns` and `handle @liveStream`
+  blocks (and keep the final `handle { basic_auth ... }`), so every request needs the login. The pages then
   work only for a signed-in browser (the browser sends the same basic-auth credentials to the
   API calls the page makes); automated clients must send the Authorization header. Restart Caddy.
   To lock only some (for example keep the pages open but not the BACnet reads), delete just those
@@ -69,7 +78,7 @@ route (for example an overloaded NF): it looks the same as an idle close.
 ## Setup
 
 ```bash
-cp .env.example .env                 # set LAN_IP (this box), NF_UPSTREAM, NF_PORT, APP_ID
+cp .env.example .env                 # set LAN_IP, optional TS_IP, NF_UPSTREAM, NF_PORT, APP_ID
 cp auth.caddy.example auth.caddy     # then replace its line with a real hash:
 docker run --rm caddy:2.11.9-alpine caddy hash-password -p 'choose-a-password'
 #   auth.caddy = one line:  admin <hash>      (never commit it; it is gitignored)
@@ -77,7 +86,7 @@ docker compose up -d
 ```
 
 Recreate NF once after setting `ENVOY_BIND_ADDRESS=127.0.0.1` so the LAN port is released for Caddy.
-Then browse `http://<LAN_IP>/` (redirects to the dashboard).
+Then browse `http://<LAN_IP>/` (redirects to the dashboard). If the box is also reached on a second address, set `TS_IP` in `.env` and restart Caddy; leave the Caddyfile unchanged.
 
 ## HTTPS (the production profile)
 
@@ -91,13 +100,17 @@ mkdir -p certs && openssl req -x509 -newkey rsa:2048 -nodes -days 1095 \
 
 In `docker-compose.yml` mount `./Caddyfile.tls` as `/etc/caddy/Caddyfile` and uncomment the two
 cert volumes; import `certs/server.crt` into client trust stores. `certs/` is gitignored.
+`Caddyfile.tls` is a drop-in: set `LAN_IP`, optional `TS_IP`, `NF_UPSTREAM`, and `APP_ID` in `.env`.
+Bare `https://<address>/` opens the dashboard; the NF console is `https://<address>/index.html`.
 
 ## Which layer rejected me
 
 A 401 can come from Caddy or from NF. Read the `WWW-Authenticate` response header:
 
 ```bash
-curl -s -i -o /dev/null -D - <front-door-url>/api/v1/apps | grep -i '^www-authenticate'
+# Use a protected path (the console). :80 on both profiles only redirects, and
+# HTTPS / also redirects to the dashboard, so those will not show this header.
+curl -s -i -o /dev/null -D - <front-door-url>/index.html | grep -i '^www-authenticate'
 ```
 
 | Header | Layer | What it means |
@@ -137,12 +150,17 @@ Never print the password or the hash. Do these on the box that runs NF and Caddy
 
 ## The `/` redirect and app ids
 
-The bare URL (`:80`, plain-HTTP profile) redirects to `/api/v1/apps/static/{$APP_ID:open-fdd}/`. `APP_ID` is a
-placeholder read from the environment when Caddy starts, with `open-fdd` as the default. Set `APP_ID=open-fdd` (full
-edition) or `APP_ID=open-fdd-lite` (Lite) in `.env`. After an app rename or an edition swap: back up the `.env`,
-change `APP_ID`, validate, restart Caddy. Never hard-code an app id in a Caddyfile copy. Syntax checked with
-`caddy adapt`: unset gives `.../open-fdd/`, `APP_ID=open-fdd-lite` gives `.../open-fdd-lite/`. The HTTPS profile's
-`:80` block only redirects to HTTPS; the dashboard URL is the same path on the HTTPS port.
+The bare URL redirects to `/api/v1/apps/static/{$APP_ID:open-fdd}/`: `:80` on the plain-HTTP profile, and
+`:443` `/` on the HTTPS profile (whose `:80` only redirects to HTTPS). `APP_ID` is a placeholder read from the
+environment when Caddy starts, with `open-fdd` as the default. Set `APP_ID=open-fdd` (full edition) or
+`APP_ID=open-fdd-lite` (Lite) in `.env`. After an app rename or an edition swap: back up the `.env`, change
+`APP_ID`, validate, restart Caddy. Never hard-code an app id in a Caddyfile copy. Syntax checked with
+`caddy adapt`: unset gives `.../open-fdd/`, `APP_ID=open-fdd-lite` gives `.../open-fdd-lite/`. The NF console
+stays at `/index.html` (basic auth).
+
+Optional `TS_IP` is a second bind address (for example a Tailscale IP). Leave it empty or omit it and Caddy
+binds only `LAN_IP`. A site that is reached on two addresses only needs `.env` (and `auth.caddy`, plus certs
+for HTTPS). Do not keep a per-site edited copy of `Caddyfile` or `Caddyfile.tls`.
 
 ## Open pages and NF auth
 
@@ -157,8 +175,8 @@ files public. Pick one:
    `CONSOLE_PASSWORD` unset in NF. The open/locked split in `routes.caddy` then does what it says, and the
    two-password divergence (above) cannot happen. Trade-off: anything with a shell on the NF host can reach NF
    without a login; hooks and the portal tunnel already do.
-2. **NF auth stays on: do not offer open pages.** Delete the `handle @appStatic`, `@readGet`, `@readPost` and
-   `@liveStream` blocks (see Security posture, "To lock them"). Every request then needs the shared login and the
+2. **NF auth stays on: do not offer open pages.** Delete the `handle @appStatic`, `@readGet`, `@readPost`,
+   `@hookRuns` and `@liveStream` blocks (see Security posture, "To lock them"). Every request then needs the shared login and the
    browser sends it with each call.
 3. Relying on the Normal Online login only (the page then uses a Clerk token through the portal) works through the
    portal, not on the LAN.
